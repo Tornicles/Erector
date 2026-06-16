@@ -12,6 +12,7 @@ from pymongo import ASCENDING, DESCENDING
 from .collections import (
     ERECTOR_USERS, ERECTOR_SESSIONS, MAGIC_LINK_ATTEMPTS,
     AUDIT_LOGS, SYSTEM_ERRORS, SYSTEM_EVENTS, DEAD_LETTER_QUEUE,
+    ECONOMIES, COUNTRY_ECONOMY_MAPPINGS,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,22 @@ A1_INDEX_SPECS = [
      {"name": "idx_dlq_status_retry"}),
     (DEAD_LETTER_QUEUE, [("original_event_id", ASCENDING)],
      {"name": "idx_dlq_original_event"}),
+
+    # ── economies (A2) ───────────────────────────────────────────────────────
+    (ECONOMIES, [("economy_id", ASCENDING)],
+     {"unique": True, "name": "idx_economies_economy_id_unique"}),
+    (ECONOMIES, [("economy_type", ASCENDING)],
+     {"name": "idx_economies_economy_type"}),
+
+    # ── country_economy_mappings (A2) ─────────────────────────────────────────
+    (COUNTRY_ECONOMY_MAPPINGS, [("country_code", ASCENDING)],
+     {"unique": True, "name": "idx_cem_country_code_unique"}),
+    (COUNTRY_ECONOMY_MAPPINGS, [("country_code_alpha3", ASCENDING)],
+     {"name": "idx_cem_country_code_alpha3", "sparse": True}),
+    (COUNTRY_ECONOMY_MAPPINGS, [("primary_economy_id", ASCENDING)],
+     {"name": "idx_cem_primary_economy_id"}),
+    (COUNTRY_ECONOMY_MAPPINGS, [("primary_economy_type", ASCENDING)],
+     {"name": "idx_cem_primary_economy_type"}),
 ]
 
 

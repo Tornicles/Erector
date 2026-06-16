@@ -22,6 +22,10 @@ from app.db.indexes import create_indexes
 from app.middleware.request_id import RequestIDMiddleware
 from app.models.api import error_response
 from app.routers import auth, health, schema
+from app.routers import economies as economies_router
+from app.routers import stack as stack_router
+from app.seeders.seed_economies import seed_economies
+from app.seeders.seed_country_mappings import seed_country_mappings
 
 settings = get_settings()
 setup_logging(settings.log_level)
@@ -43,8 +47,20 @@ async def lifespan(app: FastAPI):
     db = get_database()
     index_result = await create_indexes(db)
     logger.info(
-        f"[Erector] A1 indexes: {len(index_result['created'])} created, "
+        f"[Erector] A1+A2 indexes: {len(index_result['created'])} created, "
         f"{len(index_result['errors'])} errors"
+    )
+
+    # A2 seeders — idempotent, safe on every startup
+    eco_result = await seed_economies(db)
+    logger.info(
+        f"[Erector] Economies seeded: {eco_result['upserted']} new, "
+        f"{eco_result['skipped']} existing, {eco_result['total']} total"
+    )
+    map_result = await seed_country_mappings(db)
+    logger.info(
+        f"[Erector] Country mappings seeded: {map_result['upserted']} new, "
+        f"{map_result['skipped']} existing, {map_result['total']} total"
     )
 
     if settings.mock_auth_enabled:
@@ -120,3 +136,5 @@ async def unhandled_error_handler(request: Request, exc: Exception):
 app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(schema.router, prefix="/api")
+app.include_router(economies_router.router, prefix="/api")
+app.include_router(stack_router.router, prefix="/api")

@@ -1,0 +1,2608 @@
+[
+  {
+    "mapping_id": "map_us",
+    "country_name": "United States",
+    "country_code": "US",
+    "country_code_alpha3": "USA",
+    "aliases": [
+      "United States of America",
+      "USA",
+      "America"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "World's largest consumer capitalist economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ca",
+    "country_name": "Canada",
+    "country_code": "CA",
+    "country_code_alpha3": "CAN",
+    "aliases": [
+      "Canada"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Strong consumer capitalist; welfare elements",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_au",
+    "country_name": "Australia",
+    "country_code": "AU",
+    "country_code_alpha3": "AUS",
+    "aliases": [
+      "Australia"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Consumer capitalist; commodity export secondary",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_nz",
+    "country_name": "New Zealand",
+    "country_code": "NZ",
+    "country_code_alpha3": "NZL",
+    "aliases": [
+      "New Zealand"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Consumer capitalist economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_gb",
+    "country_name": "United Kingdom",
+    "country_code": "GB",
+    "country_code_alpha3": "GBR",
+    "aliases": [
+      "UK",
+      "Britain",
+      "England",
+      "Great Britain"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.9,
+    "notes": "Consumer capitalist with welfare state elements",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ie",
+    "country_name": "Ireland",
+    "country_code": "IE",
+    "country_code_alpha3": "IRL",
+    "aliases": [
+      "Ireland",
+      "Eire"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.88,
+    "notes": "Consumer capitalist, EU welfare state blend",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_de",
+    "country_name": "Germany",
+    "country_code": "DE",
+    "country_code_alpha3": "DEU",
+    "aliases": [
+      "Germany",
+      "Deutschland"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_manufacturing_excellence"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_excellence"
+    ],
+    "confidence": 0.96,
+    "notes": "Core welfare industrial and manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_se",
+    "country_name": "Sweden",
+    "country_code": "SE",
+    "country_code_alpha3": "SWE",
+    "aliases": [
+      "Sweden",
+      "Sverige"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.96,
+    "notes": "Strong welfare industrial",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_no",
+    "country_name": "Norway",
+    "country_code": "NO",
+    "country_code_alpha3": "NOR",
+    "aliases": [
+      "Norway",
+      "Norge"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_oil_wealth"
+    ],
+    "secondary_economy_types": [
+      "oil_wealth"
+    ],
+    "confidence": 0.95,
+    "notes": "Welfare industrial with oil fund",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_dk",
+    "country_name": "Denmark",
+    "country_code": "DK",
+    "country_code_alpha3": "DNK",
+    "aliases": [
+      "Denmark",
+      "Danmark"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Welfare industrial",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_fi",
+    "country_name": "Finland",
+    "country_code": "FI",
+    "country_code_alpha3": "FIN",
+    "aliases": [
+      "Finland",
+      "Suomi"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.94,
+    "notes": "Welfare industrial",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_nl",
+    "country_name": "Netherlands",
+    "country_code": "NL",
+    "country_code_alpha3": "NLD",
+    "aliases": [
+      "Netherlands",
+      "Holland"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_port_logistics"
+    ],
+    "secondary_economy_types": [
+      "port_logistics"
+    ],
+    "confidence": 0.94,
+    "notes": "Welfare industrial with port logistics hub",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_be",
+    "country_name": "Belgium",
+    "country_code": "BE",
+    "country_code_alpha3": "BEL",
+    "aliases": [
+      "Belgium",
+      "Belgique"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Welfare industrial",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_at",
+    "country_name": "Austria",
+    "country_code": "AT",
+    "country_code_alpha3": "AUT",
+    "aliases": [
+      "Austria",
+      "\u00d6sterreich"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_manufacturing_excellence"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_excellence"
+    ],
+    "confidence": 0.92,
+    "notes": "Welfare industrial and manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ch",
+    "country_name": "Switzerland",
+    "country_code": "CH",
+    "country_code_alpha3": "CHE",
+    "aliases": [
+      "Switzerland",
+      "Schweiz"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_financial_mega_city"
+    ],
+    "secondary_economy_types": [
+      "financial_mega_city"
+    ],
+    "confidence": 0.93,
+    "notes": "Welfare industrial with financial hub (Zurich/Geneva)",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_fr",
+    "country_name": "France",
+    "country_code": "FR",
+    "country_code_alpha3": "FRA",
+    "aliases": [
+      "France"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_consumer_capitalist"
+    ],
+    "secondary_economy_types": [
+      "consumer_capitalist"
+    ],
+    "confidence": 0.91,
+    "notes": "Welfare industrial with strong consumer market",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_it",
+    "country_name": "Italy",
+    "country_code": "IT",
+    "country_code_alpha3": "ITA",
+    "aliases": [
+      "Italy",
+      "Italia"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_tourism_economy"
+    ],
+    "secondary_economy_types": [
+      "tourism_economy"
+    ],
+    "confidence": 0.88,
+    "notes": "Welfare industrial, tourism and manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_es",
+    "country_name": "Spain",
+    "country_code": "ES",
+    "country_code_alpha3": "ESP",
+    "aliases": [
+      "Spain",
+      "Espa\u00f1a"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.9,
+    "notes": "Tourism dominant, welfare industrial elements",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pt",
+    "country_name": "Portugal",
+    "country_code": "PT",
+    "country_code_alpha3": "PRT",
+    "aliases": [
+      "Portugal"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.9,
+    "notes": "Tourism dominant",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_gr",
+    "country_name": "Greece",
+    "country_code": "GR",
+    "country_code_alpha3": "GRC",
+    "aliases": [
+      "Greece",
+      "Hellas"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.91,
+    "notes": "Tourism dominant",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_hr",
+    "country_name": "Croatia",
+    "country_code": "HR",
+    "country_code_alpha3": "HRV",
+    "aliases": [
+      "Croatia",
+      "Hrvatska"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.88,
+    "notes": "Strong Adriatic tourism economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sg",
+    "country_name": "Singapore",
+    "country_code": "SG",
+    "country_code_alpha3": "SGP",
+    "aliases": [
+      "Singapore"
+    ],
+    "primary_economy_id": "eco_financial_mega_city",
+    "primary_economy_type": "financial_mega_city",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "Southeast Asia financial mega-city",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ae",
+    "country_name": "United Arab Emirates",
+    "country_code": "AE",
+    "country_code_alpha3": "ARE",
+    "aliases": [
+      "UAE",
+      "Dubai",
+      "Abu Dhabi"
+    ],
+    "primary_economy_id": "eco_financial_mega_city",
+    "primary_economy_type": "financial_mega_city",
+    "secondary_economy_ids": [
+      "eco_oil_wealth"
+    ],
+    "secondary_economy_types": [
+      "oil_wealth"
+    ],
+    "confidence": 0.95,
+    "notes": "Financial mega-city and oil wealth blend",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_hk",
+    "country_name": "Hong Kong",
+    "country_code": "HK",
+    "country_code_alpha3": "HKG",
+    "aliases": [
+      "Hong Kong",
+      "HK"
+    ],
+    "primary_economy_id": "eco_financial_mega_city",
+    "primary_economy_type": "financial_mega_city",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Global financial mega-city",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kr",
+    "country_name": "South Korea",
+    "country_code": "KR",
+    "country_code_alpha3": "KOR",
+    "aliases": [
+      "South Korea",
+      "Korea",
+      "Republic of Korea"
+    ],
+    "primary_economy_id": "eco_export_technology",
+    "primary_economy_type": "export_technology",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.96,
+    "notes": "Export technology economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tw",
+    "country_name": "Taiwan",
+    "country_code": "TW",
+    "country_code_alpha3": "TWN",
+    "aliases": [
+      "Taiwan",
+      "Republic of China"
+    ],
+    "primary_economy_id": "eco_export_technology",
+    "primary_economy_type": "export_technology",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Semiconductor and tech export economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_jp",
+    "country_name": "Japan",
+    "country_code": "JP",
+    "country_code_alpha3": "JPN",
+    "aliases": [
+      "Japan",
+      "Nippon"
+    ],
+    "primary_economy_id": "eco_manufacturing_excellence",
+    "primary_economy_type": "manufacturing_excellence",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "Pinnacle manufacturing excellence",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cz",
+    "country_name": "Czech Republic",
+    "country_code": "CZ",
+    "country_code_alpha3": "CZE",
+    "aliases": [
+      "Czechia",
+      "Czech Republic"
+    ],
+    "primary_economy_id": "eco_manufacturing_excellence",
+    "primary_economy_type": "manufacturing_excellence",
+    "secondary_economy_ids": [
+      "eco_welfare_industrial"
+    ],
+    "secondary_economy_types": [
+      "welfare_industrial"
+    ],
+    "confidence": 0.9,
+    "notes": "Manufacturing excellence, EU welfare blend",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sk",
+    "country_name": "Slovakia",
+    "country_code": "SK",
+    "country_code_alpha3": "SVK",
+    "aliases": [
+      "Slovakia"
+    ],
+    "primary_economy_id": "eco_manufacturing_excellence",
+    "primary_economy_type": "manufacturing_excellence",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.88,
+    "notes": "Manufacturing excellence hub",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_hu",
+    "country_name": "Hungary",
+    "country_code": "HU",
+    "country_code_alpha3": "HUN",
+    "aliases": [
+      "Hungary",
+      "Magyarorsz\u00e1g"
+    ],
+    "primary_economy_id": "eco_manufacturing_excellence",
+    "primary_economy_type": "manufacturing_excellence",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.87,
+    "notes": "Manufacturing excellence hub",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pl",
+    "country_name": "Poland",
+    "country_code": "PL",
+    "country_code_alpha3": "POL",
+    "aliases": [
+      "Poland",
+      "Polska"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_manufacturing_excellence"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_excellence"
+    ],
+    "confidence": 0.88,
+    "notes": "Welfare industrial with growing manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sa",
+    "country_name": "Saudi Arabia",
+    "country_code": "SA",
+    "country_code_alpha3": "SAU",
+    "aliases": [
+      "Saudi Arabia",
+      "KSA",
+      "Kingdom of Saudi Arabia"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "Core oil wealth economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_qa",
+    "country_name": "Qatar",
+    "country_code": "QA",
+    "country_code_alpha3": "QAT",
+    "aliases": [
+      "Qatar"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "Oil/gas wealth economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kw",
+    "country_name": "Kuwait",
+    "country_code": "KW",
+    "country_code_alpha3": "KWT",
+    "aliases": [
+      "Kuwait"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.96,
+    "notes": "Oil wealth economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_bh",
+    "country_name": "Bahrain",
+    "country_code": "BH",
+    "country_code_alpha3": "BHR",
+    "aliases": [
+      "Bahrain"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_financial_mega_city"
+    ],
+    "secondary_economy_types": [
+      "financial_mega_city"
+    ],
+    "confidence": 0.9,
+    "notes": "Oil wealth with financial hub aspirations",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_om",
+    "country_name": "Oman",
+    "country_code": "OM",
+    "country_code_alpha3": "OMN",
+    "aliases": [
+      "Oman"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Oil wealth economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_az",
+    "country_name": "Azerbaijan",
+    "country_code": "AZ",
+    "country_code_alpha3": "AZE",
+    "aliases": [
+      "Azerbaijan"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.88,
+    "notes": "Caspian oil wealth",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tt",
+    "country_name": "Trinidad and Tobago",
+    "country_code": "TT",
+    "country_code_alpha3": "TTO",
+    "aliases": [
+      "Trinidad",
+      "Trinidad and Tobago"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.85,
+    "notes": "Caribbean oil wealth",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_br",
+    "country_name": "Brazil",
+    "country_code": "BR",
+    "country_code_alpha3": "BRA",
+    "aliases": [
+      "Brazil",
+      "Brasil"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [
+      "eco_rapid_urbanization"
+    ],
+    "secondary_economy_types": [
+      "rapid_urbanization"
+    ],
+    "confidence": 0.92,
+    "notes": "Commodity export with large urbanizing population",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cl",
+    "country_name": "Chile",
+    "country_code": "CL",
+    "country_code_alpha3": "CHL",
+    "aliases": [
+      "Chile"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.93,
+    "notes": "Copper/lithium commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pe",
+    "country_name": "Peru",
+    "country_code": "PE",
+    "country_code_alpha3": "PER",
+    "aliases": [
+      "Peru"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.9,
+    "notes": "Mining commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_co",
+    "country_name": "Colombia",
+    "country_code": "CO",
+    "country_code_alpha3": "COL",
+    "aliases": [
+      "Colombia"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [
+      "eco_rapid_urbanization"
+    ],
+    "secondary_economy_types": [
+      "rapid_urbanization"
+    ],
+    "confidence": 0.88,
+    "notes": "Commodity export with urbanization pressure",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ec",
+    "country_name": "Ecuador",
+    "country_code": "EC",
+    "country_code_alpha3": "ECU",
+    "aliases": [
+      "Ecuador"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.87,
+    "notes": "Oil and commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ao",
+    "country_name": "Angola",
+    "country_code": "AO",
+    "country_code_alpha3": "AGO",
+    "aliases": [
+      "Angola"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [
+      "eco_infrastructure_deficient"
+    ],
+    "secondary_economy_types": [
+      "infrastructure_deficient"
+    ],
+    "confidence": 0.88,
+    "notes": "Oil commodity export; infra deficient outside cities",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_zm",
+    "country_name": "Zambia",
+    "country_code": "ZM",
+    "country_code_alpha3": "ZMB",
+    "aliases": [
+      "Zambia"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.87,
+    "notes": "Copper commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mn",
+    "country_name": "Mongolia",
+    "country_code": "MN",
+    "country_code_alpha3": "MNG",
+    "aliases": [
+      "Mongolia"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.88,
+    "notes": "Coal/mineral commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_na",
+    "country_name": "Namibia",
+    "country_code": "NA",
+    "country_code_alpha3": "NAM",
+    "aliases": [
+      "Namibia"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.85,
+    "notes": "Mining commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pg",
+    "country_name": "Papua New Guinea",
+    "country_code": "PG",
+    "country_code_alpha3": "PNG",
+    "aliases": [
+      "Papua New Guinea",
+      "PNG"
+    ],
+    "primary_economy_id": "eco_infrastructure_deficient",
+    "primary_economy_type": "infrastructure_deficient",
+    "secondary_economy_ids": [
+      "eco_commodity_export"
+    ],
+    "secondary_economy_types": [
+      "commodity_export"
+    ],
+    "confidence": 0.85,
+    "notes": "Resource-rich but infrastructure deficient",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_in",
+    "country_name": "India",
+    "country_code": "IN",
+    "country_code_alpha3": "IND",
+    "aliases": [
+      "India",
+      "Bharat"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "World's largest rapid urbanization economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ng",
+    "country_name": "Nigeria",
+    "country_code": "NG",
+    "country_code_alpha3": "NGA",
+    "aliases": [
+      "Nigeria"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [
+      "eco_oil_wealth"
+    ],
+    "secondary_economy_types": [
+      "oil_wealth"
+    ],
+    "confidence": 0.93,
+    "notes": "Rapid urbanization with oil wealth",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_id",
+    "country_name": "Indonesia",
+    "country_code": "ID",
+    "country_code_alpha3": "IDN",
+    "aliases": [
+      "Indonesia"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.93,
+    "notes": "Large rapid urbanization economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_eg",
+    "country_name": "Egypt",
+    "country_code": "EG",
+    "country_code_alpha3": "EGY",
+    "aliases": [
+      "Egypt"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.91,
+    "notes": "Rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pk",
+    "country_name": "Pakistan",
+    "country_code": "PK",
+    "country_code_alpha3": "PAK",
+    "aliases": [
+      "Pakistan"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_bd",
+    "country_name": "Bangladesh",
+    "country_code": "BD",
+    "country_code_alpha3": "BGD",
+    "aliases": [
+      "Bangladesh"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [
+      "eco_manufacturing_expansion"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_expansion"
+    ],
+    "confidence": 0.9,
+    "notes": "Rapid urbanization with textile manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ph",
+    "country_name": "Philippines",
+    "country_code": "PH",
+    "country_code_alpha3": "PHL",
+    "aliases": [
+      "Philippines"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.9,
+    "notes": "Rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ke",
+    "country_name": "Kenya",
+    "country_code": "KE",
+    "country_code_alpha3": "KEN",
+    "aliases": [
+      "Kenya"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.89,
+    "notes": "East Africa rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_et",
+    "country_name": "Ethiopia",
+    "country_code": "ET",
+    "country_code_alpha3": "ETH",
+    "aliases": [
+      "Ethiopia"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.87,
+    "notes": "Rapid urbanization from agricultural base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tr",
+    "country_name": "Turkey",
+    "country_code": "TR",
+    "country_code_alpha3": "TUR",
+    "aliases": [
+      "Turkey",
+      "T\u00fcrkiye"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.88,
+    "notes": "Rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ma",
+    "country_name": "Morocco",
+    "country_code": "MA",
+    "country_code_alpha3": "MAR",
+    "aliases": [
+      "Morocco",
+      "Maroc"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_rapid_urbanization"
+    ],
+    "secondary_economy_types": [
+      "rapid_urbanization"
+    ],
+    "confidence": 0.87,
+    "notes": "Tourism with rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_gh",
+    "country_name": "Ghana",
+    "country_code": "GH",
+    "country_code_alpha3": "GHA",
+    "aliases": [
+      "Ghana"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [
+      "eco_commodity_export"
+    ],
+    "secondary_economy_types": [
+      "commodity_export"
+    ],
+    "confidence": 0.86,
+    "notes": "Growing urban economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tz",
+    "country_name": "Tanzania",
+    "country_code": "TZ",
+    "country_code_alpha3": "TZA",
+    "aliases": [
+      "Tanzania"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.85,
+    "notes": "Rapid urbanization from agricultural base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_jo",
+    "country_name": "Jordan",
+    "country_code": "JO",
+    "country_code_alpha3": "JOR",
+    "aliases": [
+      "Jordan"
+    ],
+    "primary_economy_id": "eco_rapid_urbanization",
+    "primary_economy_type": "rapid_urbanization",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.86,
+    "notes": "Rapid urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_za",
+    "country_name": "South Africa",
+    "country_code": "ZA",
+    "country_code_alpha3": "ZAF",
+    "aliases": [
+      "South Africa"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [
+      "eco_rapid_urbanization"
+    ],
+    "secondary_economy_types": [
+      "rapid_urbanization"
+    ],
+    "confidence": 0.89,
+    "notes": "Mining commodity export with large urban centers",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_vn",
+    "country_name": "Vietnam",
+    "country_code": "VN",
+    "country_code_alpha3": "VNM",
+    "aliases": [
+      "Vietnam",
+      "Viet Nam"
+    ],
+    "primary_economy_id": "eco_manufacturing_expansion",
+    "primary_economy_type": "manufacturing_expansion",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.95,
+    "notes": "Manufacturing expansion leader",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kh",
+    "country_name": "Cambodia",
+    "country_code": "KH",
+    "country_code_alpha3": "KHM",
+    "aliases": [
+      "Cambodia"
+    ],
+    "primary_economy_id": "eco_manufacturing_expansion",
+    "primary_economy_type": "manufacturing_expansion",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.88,
+    "notes": "Textile manufacturing expansion",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mm",
+    "country_name": "Myanmar",
+    "country_code": "MM",
+    "country_code_alpha3": "MMR",
+    "aliases": [
+      "Myanmar",
+      "Burma"
+    ],
+    "primary_economy_id": "eco_manufacturing_expansion",
+    "primary_economy_type": "manufacturing_expansion",
+    "secondary_economy_ids": [
+      "eco_infrastructure_deficient"
+    ],
+    "secondary_economy_types": [
+      "infrastructure_deficient"
+    ],
+    "confidence": 0.8,
+    "notes": "Manufacturing expansion; instability risk",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_la",
+    "country_name": "Laos",
+    "country_code": "LA",
+    "country_code_alpha3": "LAO",
+    "aliases": [
+      "Laos",
+      "Lao PDR"
+    ],
+    "primary_economy_id": "eco_manufacturing_expansion",
+    "primary_economy_type": "manufacturing_expansion",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.82,
+    "notes": "Manufacturing expansion; corruption risk",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_my",
+    "country_name": "Malaysia",
+    "country_code": "MY",
+    "country_code_alpha3": "MYS",
+    "aliases": [
+      "Malaysia"
+    ],
+    "primary_economy_id": "eco_manufacturing_expansion",
+    "primary_economy_type": "manufacturing_expansion",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.88,
+    "notes": "Manufacturing expansion with state direction",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_th",
+    "country_name": "Thailand",
+    "country_code": "TH",
+    "country_code_alpha3": "THA",
+    "aliases": [
+      "Thailand"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_manufacturing_expansion"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_expansion"
+    ],
+    "confidence": 0.91,
+    "notes": "Tourism dominant with manufacturing base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mx",
+    "country_name": "Mexico",
+    "country_code": "MX",
+    "country_code_alpha3": "MEX",
+    "aliases": [
+      "Mexico",
+      "M\u00e9xico"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_manufacturing_expansion"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_expansion"
+    ],
+    "confidence": 0.88,
+    "notes": "Tourism with near-shore manufacturing",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mv",
+    "country_name": "Maldives",
+    "country_code": "MV",
+    "country_code_alpha3": "MDV",
+    "aliases": [
+      "Maldives"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.97,
+    "notes": "Almost purely tourism economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_jm",
+    "country_name": "Jamaica",
+    "country_code": "JM",
+    "country_code_alpha3": "JAM",
+    "aliases": [
+      "Jamaica"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.87,
+    "notes": "Tourism economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mt",
+    "country_name": "Malta",
+    "country_code": "MT",
+    "country_code_alpha3": "MLT",
+    "aliases": [
+      "Malta"
+    ],
+    "primary_economy_id": "eco_port_logistics",
+    "primary_economy_type": "port_logistics",
+    "secondary_economy_ids": [
+      "eco_financial_mega_city"
+    ],
+    "secondary_economy_types": [
+      "financial_mega_city"
+    ],
+    "confidence": 0.88,
+    "notes": "Mediterranean port and financial hub",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_pa",
+    "country_name": "Panama",
+    "country_code": "PA",
+    "country_code_alpha3": "PAN",
+    "aliases": [
+      "Panama"
+    ],
+    "primary_economy_id": "eco_port_logistics",
+    "primary_economy_type": "port_logistics",
+    "secondary_economy_ids": [
+      "eco_consumer_capitalist"
+    ],
+    "secondary_economy_types": [
+      "consumer_capitalist"
+    ],
+    "confidence": 0.91,
+    "notes": "Panama Canal port logistics hub",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_dj",
+    "country_name": "Djibouti",
+    "country_code": "DJ",
+    "country_code_alpha3": "DJI",
+    "aliases": [
+      "Djibouti"
+    ],
+    "primary_economy_id": "eco_port_logistics",
+    "primary_economy_type": "port_logistics",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Horn of Africa port logistics",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cy",
+    "country_name": "Cyprus",
+    "country_code": "CY",
+    "country_code_alpha3": "CYP",
+    "aliases": [
+      "Cyprus"
+    ],
+    "primary_economy_id": "eco_port_logistics",
+    "primary_economy_type": "port_logistics",
+    "secondary_economy_ids": [
+      "eco_financial_mega_city"
+    ],
+    "secondary_economy_types": [
+      "financial_mega_city"
+    ],
+    "confidence": 0.87,
+    "notes": "Mediterranean port and financial services",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cn",
+    "country_name": "China",
+    "country_code": "CN",
+    "country_code_alpha3": "CHN",
+    "aliases": [
+      "China",
+      "PRC",
+      "People's Republic of China"
+    ],
+    "primary_economy_id": "eco_state_controlled_hybrid",
+    "primary_economy_type": "state_controlled_hybrid",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.96,
+    "notes": "State-controlled hybrid economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ru",
+    "country_name": "Russia",
+    "country_code": "RU",
+    "country_code_alpha3": "RUS",
+    "aliases": [
+      "Russia",
+      "Russian Federation"
+    ],
+    "primary_economy_id": "eco_state_controlled_hybrid",
+    "primary_economy_type": "state_controlled_hybrid",
+    "secondary_economy_ids": [
+      "eco_sanctioned"
+    ],
+    "secondary_economy_types": [
+      "sanctioned"
+    ],
+    "confidence": 0.95,
+    "notes": "State-controlled hybrid; sanctioned context",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ir",
+    "country_name": "Iran",
+    "country_code": "IR",
+    "country_code_alpha3": "IRN",
+    "aliases": [
+      "Iran",
+      "Islamic Republic of Iran",
+      "Persia"
+    ],
+    "primary_economy_id": "eco_sanctioned",
+    "primary_economy_type": "sanctioned",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.95,
+    "notes": "Sanctioned economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_by",
+    "country_name": "Belarus",
+    "country_code": "BY",
+    "country_code_alpha3": "BLR",
+    "aliases": [
+      "Belarus"
+    ],
+    "primary_economy_id": "eco_sanctioned",
+    "primary_economy_type": "sanctioned",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.9,
+    "notes": "Sanctioned state-controlled economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kp",
+    "country_name": "North Korea",
+    "country_code": "KP",
+    "country_code_alpha3": "PRK",
+    "aliases": [
+      "North Korea",
+      "DPRK"
+    ],
+    "primary_economy_id": "eco_sanctioned",
+    "primary_economy_type": "sanctioned",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.99,
+    "notes": "Most sanctioned economy globally",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tm",
+    "country_name": "Turkmenistan",
+    "country_code": "TM",
+    "country_code_alpha3": "TKM",
+    "aliases": [
+      "Turkmenistan"
+    ],
+    "primary_economy_id": "eco_sanctioned",
+    "primary_economy_type": "sanctioned",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.88,
+    "notes": "State-controlled, heavily restricted",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cu",
+    "country_name": "Cuba",
+    "country_code": "CU",
+    "country_code_alpha3": "CUB",
+    "aliases": [
+      "Cuba"
+    ],
+    "primary_economy_id": "eco_sanctioned",
+    "primary_economy_type": "sanctioned",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.88,
+    "notes": "Partially sanctioned state economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_uz",
+    "country_name": "Uzbekistan",
+    "country_code": "UZ",
+    "country_code_alpha3": "UZB",
+    "aliases": [
+      "Uzbekistan"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_state_controlled_hybrid"
+    ],
+    "secondary_economy_types": [
+      "state_controlled_hybrid"
+    ],
+    "confidence": 0.82,
+    "notes": "Transitioning agricultural; state direction",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mw",
+    "country_name": "Malawi",
+    "country_code": "MW",
+    "country_code_alpha3": "MWI",
+    "aliases": [
+      "Malawi"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.93,
+    "notes": "Agricultural labor economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_bf",
+    "country_name": "Burkina Faso",
+    "country_code": "BF",
+    "country_code_alpha3": "BFA",
+    "aliases": [
+      "Burkina Faso"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.9,
+    "notes": "Agricultural labor with aid dependency",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_mz",
+    "country_name": "Mozambique",
+    "country_code": "MZ",
+    "country_code_alpha3": "MOZ",
+    "aliases": [
+      "Mozambique"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.89,
+    "notes": "Agricultural labor economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_rw",
+    "country_name": "Rwanda",
+    "country_code": "RW",
+    "country_code_alpha3": "RWA",
+    "aliases": [
+      "Rwanda"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.87,
+    "notes": "Agricultural economy; improving governance",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ug",
+    "country_name": "Uganda",
+    "country_code": "UG",
+    "country_code_alpha3": "UGA",
+    "aliases": [
+      "Uganda"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_rapid_urbanization"
+    ],
+    "secondary_economy_types": [
+      "rapid_urbanization"
+    ],
+    "confidence": 0.87,
+    "notes": "Agricultural base with urbanization",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tj",
+    "country_name": "Tajikistan",
+    "country_code": "TJ",
+    "country_code_alpha3": "TJK",
+    "aliases": [
+      "Tajikistan"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.85,
+    "notes": "Agricultural labor; remittance dependent",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kg",
+    "country_name": "Kyrgyzstan",
+    "country_code": "KG",
+    "country_code_alpha3": "KGZ",
+    "aliases": [
+      "Kyrgyzstan"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.83,
+    "notes": "Agricultural labor with informal economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_md",
+    "country_name": "Moldova",
+    "country_code": "MD",
+    "country_code_alpha3": "MDA",
+    "aliases": [
+      "Moldova"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_post_collapse"
+    ],
+    "secondary_economy_types": [
+      "post_collapse"
+    ],
+    "confidence": 0.83,
+    "notes": "Agricultural base; post-Soviet transition",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sn",
+    "country_name": "Senegal",
+    "country_code": "SN",
+    "country_code_alpha3": "SEN",
+    "aliases": [
+      "Senegal"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.85,
+    "notes": "Agricultural labor",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ml",
+    "country_name": "Mali",
+    "country_code": "ML",
+    "country_code_alpha3": "MLI",
+    "aliases": [
+      "Mali"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.88,
+    "notes": "Aid-dependent; conflict zones",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ne",
+    "country_name": "Niger",
+    "country_code": "NE",
+    "country_code_alpha3": "NER",
+    "aliases": [
+      "Niger"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.92,
+    "notes": "Heavily aid-dependent",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_td",
+    "country_name": "Chad",
+    "country_code": "TD",
+    "country_code_alpha3": "TCD",
+    "aliases": [
+      "Chad"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.91,
+    "notes": "Aid-dependent",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ss",
+    "country_name": "South Sudan",
+    "country_code": "SS",
+    "country_code_alpha3": "SSD",
+    "aliases": [
+      "South Sudan"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [
+      "eco_civil_war"
+    ],
+    "secondary_economy_types": [
+      "civil_war"
+    ],
+    "confidence": 0.9,
+    "notes": "Aid-dependent; post-conflict",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cf",
+    "country_name": "Central African Republic",
+    "country_code": "CF",
+    "country_code_alpha3": "CAF",
+    "aliases": [
+      "Central African Republic",
+      "CAR"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [
+      "eco_militia_controlled"
+    ],
+    "secondary_economy_types": [
+      "militia_controlled"
+    ],
+    "confidence": 0.9,
+    "notes": "Aid-dependent; fragile state",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tl",
+    "country_name": "Timor-Leste",
+    "country_code": "TL",
+    "country_code_alpha3": "TLS",
+    "aliases": [
+      "East Timor",
+      "Timor-Leste"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.85,
+    "notes": "Aid-dependent small state",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tg",
+    "country_name": "Togo",
+    "country_code": "TG",
+    "country_code_alpha3": "TGO",
+    "aliases": [
+      "Togo"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.84,
+    "notes": "Agricultural labor",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_bj",
+    "country_name": "Benin",
+    "country_code": "BJ",
+    "country_code_alpha3": "BEN",
+    "aliases": [
+      "Benin"
+    ],
+    "primary_economy_id": "eco_aid_dependent",
+    "primary_economy_type": "aid_dependent",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.82,
+    "notes": "Aid-dependent agricultural",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_gn",
+    "country_name": "Guinea",
+    "country_code": "GN",
+    "country_code_alpha3": "GIN",
+    "aliases": [
+      "Guinea",
+      "Republic of Guinea"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.85,
+    "notes": "Agricultural with mineral wealth undeveloped",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sl",
+    "country_name": "Sierra Leone",
+    "country_code": "SL",
+    "country_code_alpha3": "SLE",
+    "aliases": [
+      "Sierra Leone"
+    ],
+    "primary_economy_id": "eco_infrastructure_deficient",
+    "primary_economy_type": "infrastructure_deficient",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.87,
+    "notes": "Infrastructure deficient",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_lr",
+    "country_name": "Liberia",
+    "country_code": "LR",
+    "country_code_alpha3": "LBR",
+    "aliases": [
+      "Liberia"
+    ],
+    "primary_economy_id": "eco_infrastructure_deficient",
+    "primary_economy_type": "infrastructure_deficient",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.86,
+    "notes": "Infrastructure deficient; post-conflict recovery",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_zw",
+    "country_name": "Zimbabwe",
+    "country_code": "ZW",
+    "country_code_alpha3": "ZWE",
+    "aliases": [
+      "Zimbabwe"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [
+      "eco_post_collapse"
+    ],
+    "secondary_economy_types": [
+      "post_collapse"
+    ],
+    "confidence": 0.9,
+    "notes": "Informal cash economy; currency crisis history",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ht",
+    "country_name": "Haiti",
+    "country_code": "HT",
+    "country_code_alpha3": "HTI",
+    "aliases": [
+      "Haiti"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.9,
+    "notes": "Informal cash; chronic instability",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_hn",
+    "country_name": "Honduras",
+    "country_code": "HN",
+    "country_code_alpha3": "HND",
+    "aliases": [
+      "Honduras"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.85,
+    "notes": "Informal cash economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_gt",
+    "country_name": "Guatemala",
+    "country_code": "GT",
+    "country_code_alpha3": "GTM",
+    "aliases": [
+      "Guatemala"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.84,
+    "notes": "Informal cash economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ni",
+    "country_name": "Nicaragua",
+    "country_code": "NI",
+    "country_code_alpha3": "NIC",
+    "aliases": [
+      "Nicaragua"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.83,
+    "notes": "Informal cash; political restrictions",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sv",
+    "country_name": "El Salvador",
+    "country_code": "SV",
+    "country_code_alpha3": "SLV",
+    "aliases": [
+      "El Salvador"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.84,
+    "notes": "Informal cash; remittance economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_py",
+    "country_name": "Paraguay",
+    "country_code": "PY",
+    "country_code_alpha3": "PRY",
+    "aliases": [
+      "Paraguay"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.83,
+    "notes": "Informal cash with agricultural base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_al",
+    "country_name": "Albania",
+    "country_code": "AL",
+    "country_code_alpha3": "ALB",
+    "aliases": [
+      "Albania"
+    ],
+    "primary_economy_id": "eco_informal_cash",
+    "primary_economy_type": "informal_cash",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.8,
+    "notes": "Informal economy; EU candidate",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_bo",
+    "country_name": "Bolivia",
+    "country_code": "BO",
+    "country_code_alpha3": "BOL",
+    "aliases": [
+      "Bolivia"
+    ],
+    "primary_economy_id": "eco_commodity_export",
+    "primary_economy_type": "commodity_export",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.85,
+    "notes": "Commodity export with informal economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_so",
+    "country_name": "Somalia",
+    "country_code": "SO",
+    "country_code_alpha3": "SOM",
+    "aliases": [
+      "Somalia"
+    ],
+    "primary_economy_id": "eco_militia_controlled",
+    "primary_economy_type": "militia_controlled",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.9,
+    "notes": "Militia-controlled zones and aid dependency",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ly",
+    "country_name": "Libya",
+    "country_code": "LY",
+    "country_code_alpha3": "LBY",
+    "aliases": [
+      "Libya"
+    ],
+    "primary_economy_id": "eco_black_market_war",
+    "primary_economy_type": "black_market_war",
+    "secondary_economy_ids": [
+      "eco_oil_wealth"
+    ],
+    "secondary_economy_types": [
+      "oil_wealth"
+    ],
+    "confidence": 0.88,
+    "notes": "Black market war economy; disrupted oil",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sd",
+    "country_name": "Sudan",
+    "country_code": "SD",
+    "country_code_alpha3": "SDN",
+    "aliases": [
+      "Sudan"
+    ],
+    "primary_economy_id": "eco_black_market_war",
+    "primary_economy_type": "black_market_war",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.87,
+    "notes": "Conflict economy; black market",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ps",
+    "country_name": "Palestine",
+    "country_code": "PS",
+    "country_code_alpha3": "PSE",
+    "aliases": [
+      "Palestine",
+      "West Bank",
+      "Gaza",
+      "Palestinian Territories"
+    ],
+    "primary_economy_id": "eco_occupied_territory",
+    "primary_economy_type": "occupied_territory",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.93,
+    "notes": "Occupied territory economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ye",
+    "country_name": "Yemen",
+    "country_code": "YE",
+    "country_code_alpha3": "YEM",
+    "aliases": [
+      "Yemen"
+    ],
+    "primary_economy_id": "eco_civil_war",
+    "primary_economy_type": "civil_war",
+    "secondary_economy_ids": [
+      "eco_aid_dependent"
+    ],
+    "secondary_economy_types": [
+      "aid_dependent"
+    ],
+    "confidence": 0.95,
+    "notes": "Active civil war economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_sy",
+    "country_name": "Syria",
+    "country_code": "SY",
+    "country_code_alpha3": "SYR",
+    "aliases": [
+      "Syria"
+    ],
+    "primary_economy_id": "eco_civil_war",
+    "primary_economy_type": "civil_war",
+    "secondary_economy_ids": [
+      "eco_post_collapse"
+    ],
+    "secondary_economy_types": [
+      "post_collapse"
+    ],
+    "confidence": 0.95,
+    "notes": "Civil war and post-collapse",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ve",
+    "country_name": "Venezuela",
+    "country_code": "VE",
+    "country_code_alpha3": "VEN",
+    "aliases": [
+      "Venezuela"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.93,
+    "notes": "Economic collapse and corruption",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_lb",
+    "country_name": "Lebanon",
+    "country_code": "LB",
+    "country_code_alpha3": "LBN",
+    "aliases": [
+      "Lebanon"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.92,
+    "notes": "Banking collapse; post-crisis",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ar",
+    "country_name": "Argentina",
+    "country_code": "AR",
+    "country_code_alpha3": "ARG",
+    "aliases": [
+      "Argentina"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_commodity_export"
+    ],
+    "secondary_economy_types": [
+      "commodity_export"
+    ],
+    "confidence": 0.85,
+    "notes": "Recurring collapse cycles; commodity base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_lk",
+    "country_name": "Sri Lanka",
+    "country_code": "LK",
+    "country_code_alpha3": "LKA",
+    "aliases": [
+      "Sri Lanka",
+      "Ceylon"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_tourism_economy"
+    ],
+    "secondary_economy_types": [
+      "tourism_economy"
+    ],
+    "confidence": 0.87,
+    "notes": "Recent economic collapse; recovering",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ua",
+    "country_name": "Ukraine",
+    "country_code": "UA",
+    "country_code_alpha3": "UKR",
+    "aliases": [
+      "Ukraine"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_manufacturing_excellence"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_excellence"
+    ],
+    "confidence": 0.85,
+    "notes": "Conflict-induced collapse; strong industrial history",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_am",
+    "country_name": "Armenia",
+    "country_code": "AM",
+    "country_code_alpha3": "ARM",
+    "aliases": [
+      "Armenia"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [],
+    "secondary_economy_types": [],
+    "confidence": 0.8,
+    "notes": "Post-Soviet transition economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ge",
+    "country_name": "Georgia",
+    "country_code": "GE",
+    "country_code_alpha3": "GEO",
+    "aliases": [
+      "Georgia"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.78,
+    "notes": "Post-Soviet with improving governance",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_dz",
+    "country_name": "Algeria",
+    "country_code": "DZ",
+    "country_code_alpha3": "DZA",
+    "aliases": [
+      "Algeria"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.87,
+    "notes": "Oil wealth with governance issues",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cm",
+    "country_name": "Cameroon",
+    "country_code": "CM",
+    "country_code_alpha3": "CMR",
+    "aliases": [
+      "Cameroon"
+    ],
+    "primary_economy_id": "eco_corruption_heavy",
+    "primary_economy_type": "corruption_heavy",
+    "secondary_economy_ids": [
+      "eco_agricultural_labor"
+    ],
+    "secondary_economy_types": [
+      "agricultural_labor"
+    ],
+    "confidence": 0.85,
+    "notes": "Corruption-heavy; agricultural base",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cd",
+    "country_name": "Democratic Republic of Congo",
+    "country_code": "CD",
+    "country_code_alpha3": "COD",
+    "aliases": [
+      "DRC",
+      "DR Congo",
+      "Congo-Kinshasa"
+    ],
+    "primary_economy_id": "eco_corruption_heavy",
+    "primary_economy_type": "corruption_heavy",
+    "secondary_economy_ids": [
+      "eco_infrastructure_deficient"
+    ],
+    "secondary_economy_types": [
+      "infrastructure_deficient"
+    ],
+    "confidence": 0.9,
+    "notes": "Corruption-heavy; mineral-rich but infrastructure deficient",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_cg",
+    "country_name": "Republic of Congo",
+    "country_code": "CG",
+    "country_code_alpha3": "COG",
+    "aliases": [
+      "Congo-Brazzaville",
+      "Republic of Congo"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.85,
+    "notes": "Oil wealth with corruption",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ga",
+    "country_name": "Gabon",
+    "country_code": "GA",
+    "country_code_alpha3": "GAB",
+    "aliases": [
+      "Gabon"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_corruption_heavy"
+    ],
+    "secondary_economy_types": [
+      "corruption_heavy"
+    ],
+    "confidence": 0.85,
+    "notes": "Oil wealth with governance issues",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_iq",
+    "country_name": "Iraq",
+    "country_code": "IQ",
+    "country_code_alpha3": "IRQ",
+    "aliases": [
+      "Iraq"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_post_collapse"
+    ],
+    "secondary_economy_types": [
+      "post_collapse"
+    ],
+    "confidence": 0.85,
+    "notes": "Oil wealth recovering from conflict",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_il",
+    "country_name": "Israel",
+    "country_code": "IL",
+    "country_code_alpha3": "ISR",
+    "aliases": [
+      "Israel"
+    ],
+    "primary_economy_id": "eco_consumer_capitalist",
+    "primary_economy_type": "consumer_capitalist",
+    "secondary_economy_ids": [
+      "eco_saas_startup"
+    ],
+    "secondary_economy_types": [
+      "saas_startup"
+    ],
+    "confidence": 0.9,
+    "notes": "Consumer capitalist with strong startup ecosystem",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ro",
+    "country_name": "Romania",
+    "country_code": "RO",
+    "country_code_alpha3": "ROU",
+    "aliases": [
+      "Romania"
+    ],
+    "primary_economy_id": "eco_welfare_industrial",
+    "primary_economy_type": "welfare_industrial",
+    "secondary_economy_ids": [
+      "eco_manufacturing_expansion"
+    ],
+    "secondary_economy_types": [
+      "manufacturing_expansion"
+    ],
+    "confidence": 0.83,
+    "notes": "EU welfare industrial; manufacturing growth",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_ba",
+    "country_name": "Bosnia and Herzegovina",
+    "country_code": "BA",
+    "country_code_alpha3": "BIH",
+    "aliases": [
+      "Bosnia",
+      "Bosnia and Herzegovina"
+    ],
+    "primary_economy_id": "eco_post_collapse",
+    "primary_economy_type": "post_collapse",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.82,
+    "notes": "Post-conflict transition economy",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_kz",
+    "country_name": "Kazakhstan",
+    "country_code": "KZ",
+    "country_code_alpha3": "KAZ",
+    "aliases": [
+      "Kazakhstan"
+    ],
+    "primary_economy_id": "eco_oil_wealth",
+    "primary_economy_type": "oil_wealth",
+    "secondary_economy_ids": [
+      "eco_commodity_export"
+    ],
+    "secondary_economy_types": [
+      "commodity_export"
+    ],
+    "confidence": 0.88,
+    "notes": "Oil wealth and mineral commodity export",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_tn",
+    "country_name": "Tunisia",
+    "country_code": "TN",
+    "country_code_alpha3": "TUN",
+    "aliases": [
+      "Tunisia"
+    ],
+    "primary_economy_id": "eco_tourism_economy",
+    "primary_economy_type": "tourism_economy",
+    "secondary_economy_ids": [
+      "eco_informal_cash"
+    ],
+    "secondary_economy_types": [
+      "informal_cash"
+    ],
+    "confidence": 0.83,
+    "notes": "Tourism with informal economy challenges",
+    "schema_version": "A2"
+  },
+  {
+    "mapping_id": "map_np",
+    "country_name": "Nepal",
+    "country_code": "NP",
+    "country_code_alpha3": "NPL",
+    "aliases": [
+      "Nepal"
+    ],
+    "primary_economy_id": "eco_agricultural_labor",
+    "primary_economy_type": "agricultural_labor",
+    "secondary_economy_ids": [
+      "eco_tourism_economy"
+    ],
+    "secondary_economy_types": [
+      "tourism_economy"
+    ],
+    "confidence": 0.85,
+    "notes": "Agricultural base with trekking tourism",
+    "schema_version": "A2"
+  }
+]

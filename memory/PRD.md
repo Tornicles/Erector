@@ -17,6 +17,7 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 - All API routes prefixed with `/api`
 - Standard API envelope: `{success, data, errors, metadata}` on ALL responses
 - No datetime/ObjectId serialization issues: always use `model_dump(mode='json')` in JSONResponse contexts
+- Difficulty multipliers: ALL deterministic from Civilization DNA (NO AI). Range 0.5–1.5.
 
 ---
 
@@ -61,6 +62,43 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 - `docker-compose.yml`
 - `.github/workflows/ci.yml`
 
+### PROMPT A2 — Economy World Data & API ✅ (2026-06-16)
+**Data:**
+- `economy-data/economies.json` — 30 economies × 25 Civilization DNA dimensions (generated)
+- `economy-data/country-economy-mappings.json` — 138 countries with ISO codes, primary + secondary economies
+
+**Backend Models (already in Prompt 0/A1 base):**
+- `backend/app/models/economy.py` — Economy, EconomySummary, EconomyDetail, EconomyResolveResponse, EconomyCompareRequest/Response, EconomicStackBuildRequest, EconomicStack, DifficultyMultipliers
+
+**Seeders (idempotent):**
+- `backend/app/seeders/seed_economies.py` — upserts all 30 economies on startup
+- `backend/app/seeders/seed_country_mappings.py` — upserts all 138 mappings on startup
+
+**Services:**
+- `backend/app/services/economy_service.py` — list/get economies from MongoDB
+- `backend/app/services/economy_resolution_service.py` — country → economy (ISO code, name, alias matching)
+- `backend/app/services/economic_stack_service.py` — builds 6-layer EconomicStack with deterministic multipliers
+- `backend/app/services/economy_comparison_service.py` — compares economies via 12 DNA-formula dimensions
+
+**Indexes (A2):**
+- `economies.economy_id` (unique)
+- `economies.economy_type`
+- `country_economy_mappings.country_code` (unique)
+- `country_economy_mappings.country_code_alpha3` (sparse)
+- `country_economy_mappings.primary_economy_id`
+- `country_economy_mappings.primary_economy_type`
+
+**Tests (68/68 A2 passing):**
+- `backend/tests/test_economy_seed.py` (8 tests)
+- `backend/tests/test_country_resolution.py` (25 tests — parametrized)
+- `backend/tests/test_economy_api.py` (14 tests)
+- `backend/tests/test_economic_stack_builder.py` (11 tests)
+- `backend/tests/test_economy_comparison.py` (7 tests)
+
+**Frontend/Mobile Types:**
+- `frontend/src/types/economy.ts` — full A2 TypeScript types
+- `frontend/src/services/economyClient.ts` — typed API client for all A2 endpoints
+
 ---
 
 ## API Endpoints
@@ -78,21 +116,35 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 | GET | /api/schema/enums | None | Prompt 0 — 38 enums |
 | GET | /api/schema/indexes | None | Prompt 0 — indexes |
 
+### A2 Implemented
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | /api/v1/economies | None | List all 30 economy summaries (paginated) |
+| GET | /api/v1/economies/{economy_id} | None | Full economy profile with DNA |
+| GET | /api/v1/economies/resolve/{country} | None | Country name/ISO → primary + secondary economy |
+| POST | /api/v1/economies/compare | None | Compare economies with dimension scores |
+| POST | /api/v1/stack/build | None | Build 6-layer Economic Stack |
+
 ---
 
-## DB Schema (Core A1)
+## DB Schema
+
+### A1 Core
 - `erector_users`: {user_id, email, full_name, user_type, status, subscription_tier, onboarding_completed}
 - `erector_sessions`: {session_id, user_id, access_token_hash, refresh_token_hash, expires_at, revoked_at}
 - `magic_link_attempts`: {attempt_id, email_hash, token_hash, email(mock), expires_at, consumed_at}
+
+### A2 Economy World
+- `economies`: {economy_id, economy_type, display_name, civilization_dna[25], resistance_patterns, opportunity_patterns, ...}
+- `country_economy_mappings`: {country_code, country_name, aliases, primary_economy_id, secondary_economy_ids, confidence}
 
 ---
 
 ## P0 Backlog — Remaining Prompts
 | Priority | Prompt | Description |
 |----------|--------|-------------|
-| P0 | A2 | Economy world seeding (30 economies × 25 DNA dimensions) |
 | P0 | A3 | Context collection question engine |
-| P0 | A4 | Economic stack resolution logic |
+| P0 | A4 | Economic stack resolution (deeper — persisted stacks) |
 | P1 | B1–B27 | 27 validation engines |
 | P1 | C1 | Scoring engine (27 deterministic scores) |
 | P1 | D1 | Simulation engine (6 simulation systems) |
@@ -113,3 +165,4 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 - **Torgima API**: Credentials/endpoint not yet provided.
 - **Bhudhi/Claude**: AI integration deferred to Prompt B-series.
 - **Mobile Expo**: File structure created but not runnable in cloud container.
+- **Economic Stacks persistence**: `POST /api/v1/stack/build` builds stacks in-memory; persistence to `economic_stacks` collection deferred to A4.
