@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
+import WelcomePage from './pages/WelcomePage';
+import HealthPage from './pages/HealthPage';
+
+type Page = 'welcome' | 'health';
 
 function App() {
+  const [page, setPage] = useState<Page>('welcome');
+
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Erector</h1>
-      <p>Schema foundation layer loaded. UI screens coming in subsequent prompts.</p>
-    </div>
+    <>
+      {page === 'welcome' && (
+        <WelcomePage onNavigateToHealth={() => setPage('health')} />
+      )}
+      {page === 'health' && (
+        <HealthPage onBack={() => setPage('welcome')} />
+      )}
+    </>
   );
 }
 
