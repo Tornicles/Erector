@@ -27,6 +27,11 @@ CONTEXT_ANSWERS = "context_answers"
 BHUDHI_LOGS = "bhudhi_logs"
 BHUDHI_PROMPT_CONTRACTS = "bhudhi_prompt_contracts"
 BHUDHI_USAGE_DAILY = "bhudhi_usage_daily"
+
+# ── Live Feed / WebSocket (PROMPT A6+) ───────────────────────────────────────
+VALIDATION_LIVE_EVENTS = "validation_live_events"
+VALIDATION_LIVE_SEQUENCES = "validation_live_sequences"
+WEBSOCKET_CONNECTION_LOGS = "websocket_connection_logs"
 ECONOMIC_STACKS = "economic_stacks"
 
 # ── Engines & Scoring (PROMPT B+) ────────────────────────────────────────────

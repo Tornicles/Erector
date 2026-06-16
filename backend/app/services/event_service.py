@@ -64,6 +64,15 @@ async def emit_event(
     try:
         await db[SYSTEM_EVENTS].insert_one(doc)
         logger.info("Event emitted: %s %s/%s", evt_type, entity_type, entity_id)
+        # A6 integration (best-effort): broadcast to live feed if enabled.
+        try:
+            from app.websocket.state import broadcaster
+            from app.services.event_broadcast_service import record_and_broadcast_system_event
+
+            await record_and_broadcast_system_event(db, broadcaster, doc)
+        except Exception:
+            # Never fail system event emission due to live feed
+            pass
     except Exception as exc:
         logger.error("Failed to emit event %s: %s", evt_type, exc)
         return event.event_id

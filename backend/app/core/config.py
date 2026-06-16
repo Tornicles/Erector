@@ -106,6 +106,18 @@ class Settings(BaseSettings):
     bhudhi_rate_limit_per_minute: int = Field(default=20)
     bhudhi_prompt_injection_blocking: bool = Field(default=True)
 
+    # ── WebSocket Live Feed (A6) ─────────────────────────────────────────────
+    websocket_enabled: bool = Field(default=True)
+    websocket_heartbeat_interval_seconds: int = Field(default=25)
+    websocket_heartbeat_timeout_seconds: int = Field(default=60)
+    websocket_max_connections_per_validation: int = Field(default=20)
+    websocket_max_connections_per_user: int = Field(default=50)
+    websocket_event_buffer_size: int = Field(default=100)
+    websocket_replay_limit: int = Field(default=100)
+    websocket_test_events_enabled: bool = Field(default=False)
+    websocket_persist_live_events: bool = Field(default=True)
+    websocket_cleanup_interval_seconds: int = Field(default=60)
+
     # ── Derived Properties ───────────────────────────────────────────────────
 
     @property

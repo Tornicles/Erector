@@ -16,6 +16,7 @@ from .collections import (
     VALIDATION_SESSIONS, VALIDATION_IDEMPOTENCY_KEYS,
     VALIDATION_CONTEXTS, QUESTION_DEFINITIONS, CONTEXT_ANSWERS,
     BHUDHI_LOGS, BHUDHI_PROMPT_CONTRACTS, BHUDHI_USAGE_DAILY,
+    VALIDATION_LIVE_EVENTS, VALIDATION_LIVE_SEQUENCES, WEBSOCKET_CONNECTION_LOGS,
 )
 
 logger = logging.getLogger(__name__)
@@ -203,6 +204,36 @@ A1_INDEX_SPECS = [
      {"name": "idx_bhudhi_usage_total_tokens"}),
     (BHUDHI_USAGE_DAILY, [("estimated_cost", DESCENDING)],
      {"name": "idx_bhudhi_usage_cost"}),
+
+    # ── validation_live_events (A6) ──────────────────────────────────────────
+    (VALIDATION_LIVE_EVENTS, [("live_event_id", ASCENDING)],
+     {"unique": True, "name": "idx_live_event_id_unique"}),
+    (VALIDATION_LIVE_EVENTS, [("validation_id", ASCENDING), ("sequence_number", ASCENDING)],
+     {"unique": True, "name": "idx_live_validation_sequence_unique"}),
+    (VALIDATION_LIVE_EVENTS, [("validation_id", ASCENDING), ("timestamp", DESCENDING)],
+     {"name": "idx_live_validation_timestamp"}),
+    (VALIDATION_LIVE_EVENTS, [("owner_user_id", ASCENDING), ("timestamp", DESCENDING)],
+     {"name": "idx_live_owner_timestamp", "sparse": True}),
+    (VALIDATION_LIVE_EVENTS, [("event_type", ASCENDING), ("timestamp", DESCENDING)],
+     {"name": "idx_live_type_timestamp"}),
+    (VALIDATION_LIVE_EVENTS, [("validation_id", ASCENDING), ("replayable", ASCENDING), ("sequence_number", ASCENDING)],
+     {"name": "idx_live_replayable_sequence"}),
+
+    # ── validation_live_sequences (A6) ───────────────────────────────────────
+    (VALIDATION_LIVE_SEQUENCES, [("validation_id", ASCENDING)],
+     {"unique": True, "name": "idx_live_seq_validation_unique"}),
+    (VALIDATION_LIVE_SEQUENCES, [("updated_at", DESCENDING)],
+     {"name": "idx_live_seq_updated"}),
+
+    # ── websocket_connection_logs (A6, optional) ─────────────────────────────
+    (WEBSOCKET_CONNECTION_LOGS, [("connection_log_id", ASCENDING)],
+     {"unique": True, "name": "idx_wslog_id_unique", "sparse": True}),
+    (WEBSOCKET_CONNECTION_LOGS, [("validation_id", ASCENDING), ("connected_at", DESCENDING)],
+     {"name": "idx_wslog_validation_connected", "sparse": True}),
+    (WEBSOCKET_CONNECTION_LOGS, [("owner_user_id", ASCENDING), ("connected_at", DESCENDING)],
+     {"name": "idx_wslog_owner_connected", "sparse": True}),
+    (WEBSOCKET_CONNECTION_LOGS, [("connection_id", ASCENDING)],
+     {"name": "idx_wslog_connection_id", "sparse": True}),
 ]
 
 

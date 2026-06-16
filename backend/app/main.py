@@ -9,6 +9,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import asyncio
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -27,6 +28,7 @@ from app.routers import stack as stack_router
 from app.routers import validations as validations_router
 from app.routers import context as context_router
 from app.routers import bhudhi as bhudhi_router
+from app.routers import live as live_router
 from app.seeders.seed_economies import seed_economies
 from app.seeders.seed_country_mappings import seed_country_mappings
 
@@ -69,8 +71,23 @@ async def lifespan(app: FastAPI):
     if settings.mock_auth_enabled:
         logger.warning("[Erector] MOCK AUTH ENABLED — do not use in production")
 
+    cleanup_task = None
+    if settings.websocket_enabled:
+        async def _ws_cleanup_loop():
+            from app.websocket.state import manager
+            while True:
+                try:
+                    await manager.cleanup_idle_connections()
+                except Exception:
+                    logger.exception("WebSocket cleanup loop failed")
+                await asyncio.sleep(settings.websocket_cleanup_interval_seconds)
+
+        cleanup_task = asyncio.create_task(_ws_cleanup_loop())
+
     yield
 
+    if cleanup_task:
+        cleanup_task.cancel()
     await close_mongo_connection()
     logger.info("[Erector] Shutdown complete")
 
@@ -144,3 +161,4 @@ app.include_router(stack_router.router, prefix="/api")
 app.include_router(validations_router.router, prefix="/api")
 app.include_router(context_router.router, prefix="/api")
 app.include_router(bhudhi_router.router, prefix="/api")
+app.include_router(live_router.router, prefix="/api")

@@ -254,6 +254,45 @@ IDEMPOTENCY_KEY_TTL_HOURS=24
 
 ---
 
+## Prompt A6 — WebSocket Server and Live Feed
+
+The live feed streams **real-time validation activity** to clients so validations feel “alive” during long-running engine phases.
+
+### Endpoints
+
+- **WS** `/api/v1/validations/{validation_id}/live?token=$TOKEN&last_sequence_received=12`
+- **GET** `/api/v1/validations/{validation_id}/live/snapshot`
+- **GET** `/api/v1/validations/{validation_id}/live/events?after_sequence=12&limit=50`
+- **POST** `/api/v1/validations/{validation_id}/live/test-event` (development only)
+
+### Reconnect + replay
+
+- Each live event has a **monotonic `sequence_number` per validation**.
+- Clients reconnect with `last_sequence_received` and the server replays events with higher sequence numbers (buffer-first, DB fallback).
+
+### Heartbeat
+
+- Client sends `{ "type": "ping" }` periodically.
+- Server responds `{ "type": "pong" }` and tracks last heartbeat to clean up dead sockets.
+
+### Developer note
+
+Future engine prompts must emit live feed events via the broadcaster path (system events → live feed mapping or direct live event creation). **Do not write directly to WebSocket connections.**
+
+### A6 gate test (manual)
+
+```bash
+# Connect
+ws://localhost:8001/api/v1/validations/val_example/live?token=$TOKEN
+
+# Broadcast a dev test event
+curl -X POST http://localhost:8001/api/v1/validations/val_example/live/test-event \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"event_type":"engine_started","level":"info","title":"Engine started","message":"Economy Resolution Engine started."}'
+```
+
+---
+
 ## Completed prompts
 
 | Prompt | Status |
@@ -263,5 +302,7 @@ IDEMPOTENCY_KEY_TTL_HOURS=24
 | A2 — Economy World Data & API | ✅ |
 | A3 — Validation Lifecycle & State Machine | ✅ |
 | A4 — Context Collection & Dynamic Question Engine | ✅ |
+| A5 — Bhudhi Integration Layer | ✅ |
+| A6 — WebSocket Server & Live Feed | ✅ |
 
 See `memory/PRD.md` for full build sequence and backlog.

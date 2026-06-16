@@ -247,6 +247,88 @@ class PromptInjectionRiskType(str, Enum):
     jailbreak_attempt = "jailbreak_attempt"
 
 
+class LiveFeedEventType(str, Enum):
+    validation_created = "validation_created"
+    validation_state_changed = "validation_state_changed"
+    context_started = "context_started"
+    context_questions_generated = "context_questions_generated"
+    context_answers_submitted = "context_answers_submitted"
+    context_blocked = "context_blocked"
+    context_collected = "context_collected"
+    economic_stack_built = "economic_stack_built"
+    engine_started = "engine_started"
+    engine_progress = "engine_progress"
+    engine_completed = "engine_completed"
+    engine_failed = "engine_failed"
+    engine_fallback = "engine_fallback"
+    score_updated = "score_updated"
+    scoring_started = "scoring_started"
+    scoring_completed = "scoring_completed"
+    recursive_challenge_started = "recursive_challenge_started"
+    recursive_challenge_completed = "recursive_challenge_completed"
+    path_generation_started = "path_generation_started"
+    path_generation_completed = "path_generation_completed"
+    report_ready = "report_ready"
+    validation_complete = "validation_complete"
+    validation_failed = "validation_failed"
+    validation_archived = "validation_archived"
+    connection_established = "connection_established"
+    connection_resumed = "connection_resumed"
+    heartbeat = "heartbeat"
+    error = "error"
+
+
+class LiveFeedEventLevel(str, Enum):
+    debug = "debug"
+    info = "info"
+    success = "success"
+    warning = "warning"
+    error = "error"
+    critical = "critical"
+
+
+class WebSocketConnectionStatus(str, Enum):
+    connecting = "connecting"
+    connected = "connected"
+    authenticated = "authenticated"
+    active = "active"
+    idle = "idle"
+    disconnected = "disconnected"
+    expired = "expired"
+    rejected = "rejected"
+
+
+class WebSocketDisconnectReason(str, Enum):
+    client_closed = "client_closed"
+    auth_failed = "auth_failed"
+    validation_not_found = "validation_not_found"
+    access_denied = "access_denied"
+    token_expired = "token_expired"
+    heartbeat_timeout = "heartbeat_timeout"
+    server_shutdown = "server_shutdown"
+    duplicate_connection = "duplicate_connection"
+    unknown_error = "unknown_error"
+
+
+class EngineLiveStatus(str, Enum):
+    pending = "pending"
+    queued = "queued"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+    fallback = "fallback"
+    skipped = "skipped"
+    timed_out = "timed_out"
+
+
+class LiveFeedChannelType(str, Enum):
+    validation = "validation"
+    user = "user"
+    team = "team"
+    admin = "admin"
+    system = "system"
+
+
 class EconomyType(str, Enum):
     consumer_capitalist = "consumer_capitalist"
     welfare_industrial = "welfare_industrial"
