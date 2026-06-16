@@ -240,6 +240,30 @@ class CivilizationDnaDimension(str, Enum):
     future_change_velocity_index = "future_change_velocity_index"
 
 
+class EconomicStackLayerType(str, Enum):
+    founder_economy = "founder_economy"
+    customer_economy = "customer_economy"
+    revenue_economy = "revenue_economy"
+    platform_economy = "platform_economy"
+    talent_economy = "talent_economy"
+    regulatory_economy = "regulatory_economy"
+
+
+class EconomyComparisonDimension(str, Enum):
+    market_fit = "market_fit"
+    trust_fit = "trust_fit"
+    payment_fit = "payment_fit"
+    infrastructure_fit = "infrastructure_fit"
+    regulatory_fit = "regulatory_fit"
+    adoption_fit = "adoption_fit"
+    execution_fit = "execution_fit"
+    narrative_fit = "narrative_fit"
+    platform_fit = "platform_fit"
+    talent_fit = "talent_fit"
+    risk_fit = "risk_fit"
+    opportunity_fit = "opportunity_fit"
+
+
 class EvidenceType(str, Enum):
     no_evidence = "no_evidence"
     opinion = "opinion"

@@ -1,6 +1,5 @@
 """
-Enums — re-exports the foundational subset from PROMPT 0.
-TODO: Later prompts will import the full enum set from models.enums directly.
+Enums — re-exports from Prompt 0 enums + A2 economy enums.
 """
 from models.enums import (    # noqa: F401
     UserType,
@@ -19,11 +18,38 @@ from models.enums import (    # noqa: F401
     BillingCycle,
     SubscriptionStatus,
     PaymentStatus,
+    # A2 economy enums
+    EconomyType,
+    CivilizationDnaDimension,
+    EconomicStackLayerType,
+    EconomyComparisonDimension,
+    # Remaining Prompt 0 enums
+    EngineName,
+    EngineStatus,
+    BhudhiMode,
+    BhudhiForbiddenAction,
+    EconomyType,
+    CivilizationDnaDimension,
+    EvidenceType,
+    AssumptionCategory,
+    AssumptionStatus,
+    DependencyType,
+    DependencyStatus,
+    BlockerLevel,
+    RiskSeverity,
+    PathType,
+    VerdictType,
+    SimulationType,
+    SimulationStatus,
+    ScenarioType,
+    SimulationObjectType,
+    SimulationObjectState,
+    FitColor,
+    ClimateState,
+    ReportPackageType,
+    ReportFormat,
+    ShareExpiry,
+    NotificationType,
+    WorldEventCategory,
+    WebhookEventType,
 )
-
-__all__ = [
-    "UserType", "ExperienceLevel", "GoalType", "SubscriptionTier",
-    "TeamRole", "VisibilityType", "SourceType", "Platform",
-    "UserStatus", "ErrorType", "ErrorSeverity", "ValidationStatus",
-    "ValidationDepth", "BillingCycle", "SubscriptionStatus", "PaymentStatus",
-]
