@@ -15,6 +15,7 @@ from .collections import (
     ECONOMIES, COUNTRY_ECONOMY_MAPPINGS,
     VALIDATION_SESSIONS, VALIDATION_IDEMPOTENCY_KEYS,
     VALIDATION_CONTEXTS, QUESTION_DEFINITIONS, CONTEXT_ANSWERS,
+    BHUDHI_LOGS, BHUDHI_PROMPT_CONTRACTS, BHUDHI_USAGE_DAILY,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,40 @@ A1_INDEX_SPECS = [
      {"unique": True, "name": "idx_qdef_question_id_unique", "sparse": True}),
     (QUESTION_DEFINITIONS, [("category", ASCENDING), ("order", ASCENDING)],
      {"name": "idx_qdef_category_order", "sparse": True}),
+
+    # ── bhudhi_logs (A5) ─────────────────────────────────────────────────────
+    (BHUDHI_LOGS, [("bhudhi_log_id", ASCENDING)],
+     {"unique": True, "name": "idx_bhudhi_log_id_unique"}),
+    (BHUDHI_LOGS, [("validation_id", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_validation_created", "sparse": True}),
+    (BHUDHI_LOGS, [("owner_user_id", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_owner_created", "sparse": True}),
+    (BHUDHI_LOGS, [("trigger_type", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_trigger_created", "sparse": True}),
+    (BHUDHI_LOGS, [("mode", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_mode_created", "sparse": True}),
+    (BHUDHI_LOGS, [("status", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_status_created", "sparse": True}),
+    (BHUDHI_LOGS, [("fallback_used", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_bhudhi_fallback_created", "sparse": True}),
+
+    # ── bhudhi_prompt_contracts (A5) ─────────────────────────────────────────
+    (BHUDHI_PROMPT_CONTRACTS, [("contract_id", ASCENDING)],
+     {"unique": True, "name": "idx_bhudhi_contract_id_unique"}),
+    (BHUDHI_PROMPT_CONTRACTS, [("mode", ASCENDING), ("trigger_type", ASCENDING)],
+     {"name": "idx_bhudhi_mode_trigger"}),
+    (BHUDHI_PROMPT_CONTRACTS, [("active", ASCENDING), ("version", DESCENDING)],
+     {"name": "idx_bhudhi_active_version"}),
+
+    # ── bhudhi_usage_daily (A5) ──────────────────────────────────────────────
+    (BHUDHI_USAGE_DAILY, [("owner_user_id", ASCENDING), ("date", ASCENDING)],
+     {"unique": True, "name": "idx_bhudhi_usage_owner_date_unique", "sparse": True}),
+    (BHUDHI_USAGE_DAILY, [("date", ASCENDING)],
+     {"name": "idx_bhudhi_usage_date"}),
+    (BHUDHI_USAGE_DAILY, [("total_tokens", DESCENDING)],
+     {"name": "idx_bhudhi_usage_total_tokens"}),
+    (BHUDHI_USAGE_DAILY, [("estimated_cost", DESCENDING)],
+     {"name": "idx_bhudhi_usage_cost"}),
 ]
 
 

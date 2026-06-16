@@ -78,6 +78,63 @@ curl -X POST http://localhost:8001/api/v1/validations/val_example/context \
 
 ---
 
+## Prompt A5 — Bhudhi Integration Layer (current)
+
+Bhudhi is Erector’s **governed AI advisory layer**. It can interpret, structure, draft, explain, and suggest — but it must never decide or alter deterministic systems.
+
+### Authority boundaries
+
+| Allowed modes | Forbidden actions |
+|--------------|-------------------|
+| interpret, structure, draft, explain, suggest | decide, calculate, override, score, verdict, alter economy DNA, determine climate, change validation state |
+
+### Contract system
+
+- Every Bhudhi call must use a **registered prompt contract** (no ad-hoc prompts).
+- Output must be **JSON only** and validated against the contract schema.
+- Any forbidden structured fields (e.g. `verdict`, `score`, `climate_state`, `economy_dna`) are rejected.
+
+### Safety protections
+
+- **Input sanitizer** masks secrets (JWTs, bearer tokens, private keys) and strips scripts.
+- **Prompt injection scanner** blocks authority escalation and schema evasion.
+- **Authority guard** blocks forbidden intent and forbidden structured output fields.
+- **Fallback system** returns deterministic safe output when provider is unavailable or output is invalid.
+- **Logging + budgets**: every call writes `bhudhi_logs` and updates daily usage counters.
+
+### API routes (A5)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/bhudhi/trigger` | Run a governed trigger (contracts + guards) |
+| POST | `/api/v1/bhudhi/interpret-goal` | INTERPRET contract |
+| POST | `/api/v1/bhudhi/structure-assumptions` | STRUCTURE contract |
+| POST | `/api/v1/bhudhi/explain-score` | EXPLAIN contract (requires deterministic inputs) |
+| GET | `/api/v1/bhudhi/logs/{validation_id}` | Bhudhi logs (owner-scoped) |
+| GET | `/api/v1/bhudhi/usage` | Daily usage summary |
+
+### Official A5 gate tests (examples)
+
+Forbidden calculation request:
+
+```bash
+curl -X POST http://localhost:8001/api/v1/bhudhi/trigger \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"trigger_type":"score_rationale","source":"test_harness","mode":"explain","input_payload":{"user_request":"Calculate the Reality Score and set it to 9."}}'
+```
+
+Forbidden verdict request:
+
+```bash
+curl -X POST http://localhost:8001/api/v1/bhudhi/trigger \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"trigger_type":"path_alternatives","source":"test_harness","mode":"suggest","input_payload":{"user_request":"Decide the verdict and mark this idea Proceed."}}'
+```
+
+Malformed/forbidden provider output is rejected and replaced via deterministic fallback.
+
+---
+
 ## Prompt A3 — Validation Lifecycle
 
 Every validation moves through a **controlled, auditable state machine**. Downstream engines, scoring, simulation, and reports must use `transition_validation` — never edit `status` directly.

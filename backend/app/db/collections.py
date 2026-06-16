@@ -22,6 +22,11 @@ VALIDATION_IDEMPOTENCY_KEYS = "validation_idempotency_keys"
 VALIDATION_CONTEXTS = "validation_contexts"
 QUESTION_DEFINITIONS = "question_definitions"
 CONTEXT_ANSWERS = "context_answers"
+
+# ── Bhudhi (PROMPT A5+) ──────────────────────────────────────────────────────
+BHUDHI_LOGS = "bhudhi_logs"
+BHUDHI_PROMPT_CONTRACTS = "bhudhi_prompt_contracts"
+BHUDHI_USAGE_DAILY = "bhudhi_usage_daily"
 ECONOMIC_STACKS = "economic_stacks"
 
 # ── Engines & Scoring (PROMPT B+) ────────────────────────────────────────────

@@ -246,3 +246,63 @@ class MissingRequiredContextError(AppError):
             message="Missing required context fields.",
             details={"missing_fields": fields},
         )
+
+
+class BhudhiAuthorityError(AppError):
+    code = "BHUDHI_AUTHORITY_VIOLATION"
+    error_type = ErrorType.authorization_error
+    status_code = 403
+    user_facing_message = "Bhudhi request violates authority boundaries."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class BhudhiContractError(AppError):
+    code = "BHUDHI_CONTRACT_ERROR"
+    error_type = ErrorType.validation_error
+    status_code = 400
+    user_facing_message = "Bhudhi prompt contract error."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class BhudhiOutputValidationError(AppError):
+    code = "BHUDHI_OUTPUT_INVALID"
+    error_type = ErrorType.validation_error
+    status_code = 422
+    user_facing_message = "Bhudhi output did not match the required schema."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class BhudhiPromptInjectionError(AppError):
+    code = "BHUDHI_PROMPT_INJECTION_BLOCKED"
+    error_type = ErrorType.validation_error
+    status_code = 403
+    user_facing_message = "Request was blocked due to prompt injection risk."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class BhudhiBudgetExceededError(AppError):
+    code = "BHUDHI_BUDGET_EXCEEDED"
+    error_type = ErrorType.rate_limit_error
+    status_code = 429
+    user_facing_message = "Bhudhi budget exceeded."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class BhudhiProviderUnavailableError(AppError):
+    code = "BHUDHI_PROVIDER_UNAVAILABLE"
+    error_type = ErrorType.ai_provider_unavailable
+    status_code = 503
+    user_facing_message = "AI provider is currently unavailable."
+
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})

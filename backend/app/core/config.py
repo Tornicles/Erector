@@ -90,6 +90,22 @@ class Settings(BaseSettings):
     resend_api_key: Optional[str] = Field(default=None)
     torgima_api_base_url: Optional[str] = Field(default=None)
 
+    # ── Bhudhi (A5) ──────────────────────────────────────────────────────────
+    bhudhi_enabled: bool = Field(default=True)
+    bhudhi_provider: str = Field(default="anthropic")
+    bhudhi_model: str = Field(default="claude-3-5-sonnet-latest")
+    bhudhi_timeout_seconds: int = Field(default=30)
+    bhudhi_max_tokens_default: int = Field(default=1500)
+    bhudhi_temperature_default: float = Field(default=0.2)
+    bhudhi_allow_dev_fallback: bool = Field(default=True)
+    bhudhi_store_raw_io: bool = Field(default=False)
+    bhudhi_daily_token_budget: int = Field(default=200000)
+    bhudhi_daily_cost_budget_usd: float = Field(default=50.0)
+    bhudhi_per_user_daily_token_limit: int = Field(default=25000)
+    bhudhi_per_validation_token_limit: int = Field(default=10000)
+    bhudhi_rate_limit_per_minute: int = Field(default=20)
+    bhudhi_prompt_injection_blocking: bool = Field(default=True)
+
     # ── Derived Properties ───────────────────────────────────────────────────
 
     @property

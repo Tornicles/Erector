@@ -186,6 +186,65 @@ class BhudhiForbiddenAction(str, Enum):
     determine_climate = "determine_climate"
     approve_assumption = "approve_assumption"
     reject_assumption = "reject_assumption"
+    change_validation_state = "change_validation_state"
+    change_dependency_status = "change_dependency_status"
+    mark_launch_ready = "mark_launch_ready"
+
+
+class BhudhiRiskLevel(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    blocked = "blocked"
+
+
+class BhudhiStatus(str, Enum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    rejected = "rejected"
+    failed = "failed"
+    fallback = "fallback"
+    rate_limited = "rate_limited"
+    budget_exceeded = "budget_exceeded"
+
+
+class BhudhiTriggerType(str, Enum):
+    goal_decomposition = "goal_decomposition"
+    assumption_extraction = "assumption_extraction"
+    framework_language = "framework_language"
+    score_rationale = "score_rationale"
+    path_alternatives = "path_alternatives"
+    clarification_question_generation = "clarification_question_generation"
+    report_language = "report_language"
+    user_explanation = "user_explanation"
+    context_summary = "context_summary"
+    evidence_summary = "evidence_summary"
+
+
+class BhudhiSource(str, Enum):
+    context_collection = "context_collection"
+    validation_engine = "validation_engine"
+    scoring_engine = "scoring_engine"
+    framework_builder = "framework_builder"
+    report_generator = "report_generator"
+    path_system = "path_system"
+    user_request = "user_request"
+    test_harness = "test_harness"
+    system = "system"
+
+
+class PromptInjectionRiskType(str, Enum):
+    instruction_override = "instruction_override"
+    system_prompt_request = "system_prompt_request"
+    secret_extraction = "secret_extraction"
+    tool_abuse_request = "tool_abuse_request"
+    authority_escalation = "authority_escalation"
+    output_schema_evasion = "output_schema_evasion"
+    hidden_directive = "hidden_directive"
+    malicious_payload = "malicious_payload"
+    role_confusion = "role_confusion"
+    jailbreak_attempt = "jailbreak_attempt"
 
 
 class EconomyType(str, Enum):
@@ -833,11 +892,7 @@ class RevalidationStatus(str, Enum):
     failed = "failed"
 
 
-class BhudhiStatus(str, Enum):
-    pending = "pending"
-    completed = "completed"
-    failed = "failed"
-    rejected = "rejected"
+# (BhudhiStatus is defined earlier in this file under the Bhudhi section.)
 
 
 class LogLevel(str, Enum):

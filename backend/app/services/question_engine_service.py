@@ -38,6 +38,7 @@ from app.services.economic_stack_service import build_economic_stack
 from app.services.engine_input_builder_service import build_engine_input_object
 from app.services.event_service import emit_event
 from app.services.goal_interpretation_service import interpret_goal_deterministically
+from app.services.bhudhi_service import interpret_goal as bhudhi_interpret_goal
 from app.services.preliminary_anti_gaming_service import run_preliminary_anti_gaming_scan
 from app.services.preliminary_knowledge_gap_service import run_preliminary_knowledge_gap_scan
 from app.services.question_branching_service import get_required_questions, prioritize_questions
@@ -67,6 +68,36 @@ async def initialize_context_from_validation(
 ) -> ValidationContext:
     raw_goal = validation.get("raw_goal") or ""
     structured = interpret_goal_deterministically(raw_goal) if raw_goal else None
+    # Optional A5 integration: Bhudhi INTERPRET (advisory only). Deterministic fallback remains authoritative.
+    if raw_goal:
+        try:
+            resp = await bhudhi_interpret_goal(
+                db,
+                raw_goal,
+                validation_id=validation.get("validation_id"),
+                context={},
+                current_user=current_user,
+            )
+            if resp and (resp.validated_output or resp.output):
+                out = resp.validated_output or resp.output
+                # Only map allowed structured goal fields
+                structured.problem_claim = out.get("problem_claim") or structured.problem_claim
+                structured.target_user = out.get("target_user") or structured.target_user
+                structured.value_claim = out.get("value_claim") or structured.value_claim
+                structured.change_claim = out.get("change_claim") or structured.change_claim
+                structured.success_claim = out.get("success_claim") or structured.success_claim
+                structured.revenue_claim = out.get("revenue_claim") or structured.revenue_claim
+                structured.timing_claim = out.get("timing_claim") or structured.timing_claim
+                structured.resource_claim = out.get("resource_claim") or structured.resource_claim
+                structured.hidden_assumptions = out.get("hidden_assumptions") or structured.hidden_assumptions
+                structured.contradictions = out.get("contradictions") or structured.contradictions
+                structured.unclear_terms = out.get("unclear_terms") or structured.unclear_terms
+                if out.get("interpretation_confidence") is not None:
+                    structured.interpretation_confidence = float(out["interpretation_confidence"])
+                structured.source = "bhudhi_interpret"
+        except Exception:
+            # Never block context creation on Bhudhi availability
+            pass
     settings = get_settings()
     required_cats = settings.context_required_categories_list
 
