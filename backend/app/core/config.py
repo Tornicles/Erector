@@ -75,6 +75,16 @@ class Settings(BaseSettings):
     event_retry_backoff_seconds: str = Field(default="30,120,600")
     idempotency_key_ttl_hours: int = Field(default=24)
 
+    # ── Context Collection (A4) ──────────────────────────────────────────────
+    context_max_answer_length: int = Field(default=5000)
+    context_max_batch_size: int = Field(default=7)
+    context_min_quality_score: float = Field(default=6.0)
+    context_min_integrity_score: float = Field(default=6.0)
+    context_required_categories: str = Field(default="basic,industry,economy,evidence,risk")
+    context_allow_development_reset: bool = Field(default=True)
+    preliminary_anti_gaming_enabled: bool = Field(default=True)
+    preliminary_knowledge_gap_enabled: bool = Field(default=True)
+
     # ── External Services (placeholders for future prompts) ──────────────────
     anthropic_api_key: Optional[str] = Field(default=None)
     resend_api_key: Optional[str] = Field(default=None)
@@ -129,6 +139,10 @@ class Settings(BaseSettings):
     @property
     def event_retry_backoff_list(self) -> list[int]:
         return [int(s.strip()) for s in self.event_retry_backoff_seconds.split(",") if s.strip()]
+
+    @property
+    def context_required_categories_list(self) -> list[str]:
+        return [c.strip() for c in self.context_required_categories.split(",") if c.strip()]
 
     def __repr__(self) -> str:
         # Never expose secrets in repr

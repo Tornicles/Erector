@@ -124,6 +124,26 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 - `frontend/src/types/validation.ts`, `frontend/src/services/validationClient.ts`
 - `mobile/types/validation.ts`, `mobile/services/validationClient.ts`
 
+### PROMPT A4 — Context Collection and Dynamic Question Engine ✅ (2026-06-16)
+**Backend:**
+- `backend/app/models/context.py`, `questions.py`, `evidence.py`, `assumptions.py`
+- `backend/app/services/goal_interpretation_service.py` — deterministic goal parsing (A5 hook)
+- `backend/app/services/question_catalog.py` — 8 category question definitions
+- `backend/app/services/question_branching_service.py` — regulated industry, team, revenue branches
+- `backend/app/services/question_engine_service.py` — batches, submission, state integration
+- `backend/app/services/answer_quality_service.py`
+- `backend/app/services/preliminary_anti_gaming_service.py`
+- `backend/app/services/preliminary_knowledge_gap_service.py`
+- `backend/app/services/context_gate_service.py`
+- `backend/app/services/engine_input_builder_service.py`
+- `backend/app/routers/context.py` — questions, context submit, get, reset
+
+**Tests (A4):** 11 test modules covering models, interpretation, engine, branching, quality, gaming, gaps, gate, API, engine input
+
+**Frontend/Mobile:**
+- `frontend/src/types/context.ts`, `questions.ts`, `services/contextClient.ts`
+- `mobile/types/context.ts`, `questions.ts`, `services/contextClient.ts`
+
 ---
 
 ## API Endpoints
@@ -162,6 +182,14 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 | GET | /api/v1/validations/{id}/events | Bearer | Lifecycle events |
 | GET | /api/v1/validations/{id}/health | Bearer | Stuck detection status |
 
+### A4 Implemented
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | /api/v1/validations/{id}/questions | Bearer | Dynamic question batch |
+| POST | /api/v1/validations/{id}/context | Bearer | Submit answers, gate evaluation |
+| GET | /api/v1/validations/{id}/context | Bearer | Context state + engine input |
+| POST | /api/v1/validations/{id}/context/reset | Bearer | Dev context reset |
+
 ---
 
 ## DB Schema
@@ -180,8 +208,8 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 ## P0 Backlog — Remaining Prompts
 | Priority | Prompt | Description |
 |----------|--------|-------------|
-| P0 | A4 | Economic stack resolution (deeper — persisted stacks) |
-| P0 | A5 | Context collection question engine |
+| P0 | A5 | Bhudhi INTERPRET mode integration |
+| P0 | A6 | Economic stack persistence (deeper) |
 | P1 | B1–B27 | 27 validation engines |
 | P1 | C1 | Scoring engine (27 deterministic scores) |
 | P1 | D1 | Simulation engine (6 simulation systems) |

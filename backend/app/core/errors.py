@@ -193,3 +193,56 @@ class EventProcessingError(AppError):
             message=f"Event {event_id} processing failed: {reason}",
             details={"event_id": event_id, "reason": reason},
         )
+
+
+class ContextNotFoundError(AppError):
+    code = "CONTEXT_NOT_FOUND"
+    error_type = ErrorType.validation_error
+    status_code = 404
+    user_facing_message = "Context not found."
+
+    def __init__(self, context_id: str = "") -> None:
+        super().__init__(message=f"Context not found: {context_id}")
+
+
+class QuestionNotFoundError(AppError):
+    code = "QUESTION_NOT_FOUND"
+    error_type = ErrorType.validation_error
+    status_code = 404
+    user_facing_message = "Question not found."
+
+    def __init__(self, question_id: str) -> None:
+        super().__init__(message=f"Question not found: {question_id}")
+
+
+class ContextBlockedError(AppError):
+    code = "CONTEXT_BLOCKED"
+    error_type = ErrorType.validation_error
+    status_code = 409
+    user_facing_message = "Context is blocked and cannot proceed."
+
+    def __init__(self, message: str = "Context blocked.", details: Optional[dict] = None) -> None:
+        super().__init__(message=message, details=details or {})
+
+
+class InvalidAnswerError(AppError):
+    code = "INVALID_CONTEXT_ANSWER"
+    error_type = ErrorType.validation_error
+    status_code = 422
+    user_facing_message = "Invalid context answer."
+
+    def __init__(self, message: str, field: Optional[str] = None) -> None:
+        super().__init__(message=message, field=field)
+
+
+class MissingRequiredContextError(AppError):
+    code = "MISSING_REQUIRED_CONTEXT"
+    error_type = ErrorType.validation_error
+    status_code = 422
+    user_facing_message = "Required context fields are missing."
+
+    def __init__(self, fields: list[str]) -> None:
+        super().__init__(
+            message="Missing required context fields.",
+            details={"missing_fields": fields},
+        )

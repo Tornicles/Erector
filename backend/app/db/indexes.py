@@ -14,6 +14,7 @@ from .collections import (
     AUDIT_LOGS, SYSTEM_ERRORS, SYSTEM_EVENTS, DEAD_LETTER_QUEUE,
     ECONOMIES, COUNTRY_ECONOMY_MAPPINGS,
     VALIDATION_SESSIONS, VALIDATION_IDEMPOTENCY_KEYS,
+    VALIDATION_CONTEXTS, QUESTION_DEFINITIONS, CONTEXT_ANSWERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,34 @@ A1_INDEX_SPECS = [
      {"unique": True, "name": "idx_audit_audit_id_unique", "sparse": True}),
     (AUDIT_LOGS, [("action", ASCENDING), ("created_at", DESCENDING)],
      {"name": "idx_audit_action_created"}),
+
+    # ── validation_contexts (A4) ───────────────────────────────────────────
+    (VALIDATION_CONTEXTS, [("context_id", ASCENDING)],
+     {"unique": True, "name": "idx_vctx_context_id_unique"}),
+    (VALIDATION_CONTEXTS, [("validation_id", ASCENDING)],
+     {"unique": True, "name": "idx_vctx_validation_id_unique"}),
+    (VALIDATION_CONTEXTS, [("owner_user_id", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)],
+     {"name": "idx_vctx_owner_status_updated"}),
+    (VALIDATION_CONTEXTS, [("team_id", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)],
+     {"name": "idx_vctx_team_status_updated", "sparse": True}),
+    (VALIDATION_CONTEXTS, [("status", ASCENDING), ("updated_at", DESCENDING)],
+     {"name": "idx_vctx_status_updated"}),
+
+    # ── context_answers (A4) ─────────────────────────────────────────────────
+    (CONTEXT_ANSWERS, [("answer_id", ASCENDING)],
+     {"unique": True, "name": "idx_cans_answer_id_unique", "sparse": True}),
+    (CONTEXT_ANSWERS, [("validation_id", ASCENDING), ("question_id", ASCENDING)],
+     {"name": "idx_cans_validation_question", "sparse": True}),
+    (CONTEXT_ANSWERS, [("context_id", ASCENDING), ("category", ASCENDING)],
+     {"name": "idx_cans_context_category", "sparse": True}),
+    (CONTEXT_ANSWERS, [("owner_user_id", ASCENDING), ("submitted_at", DESCENDING)],
+     {"name": "idx_cans_owner_submitted", "sparse": True}),
+
+    # ── question_definitions (A4) ────────────────────────────────────────────
+    (QUESTION_DEFINITIONS, [("question_id", ASCENDING)],
+     {"unique": True, "name": "idx_qdef_question_id_unique", "sparse": True}),
+    (QUESTION_DEFINITIONS, [("category", ASCENDING), ("order", ASCENDING)],
+     {"name": "idx_qdef_category_order", "sparse": True}),
 ]
 
 

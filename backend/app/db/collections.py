@@ -20,6 +20,8 @@ COUNTRY_ECONOMY_MAPPINGS = "country_economy_mappings"
 VALIDATION_SESSIONS = "validation_sessions"
 VALIDATION_IDEMPOTENCY_KEYS = "validation_idempotency_keys"
 VALIDATION_CONTEXTS = "validation_contexts"
+QUESTION_DEFINITIONS = "question_definitions"
+CONTEXT_ANSWERS = "context_answers"
 ECONOMIC_STACKS = "economic_stacks"
 
 # ── Engines & Scoring (PROMPT B+) ────────────────────────────────────────────

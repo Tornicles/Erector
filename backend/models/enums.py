@@ -107,6 +107,12 @@ class ValidationEventType(str, Enum):
     validation_completed = "validation_completed"
     validation_failed = "validation_failed"
     validation_archived = "validation_archived"
+    context_started = "context_started"
+    context_questions_generated = "context_questions_generated"
+    context_answers_submitted = "context_answers_submitted"
+    context_blocked = "context_blocked"
+    context_collected = "context_collected"
+    context_reset = "context_reset"
     context_submitted = "context_submitted"
     economic_stack_built = "economic_stack_built"
     engine_started = "engine_started"
@@ -663,6 +669,127 @@ class QuestionCategory(str, Enum):
     evidence = "evidence"
     risk = "risk"
     follow_up = "follow_up"
+
+
+class QuestionType(str, Enum):
+    text = "text"
+    textarea = "textarea"
+    number = "number"
+    currency = "currency"
+    percentage = "percentage"
+    date = "date"
+    boolean = "boolean"
+    single_select = "single_select"
+    multi_select = "multi_select"
+    country = "country"
+    industry = "industry"
+    file_reference = "file_reference"
+    evidence_reference = "evidence_reference"
+
+
+class QuestionPriority(str, Enum):
+    required = "required"
+    recommended = "recommended"
+    optional = "optional"
+    conditional = "conditional"
+
+
+class QuestionStatus(str, Enum):
+    pending = "pending"
+    answered = "answered"
+    skipped = "skipped"
+    blocked = "blocked"
+    invalid = "invalid"
+    needs_clarification = "needs_clarification"
+
+
+class AnswerQualityFlag(str, Enum):
+    vague = "vague"
+    inflated = "inflated"
+    contradictory = "contradictory"
+    unrealistic_timeline = "unrealistic_timeline"
+    unrealistic_budget = "unrealistic_budget"
+    missing_customer = "missing_customer"
+    missing_evidence = "missing_evidence"
+    missing_legal_constraint = "missing_legal_constraint"
+    unsupported_claim = "unsupported_claim"
+    overconfident_language = "overconfident_language"
+    no_competitor_claim = "no_competitor_claim"
+    everyone_needs_this = "everyone_needs_this"
+    unclear_revenue_model = "unclear_revenue_model"
+    weak_success_definition = "weak_success_definition"
+    incomplete = "incomplete"
+    acceptable = "acceptable"
+
+
+class ContextStatus(str, Enum):
+    not_started = "not_started"
+    in_progress = "in_progress"
+    missing_required_fields = "missing_required_fields"
+    blocked_by_quality = "blocked_by_quality"
+    blocked_by_anti_gaming = "blocked_by_anti_gaming"
+    ready_for_stack = "ready_for_stack"
+    context_collected = "context_collected"
+
+
+class AntiGamingFlagType(str, Enum):
+    inflated_timeline = "inflated_timeline"
+    inflated_market_size = "inflated_market_size"
+    unrealistic_budget = "unrealistic_budget"
+    no_customer_evidence = "no_customer_evidence"
+    no_competitors_claim = "no_competitors_claim"
+    missing_legal_constraints = "missing_legal_constraints"
+    vague_customer_definition = "vague_customer_definition"
+    impossible_execution_scope = "impossible_execution_scope"
+    unsupported_revenue_claim = "unsupported_revenue_claim"
+    contradiction_detected = "contradiction_detected"
+    overconfident_language = "overconfident_language"
+    suspiciously_perfect_answers = "suspiciously_perfect_answers"
+
+
+class KnowledgeGapSeverity(str, Enum):
+    low_impact = "low_impact"
+    dangerous = "dangerous"
+    critical = "critical"
+
+
+class ContextBlockerType(str, Enum):
+    missing_required_answer = "missing_required_answer"
+    low_answer_quality = "low_answer_quality"
+    anti_gaming_flag = "anti_gaming_flag"
+    critical_knowledge_gap = "critical_knowledge_gap"
+    missing_evidence = "missing_evidence"
+    missing_economy_input = "missing_economy_input"
+    regulated_industry_missing_legal_answer = "regulated_industry_missing_legal_answer"
+    contradictory_context = "contradictory_context"
+
+
+class EvidenceClaimType(str, Enum):
+    customer_demand = "customer_demand"
+    willingness_to_pay = "willingness_to_pay"
+    ability_to_pay = "ability_to_pay"
+    competitor_awareness = "competitor_awareness"
+    legal_readiness = "legal_readiness"
+    technical_feasibility = "technical_feasibility"
+    distribution_access = "distribution_access"
+    team_capability = "team_capability"
+    budget_reality = "budget_reality"
+    timeline_reality = "timeline_reality"
+    market_size = "market_size"
+    pricing = "pricing"
+    trust = "trust"
+    operations = "operations"
+
+
+class GoalClaimType(str, Enum):
+    problem_claim = "problem_claim"
+    target_user = "target_user"
+    value_claim = "value_claim"
+    change_claim = "change_claim"
+    success_claim = "success_claim"
+    revenue_claim = "revenue_claim"
+    timing_claim = "timing_claim"
+    resource_claim = "resource_claim"
 
 
 class AnswerType(str, Enum):
