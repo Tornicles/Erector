@@ -24,6 +24,7 @@ from app.models.api import error_response
 from app.routers import auth, health, schema
 from app.routers import economies as economies_router
 from app.routers import stack as stack_router
+from app.routers import validations as validations_router
 from app.seeders.seed_economies import seed_economies
 from app.seeders.seed_country_mappings import seed_country_mappings
 
@@ -138,3 +139,4 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(schema.router, prefix="/api")
 app.include_router(economies_router.router, prefix="/api")
 app.include_router(stack_router.router, prefix="/api")
+app.include_router(validations_router.router, prefix="/api")

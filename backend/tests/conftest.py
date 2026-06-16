@@ -50,3 +50,40 @@ async def db():
 
     yield database
     motor_client.close()
+
+
+VALIDATION_TEST_EMAIL = "validation_test@erector.dev"
+
+
+@pytest.fixture
+def auth_headers(client):
+    """Obtain Bearer token via mock magic-link flow."""
+    token = client.post(
+        "/api/v1/auth/magic-link",
+        json={"email": VALIDATION_TEST_EMAIL},
+    ).json()["data"]["mock_token"]
+    pair = client.get(f"/api/v1/auth/verify?token={token}").json()["data"]
+    return {"Authorization": f"Bearer {pair['access_token']}"}
+
+
+@pytest.fixture
+def auth_headers_user2(client):
+    """Second user for cross-access tests."""
+    token = client.post(
+        "/api/v1/auth/magic-link",
+        json={"email": "validation_other@erector.dev"},
+    ).json()["data"]["mock_token"]
+    pair = client.get(f"/api/v1/auth/verify?token={token}").json()["data"]
+    return {"Authorization": f"Bearer {pair['access_token']}"}
+
+
+def make_validation_payload(**overrides):
+    base = {
+        "raw_goal": "I want to build a SaaS tool for small clinics",
+        "industry": "software",
+        "founder_country": "Germany",
+        "customer_country": "United States",
+        "success_definition": "Get 100 paying clinics within 12 months",
+    }
+    base.update(overrides)
+    return base

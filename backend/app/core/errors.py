@@ -126,3 +126,70 @@ class SessionRevokedError(AuthenticationError):
 
     def __init__(self) -> None:
         super().__init__(message="Session has been revoked.")
+
+
+class InvalidStateTransitionError(AppError):
+    code = "INVALID_STATE_TRANSITION"
+    error_type = ErrorType.validation_error
+    status_code = 409
+    user_facing_message = "This state transition is not allowed."
+
+    def __init__(
+        self,
+        message: str,
+        current_status: str,
+        requested_status: str,
+        allowed_statuses: list[str],
+    ) -> None:
+        super().__init__(
+            message=message,
+            field="next_status",
+            details={
+                "current_status": current_status,
+                "requested_status": requested_status,
+                "allowed_statuses": allowed_statuses,
+            },
+        )
+
+
+class ValidationNotFoundError(AppError):
+    code = "VALIDATION_NOT_FOUND"
+    error_type = ErrorType.validation_error
+    status_code = 404
+    user_facing_message = "Validation not found."
+
+    def __init__(self, validation_id: str) -> None:
+        super().__init__(message=f"Validation not found: {validation_id}")
+
+
+class ValidationAccessDeniedAsNotFound(ValidationNotFoundError):
+    """Return 404 to avoid existence disclosure for unauthorized access."""
+
+    def __init__(self, validation_id: str) -> None:
+        super().__init__(validation_id=validation_id)
+
+
+class IdempotencyConflictError(AppError):
+    code = "IDEMPOTENCY_CONFLICT"
+    error_type = ErrorType.validation_error
+    status_code = 409
+    user_facing_message = "Idempotency key was already used with a different request."
+
+    def __init__(self, idempotency_key: str) -> None:
+        super().__init__(
+            message=f"Idempotency key conflict: {idempotency_key}",
+            field="idempotency_key",
+        )
+
+
+class EventProcessingError(AppError):
+    code = "EVENT_PROCESSING_FAILED"
+    error_type = ErrorType.unknown_error
+    status_code = 500
+    user_facing_message = "Event processing failed."
+
+    def __init__(self, event_id: str, reason: str) -> None:
+        super().__init__(
+            message=f"Event {event_id} processing failed: {reason}",
+            details={"event_id": event_id, "reason": reason},
+        )

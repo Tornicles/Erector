@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     # ── Features ─────────────────────────────────────────────────────────────
     rate_limit_enabled: bool = Field(default=False)
 
+    # ── Validation Lifecycle (A3) ────────────────────────────────────────────
+    validation_stuck_after_seconds: int = Field(default=300)
+    validation_health_monitor_enabled: bool = Field(default=True)
+    validation_health_monitor_interval_seconds: int = Field(default=60)
+    event_max_retry_attempts: int = Field(default=3)
+    event_retry_backoff_seconds: str = Field(default="30,120,600")
+    idempotency_key_ttl_hours: int = Field(default=24)
+
     # ── External Services (placeholders for future prompts) ──────────────────
     anthropic_api_key: Optional[str] = Field(default=None)
     resend_api_key: Optional[str] = Field(default=None)
@@ -117,6 +125,10 @@ class Settings(BaseSettings):
     def mock_auth_enabled(self) -> bool:
         """True when Supabase is not configured OR debug mode is on."""
         return not self.supabase_configured or self.debug
+
+    @property
+    def event_retry_backoff_list(self) -> list[int]:
+        return [int(s.strip()) for s in self.event_retry_backoff_seconds.split(",") if s.strip()]
 
     def __repr__(self) -> str:
         # Never expose secrets in repr

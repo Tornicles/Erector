@@ -1,1 +1,160 @@
 # Erector
+
+Reality Simulation, Validation & Execution Intelligence Platform — deployed on [emergent.sh](https://emergent.sh).
+
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| Backend | Python 3.11, FastAPI, Pydantic v2, Motor (async MongoDB) |
+| Frontend | React 18, TypeScript, Tailwind CSS |
+| Mobile | Expo Router (scaffold) |
+| Database | MongoDB 7 |
+| Hosting | emergent.sh (backend port **8001**) |
+
+## Quick Start
+
+```bash
+docker compose up
+```
+
+- API: http://localhost:8001/api/health
+- API docs: http://localhost:8001/api/docs
+- Frontend: http://localhost:3000
+
+```bash
+cd backend
+pytest
+```
+
+---
+
+## Prompt A3 — Validation Lifecycle (current)
+
+Every validation moves through a **controlled, auditable state machine**. Downstream engines, scoring, simulation, and reports must use `transition_validation` — never edit `status` directly.
+
+> **Developer note:** No validation engine should run until the validation state machine has moved the session into the correct engine-ready state. Future prompts must use `transition_validation` instead of directly editing status.
+
+### Lifecycle overview
+
+```
+draft → context_collected → economic_stack_built → engines_running
+  → partial_results → scoring → recursive_challenge → path_generation
+  → report_ready → completed → launched
+```
+
+Exception paths: any active state → `failed` → `archived`; `completed` → `archived`.
+
+### State machine — legal transitions
+
+| From | Allowed next states |
+|------|---------------------|
+| draft | context_collecting, context_collected, failed, archived |
+| context_collecting | context_collected, failed, archived |
+| context_collected | economic_stack_built, failed, archived |
+| economic_stack_built | engines_queued, engines_running, failed, archived |
+| engines_queued | engines_running, failed, archived |
+| engines_running | partial_results, scoring, failed, archived |
+| partial_results | scoring, failed, archived |
+| scoring | recursive_challenge, path_generation, failed, archived |
+| recursive_challenge | path_generation, failed, archived |
+| path_generation | simulation_ready, report_ready, completed, failed, archived |
+| report_ready | completed, failed, archived |
+| completed | launched, archived |
+| failed | archived |
+| launched | archived |
+| archived | *(terminal — no outgoing)* |
+
+**Forbidden examples:** draft → scoring, completed → engines_running, archived → draft.
+
+### Idempotency
+
+- Clients may send `Idempotency-Key` header or `idempotency_key` in body.
+- Same `owner_user_id` + key + payload → returns existing validation (`200`, `existing: true`).
+- Same key + different payload → `409 IDEMPOTENCY_CONFLICT`.
+- Keys are scoped per user; enforced via MongoDB unique index.
+
+### Event system
+
+Lifecycle events persisted to `system_events`:
+
+- `validation_created`, `validation_state_changed`, `validation_failed`, `validation_archived`
+
+Events start `pending`, process asynchronously. Failed events retry with backoff: **30s → 2m → 10m** (3 attempts max).
+
+### Dead letter queue
+
+After 3 failed processing attempts, events move to `dead_letter_queue` with audit log `event.dead_lettered`. Service supports retry, resolve, and ignore.
+
+### Stuck validation monitor
+
+Validations in engine-active states idle **> 5 minutes** with no recent events are flagged stuck (warning added, not auto-failed). Worker: `validation_health_monitor.py`.
+
+### API routes (A3)
+
+| Method | Path | Auth |
+|--------|------|------|
+| POST | `/api/v1/validations` | Bearer |
+| GET | `/api/v1/validations` | Bearer |
+| GET | `/api/v1/validations/{id}` | Bearer |
+| PATCH | `/api/v1/validations/{id}/state` | Bearer |
+| POST | `/api/v1/validations/{id}/fail` | Bearer |
+| POST | `/api/v1/validations/{id}/archive` | Bearer |
+| GET | `/api/v1/validations/{id}/events` | Bearer |
+| GET | `/api/v1/validations/{id}/health` | Bearer |
+
+### API examples
+
+```bash
+# Create validation
+curl -X POST http://localhost:8001/api/v1/validations \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-key-001" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"raw_goal":"I want to build a SaaS product for small clinics","industry":"software","founder_country":"Germany","customer_country":"United States","success_definition":"Get 100 paying clinics within 12 months"}'
+
+# Get validation
+curl http://localhost:8001/api/v1/validations/val_example -H "Authorization: Bearer $TOKEN"
+
+# Transition state
+curl -X PATCH http://localhost:8001/api/v1/validations/val_example/state \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"next_status":"context_collected","reason":"Context collected during A3 test."}'
+```
+
+### A3 gate checklist
+
+- [x] ValidationSession model with full lifecycle fields
+- [x] Explicit state machine with legal transition map
+- [x] Invalid transitions return 409
+- [x] Idempotency prevents duplicate creation
+- [x] Event system with retry + dead letter queue
+- [x] Stuck validation detection (> 5 min idle)
+- [x] Audit logs for create, transition, fail, archive
+- [x] Owner-scoped access (404 for cross-user)
+- [x] Tests: model, state machine, API, idempotency, events, DLQ, health
+
+### Configuration (`.env`)
+
+```
+VALIDATION_STUCK_AFTER_SECONDS=300
+VALIDATION_HEALTH_MONITOR_ENABLED=true
+VALIDATION_HEALTH_MONITOR_INTERVAL_SECONDS=60
+EVENT_MAX_RETRY_ATTEMPTS=3
+EVENT_RETRY_BACKOFF_SECONDS=30,120,600
+IDEMPOTENCY_KEY_TTL_HOURS=24
+```
+
+---
+
+## Completed prompts
+
+| Prompt | Status |
+|--------|--------|
+| 0 — Master Schema Lock | ✅ |
+| A1 — Scaffold & Environment | ✅ |
+| A2 — Economy World Data & API | ✅ |
+| A3 — Validation Lifecycle & State Machine | ✅ |
+
+See `memory/PRD.md` for full build sequence and backlog.

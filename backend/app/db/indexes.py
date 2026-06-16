@@ -13,6 +13,7 @@ from .collections import (
     ERECTOR_USERS, ERECTOR_SESSIONS, MAGIC_LINK_ATTEMPTS,
     AUDIT_LOGS, SYSTEM_ERRORS, SYSTEM_EVENTS, DEAD_LETTER_QUEUE,
     ECONOMIES, COUNTRY_ECONOMY_MAPPINGS,
+    VALIDATION_SESSIONS, VALIDATION_IDEMPOTENCY_KEYS,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,58 @@ A1_INDEX_SPECS = [
      {"name": "idx_cem_primary_economy_id"}),
     (COUNTRY_ECONOMY_MAPPINGS, [("primary_economy_type", ASCENDING)],
      {"name": "idx_cem_primary_economy_type"}),
+
+    # ── validation_sessions (A3) ───────────────────────────────────────────
+    (VALIDATION_SESSIONS, [("validation_id", ASCENDING)],
+     {"unique": True, "name": "idx_val_validation_id_unique"}),
+    (VALIDATION_SESSIONS, [("owner_user_id", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)],
+     {"name": "idx_val_owner_status_updated"}),
+    (VALIDATION_SESSIONS, [("owner_user_id", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_val_owner_created"}),
+    (VALIDATION_SESSIONS, [("team_id", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)],
+     {"name": "idx_val_team_status_updated", "sparse": True}),
+    (VALIDATION_SESSIONS, [("status", ASCENDING), ("last_activity_at", ASCENDING)],
+     {"name": "idx_val_status_last_activity"}),
+    (VALIDATION_SESSIONS, [("idempotency_key", ASCENDING), ("owner_user_id", ASCENDING)],
+     {"name": "idx_val_idempotency_owner", "sparse": True}),
+    (VALIDATION_SESSIONS, [("current_score_id", ASCENDING)],
+     {"name": "idx_val_current_score_id", "sparse": True}),
+    (VALIDATION_SESSIONS, [("economic_stack_id", ASCENDING)],
+     {"name": "idx_val_economic_stack_id", "sparse": True}),
+
+    # ── validation_idempotency_keys (A3) ─────────────────────────────────────
+    (VALIDATION_IDEMPOTENCY_KEYS, [("owner_user_id", ASCENDING), ("idempotency_key", ASCENDING)],
+     {"unique": True, "name": "idx_idem_owner_key_unique"}),
+    (VALIDATION_IDEMPOTENCY_KEYS, [("anonymous_fingerprint", ASCENDING), ("idempotency_key", ASCENDING)],
+     {"name": "idx_idem_anon_key", "sparse": True}),
+    (VALIDATION_IDEMPOTENCY_KEYS, [("validation_id", ASCENDING)],
+     {"name": "idx_idem_validation_id", "sparse": True}),
+    (VALIDATION_IDEMPOTENCY_KEYS, [("expires_at", ASCENDING)],
+     {"name": "idx_idem_expires_ttl", "expireAfterSeconds": 0, "sparse": True}),
+
+    # ── system_events (A3 extensions) ────────────────────────────────────────
+    (SYSTEM_EVENTS, [("event_id", ASCENDING)],
+     {"unique": True, "name": "idx_sysevt_event_id_unique"}),
+    (SYSTEM_EVENTS, [("validation_id", ASCENDING), ("emitted_at", DESCENDING)],
+     {"name": "idx_sysevt_validation_emitted", "sparse": True}),
+    (SYSTEM_EVENTS, [("owner_user_id", ASCENDING), ("emitted_at", DESCENDING)],
+     {"name": "idx_sysevt_owner_emitted", "sparse": True}),
+    (SYSTEM_EVENTS, [("status", ASCENDING), ("next_retry_at", ASCENDING)],
+     {"name": "idx_sysevt_status_retry", "sparse": True}),
+
+    # ── dead_letter_queue (A3 extensions) ──────────────────────────────────
+    (DEAD_LETTER_QUEUE, [("dead_letter_id", ASCENDING)],
+     {"unique": True, "name": "idx_dlq_dead_letter_id_unique"}),
+    (DEAD_LETTER_QUEUE, [("validation_id", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_dlq_validation_created", "sparse": True}),
+    (DEAD_LETTER_QUEUE, [("event_type", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_dlq_event_type_created"}),
+
+    # ── audit_logs (A3 extensions) ───────────────────────────────────────────
+    (AUDIT_LOGS, [("audit_id", ASCENDING)],
+     {"unique": True, "name": "idx_audit_audit_id_unique", "sparse": True}),
+    (AUDIT_LOGS, [("action", ASCENDING), ("created_at", DESCENDING)],
+     {"name": "idx_audit_action_created"}),
 ]
 
 

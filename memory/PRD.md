@@ -99,6 +99,31 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 - `frontend/src/types/economy.ts` — full A2 TypeScript types
 - `frontend/src/services/economyClient.ts` — typed API client for all A2 endpoints
 
+### PROMPT A3 — Validation Lifecycle and State Machine ✅ (2026-06-16)
+**Backend:**
+- `backend/app/models/validation.py` — ValidationSession, request/response models
+- `backend/app/models/events.py` — SystemEvent, DeadLetterQueueItem
+- `backend/app/models/audit.py` — AuditLog with request_id
+- `backend/app/services/validation_state_machine.py` — legal transitions, transition_validation
+- `backend/app/services/idempotency_service.py` — concurrency-safe idempotency
+- `backend/app/services/validation_service.py` — create/get/list/transition/fail/archive
+- `backend/app/services/event_service.py` — emit, process, retry backoff
+- `backend/app/services/dead_letter_service.py` — DLQ move/retry/resolve/ignore
+- `backend/app/services/validation_health_service.py` — stuck detection
+- `backend/app/services/audit_service.py` — immutable audit trail
+- `backend/app/routers/validations.py` — 8 lifecycle API routes
+- `backend/app/workers/validation_health_monitor.py` — stuck validation worker
+- `backend/app/workers/event_retry_worker.py` — event retry worker
+
+**Tests (A3):**
+- `test_validation_model.py`, `test_validation_state_machine.py`, `test_validation_api.py`
+- `test_idempotency.py`, `test_event_service.py`, `test_dead_letter_queue.py`
+- `test_validation_health_monitor.py`
+
+**Frontend/Mobile:**
+- `frontend/src/types/validation.ts`, `frontend/src/services/validationClient.ts`
+- `mobile/types/validation.ts`, `mobile/services/validationClient.ts`
+
 ---
 
 ## API Endpoints
@@ -125,6 +150,18 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 | POST | /api/v1/economies/compare | None | Compare economies with dimension scores |
 | POST | /api/v1/stack/build | None | Build 6-layer Economic Stack |
 
+### A3 Implemented
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | /api/v1/validations | Bearer | Create validation (idempotent) |
+| GET | /api/v1/validations | Bearer | List user validations |
+| GET | /api/v1/validations/{id} | Bearer | Detail + allowed transitions + health |
+| PATCH | /api/v1/validations/{id}/state | Bearer | Legal state transition |
+| POST | /api/v1/validations/{id}/fail | Bearer | Mark failed |
+| POST | /api/v1/validations/{id}/archive | Bearer | Archive validation |
+| GET | /api/v1/validations/{id}/events | Bearer | Lifecycle events |
+| GET | /api/v1/validations/{id}/health | Bearer | Stuck detection status |
+
 ---
 
 ## DB Schema
@@ -143,8 +180,8 @@ Users validate business ideas against 30 economy types, 25 Civilization DNA dime
 ## P0 Backlog — Remaining Prompts
 | Priority | Prompt | Description |
 |----------|--------|-------------|
-| P0 | A3 | Context collection question engine |
 | P0 | A4 | Economic stack resolution (deeper — persisted stacks) |
+| P0 | A5 | Context collection question engine |
 | P1 | B1–B27 | 27 validation engines |
 | P1 | C1 | Scoring engine (27 deterministic scores) |
 | P1 | D1 | Simulation engine (6 simulation systems) |

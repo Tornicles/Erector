@@ -79,22 +79,22 @@ class ValidationStatus(str, Enum):
     archived = "archived"
 
 
-# Legal state machine transitions
+# Legal state machine transitions (A3 lifecycle control layer)
 VALIDATION_STATE_TRANSITIONS: dict[str, list[str]] = {
-    "draft": ["context_collecting"],
-    "context_collecting": ["context_collected", "failed"],
-    "context_collected": ["economic_stack_built", "failed"],
-    "economic_stack_built": ["engines_queued", "failed"],
-    "engines_queued": ["engines_running", "failed"],
-    "engines_running": ["partial_results", "scoring", "failed"],
-    "partial_results": ["scoring", "failed"],
-    "scoring": ["recursive_challenge", "path_generation", "failed"],
-    "recursive_challenge": ["scoring", "path_generation", "failed"],
-    "path_generation": ["simulation_ready", "report_ready", "failed"],
-    "simulation_ready": ["report_ready", "failed"],
-    "report_ready": ["completed"],
+    "draft": ["context_collecting", "context_collected", "failed", "archived"],
+    "context_collecting": ["context_collected", "failed", "archived"],
+    "context_collected": ["economic_stack_built", "failed", "archived"],
+    "economic_stack_built": ["engines_queued", "engines_running", "failed", "archived"],
+    "engines_queued": ["engines_running", "failed", "archived"],
+    "engines_running": ["partial_results", "scoring", "failed", "archived"],
+    "partial_results": ["scoring", "failed", "archived"],
+    "scoring": ["recursive_challenge", "path_generation", "failed", "archived"],
+    "recursive_challenge": ["path_generation", "failed", "archived"],
+    "path_generation": ["simulation_ready", "report_ready", "completed", "failed", "archived"],
+    "simulation_ready": ["report_ready", "failed", "archived"],
+    "report_ready": ["completed", "failed", "archived"],
     "completed": ["launched", "archived"],
-    "failed": ["draft"],
+    "failed": ["archived"],
     "launched": ["archived"],
     "archived": [],
 }
@@ -102,6 +102,11 @@ VALIDATION_STATE_TRANSITIONS: dict[str, list[str]] = {
 
 class ValidationEventType(str, Enum):
     validation_created = "validation_created"
+    validation_started = "validation_started"
+    validation_state_changed = "validation_state_changed"
+    validation_completed = "validation_completed"
+    validation_failed = "validation_failed"
+    validation_archived = "validation_archived"
     context_submitted = "context_submitted"
     economic_stack_built = "economic_stack_built"
     engine_started = "engine_started"
@@ -109,8 +114,6 @@ class ValidationEventType(str, Enum):
     engine_failed = "engine_failed"
     engine_fallback = "engine_fallback"
     score_updated = "score_updated"
-    validation_completed = "validation_completed"
-    validation_failed = "validation_failed"
     report_generated = "report_generated"
     climate_changed = "climate_changed"
     launch_ready = "launch_ready"
@@ -612,11 +615,15 @@ class SystemEventStatus(str, Enum):
     processed = "processed"
     failed = "failed"
     dead_lettered = "dead_lettered"
+    ignored = "ignored"
 
 
 class DeadLetterStatus(str, Enum):
     pending = "pending"
+    open = "open"
+    retrying = "retrying"
     resolved = "resolved"
+    ignored = "ignored"
     abandoned = "abandoned"
 
 

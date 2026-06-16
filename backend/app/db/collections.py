@@ -16,8 +16,9 @@ DEAD_LETTER_QUEUE = "dead_letter_queue"
 ECONOMIES = "economies"
 COUNTRY_ECONOMY_MAPPINGS = "country_economy_mappings"
 
-# ── Validation (PROMPT B+) ───────────────────────────────────────────────────
+# ── Validation (PROMPT A3+) ──────────────────────────────────────────────────
 VALIDATION_SESSIONS = "validation_sessions"
+VALIDATION_IDEMPOTENCY_KEYS = "validation_idempotency_keys"
 VALIDATION_CONTEXTS = "validation_contexts"
 ECONOMIC_STACKS = "economic_stacks"
 
