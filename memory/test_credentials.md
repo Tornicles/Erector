@@ -1,17 +1,19 @@
-# Erector Test Credentials
+# Erector — Test Credentials
 
-## Current Status
-No user accounts created yet — PROMPT 0 is schema-only (no auth, no user creation).
+## Mock Auth (A1 Scaffold)
 
-## Next Steps
-When auth is implemented (PROMPT I1 — Supabase integration), test credentials will be added here.
+Auth is fully **MOCK** — no real Supabase keys required.
 
-## API Endpoints (No Auth Required — Schema Layer)
-- Health: GET /api/health
-- Collections: GET /api/schema/collections
-- Enums: GET /api/schema/enums
-- Indexes: GET /api/schema/indexes
+### How to test the auth flow:
+1. POST `/api/v1/auth/magic-link` with `{"email": "any@email.com"}`
+2. Response contains `mock_token` (only in debug mode)
+3. GET `/api/v1/auth/verify?token=<mock_token>` → returns `access_token` + `refresh_token`
+4. Use `Authorization: Bearer <access_token>` on protected routes
 
-## Backend URL
-- Internal: http://localhost:8001
-- External: https://d2fbc53d-9617-4bf2-aa0b-b29f68464f25.preview.emergentagent.com
+### Test Email Used in CI/Tests:
+- Email: `scaffold_test@erector.dev`
+- Password: N/A (magic link auth, no password)
+
+### Supabase
+- **Status**: Not configured (deferred to Prompt I1)
+- **mock_auth_enabled**: true (because `SUPABASE_URL` not set)
