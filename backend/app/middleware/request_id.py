@@ -1,21 +1,16 @@
-"""
-Request ID Middleware — attaches X-Request-ID to every request/response.
-If the client sends the header we echo it; otherwise we generate a UUID4.
-"""
-
-from __future__ import annotations
-
+import re
 import uuid
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        supplied = request.headers.get('X-Request-ID', '')
+        request_id = supplied if re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', supplied) else str(uuid.uuid4())
         request.state.request_id = request_id
-        response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
+        response = await call_next(request)
+        response.headers['X-Request-ID'] = request_id
         return response

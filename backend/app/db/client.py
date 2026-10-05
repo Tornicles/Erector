@@ -1,63 +1,34 @@
-"""
-Async Motor MongoDB client management.
-Single global client instance — never create per-request.
-"""
+from typing import Any
 
-from __future__ import annotations
+import httpx
 
-import logging
-from typing import Optional
-
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-
-logger = logging.getLogger(__name__)
-
-_client: Optional[AsyncIOMotorClient] = None
-_db: Optional[AsyncIOMotorDatabase] = None
+from app.core.config import Settings
+from app.core.errors import AppError
 
 
-async def connect_to_mongo(uri: str, db_name: str, timeout_ms: int = 5000) -> None:
-    """Create the Motor client and verify connectivity."""
-    global _client, _db
-    _client = AsyncIOMotorClient(
-        uri,
-        connectTimeoutMS=timeout_ms,
-        serverSelectionTimeoutMS=timeout_ms,
-    )
-    _db = _client[db_name]
-    # Verify connection
-    await _db.command("ping")
-    logger.info(f"MongoDB connected: {db_name}")
+class SupabaseGateway:
+    def __init__(self, settings: Settings, client: httpx.AsyncClient):
+        self.settings = settings
+        self.client = client
 
-
-async def close_mongo_connection() -> None:
-    """Gracefully close the Motor client."""
-    global _client, _db
-    if _client:
-        _client.close()
-        _client = None
-        _db = None
-        logger.info("MongoDB connection closed.")
-
-
-def get_database() -> AsyncIOMotorDatabase:
-    """Return the active database instance. Raises if not connected."""
-    if _db is None:
-        raise RuntimeError("MongoDB not connected. Call connect_to_mongo() first.")
-    return _db
-
-
-def get_collection(name: str):
-    """Return a named collection from the active database."""
-    return get_database()[name]
-
-
-async def ping_mongo() -> bool:
-    """Return True if MongoDB responds to ping, False otherwise."""
-    try:
-        db = get_database()
-        result = await db.command("ping")
-        return result.get("ok") == 1
-    except Exception as exc:
-        logger.warning(f"MongoDB ping failed: {exc}")
-        return False
+    async def request(self, method: str, path: str, *, token: str, schema: bool = False, params: dict[str, str] | None = None, json: Any = None, prefer: str | None = None) -> Any:
+        if not self.settings.configured or self.settings.supabase_publishable_key is None:
+            raise AppError('SUPABASE_NOT_CONFIGURED', 'unavailable', 'The application data platform is not configured.', 503)
+        headers = {'apikey': self.settings.supabase_publishable_key.get_secret_value(), 'Authorization': f'Bearer {token}'}
+        if schema:
+            headers['Accept-Profile'] = 'tonde'
+            headers['Content-Profile'] = 'tonde'
+        if prefer:
+            headers['Prefer'] = prefer
+        try:
+            response = await self.client.request(method, f'{self.settings.supabase_url}{path}', headers=headers, params=params, json=json)
+        except httpx.HTTPError as exc:
+            raise AppError('SUPABASE_UNAVAILABLE', 'unavailable', 'The application data platform is temporarily unavailable.', 503) from exc
+        if response.status_code in (401, 403):
+            raise AppError('AUTHENTICATION_REQUIRED', 'authentication', 'Your session is invalid or expired. Please sign in again.', 401)
+        if response.status_code >= 400:
+            raise AppError('SUPABASE_REQUEST_FAILED', 'database', 'The application data request could not be completed.', 503)
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise AppError('INVALID_PLATFORM_RESPONSE', 'unavailable', 'The application data platform returned an invalid response.', 503) from exc

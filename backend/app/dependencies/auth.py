@@ -1,61 +1,52 @@
-"""
-Auth Dependencies — FastAPI Depends() helpers for protected routes.
-"""
-
-from __future__ import annotations
+import logging
+from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.core.errors import AuthenticationError, SessionRevokedError
-from app.db.client import get_database
-from app.db.collections import ERECTOR_SESSIONS, ERECTOR_USERS
-from app.models.auth import CurrentUser
-from app.models.enums import SubscriptionTier, UserType
-from app.services.token_service import decode_access_token
+from app.core.errors import AppError
+from app.db.client import SupabaseGateway
 
-_bearer = HTTPBearer(auto_error=False)
+logger = logging.getLogger('tonde.auth')
+bearer = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
-) -> CurrentUser:
-    """
-    Extract and validate a Bearer access token from the Authorization header.
-    Returns a CurrentUser or raises AuthenticationError.
-    """
-    if not credentials or not credentials.credentials:
-        raise AuthenticationError("No Bearer token provided.")
+class CurrentUser(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    id: UUID
 
-    token = credentials.credentials
-    claims = decode_access_token(token)  # raises TokenExpiredError / TokenInvalidError
 
-    user_id: str = claims["sub"]
-    session_id: str = claims["sid"]
+def get_gateway(request: Request) -> SupabaseGateway:
+    return request.app.state.gateway
 
-    db = get_database()
 
-    # Verify session is active
-    session_doc = await db[ERECTOR_SESSIONS].find_one({"session_id": session_id})
-    if not session_doc:
-        raise AuthenticationError("Session not found.")
-    if session_doc.get("revoked_at") is not None:
-        raise SessionRevokedError()
+async def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer), gateway: SupabaseGateway = Depends(get_gateway)) -> CurrentUser:
+    if credentials is None or len(credentials.credentials) > 16384:
+        raise AppError('AUTHENTICATION_REQUIRED', 'authentication', 'Sign in to continue.', 401)
+    try:
+        data = await gateway.request('GET', '/auth/v1/user', token=credentials.credentials)
+        user = CurrentUser.model_validate(data)
+    except ValidationError as exc:
+        raise AppError('AUTHENTICATION_REQUIRED', 'authentication', 'Your session is invalid. Please sign in again.', 401) from exc
+    except AppError:
+        logger.warning('auth_failure', extra={'context': {'event': 'authentication_failure', 'request_id': getattr(request.state, 'request_id', None)}})
+        raise
+    request.state.access_token = credentials.credentials
+    return user
 
-    # Fetch user
-    user_doc = await db[ERECTOR_USERS].find_one({"user_id": user_id})
-    if not user_doc:
-        raise AuthenticationError("User not found.")
 
-    return CurrentUser(
-        user_id=user_id,
-        email=user_doc["email"],
-        user_type=UserType(user_doc.get("user_type", UserType.individual.value)),
-        subscription_tier=SubscriptionTier(
-            user_doc.get("subscription_tier", SubscriptionTier.free.value)
-        ),
-        team_ids=user_doc.get("team_ids", []),
-        is_admin=user_doc.get("is_admin", False),
-        session_id=session_id,
-    )
+async def require_workspace_access(workspace_id: UUID, request: Request, user: CurrentUser = Depends(get_current_user), gateway: SupabaseGateway = Depends(get_gateway)) -> CurrentUser:
+    rows = await gateway.request('GET', '/rest/v1/workspace_members', token=request.state.access_token, schema=True,
+        params={'workspace_id': f'eq.{workspace_id}', 'user_id': f'eq.{user.id}', 'select': 'role', 'limit': '1'})
+    if not rows:
+        raise AppError('WORKSPACE_ACCESS_DENIED', 'authorization', 'You do not have access to this workspace.', 403)
+    return user
+
+
+async def require_workspace_editor(workspace_id: UUID, request: Request, user: CurrentUser = Depends(get_current_user), gateway: SupabaseGateway = Depends(get_gateway)) -> CurrentUser:
+    rows = await gateway.request('GET', '/rest/v1/workspace_members', token=request.state.access_token, schema=True,
+        params={'workspace_id': f'eq.{workspace_id}', 'user_id': f'eq.{user.id}', 'role': 'in.(owner,admin,editor)', 'select': 'role', 'limit': '1'})
+    if not rows:
+        raise AppError('WORKSPACE_ACCESS_DENIED', 'authorization', 'You do not have permission to direct this Production.', 403)
+    return user

@@ -1,1 +1,1 @@
-"""Erector backend application package."""
+"""TONDE server-side services."""
