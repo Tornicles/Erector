@@ -1,74 +1,23 @@
-/**
- * Minimal API client for the Erector backend.
- * Uses REACT_APP_BACKEND_URL from the environment.
- */
-
-const BASE_URL = process.env.REACT_APP_BACKEND_URL || '';
-
-export interface ApiEnvelope<T = unknown> {
+import { requireSupabase } from '../lib/supabase';
+import { AppError } from './errors';
+export interface ApiEnvelope<T> {
   success: boolean;
   data: T | null;
-  errors: Array<{ code: string; message: string; type: string; field?: string }> | null;
-  metadata: {
-    request_id: string;
-    version: string;
-    timestamp: string;
-    processing_time_ms: number;
-    pagination: null | object;
-  };
+  errors: { code: string; message: string; type: string }[] | null;
+  metadata: { request_id: string; timestamp: string; version: string };
 }
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<ApiEnvelope<T>> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-  });
-  const body: ApiEnvelope<T> = await res.json();
-  return body;
-}
-
-// ── Health ────────────────────────────────────────────────────────────────────
-
-export interface HealthData {
-  status: 'healthy' | 'degraded';
-  version: string;
-  environment: string;
-  timestamp: string;
-  database: { connected: boolean; name: string | null; error: string | null };
-  mock_auth_enabled: boolean;
-}
-
-export function fetchHealth(): Promise<ApiEnvelope<HealthData>> {
-  return request<HealthData>('/api/health');
-}
-
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-export interface MagicLinkData {
-  message: string;
-  email: string;
-  expires_in_minutes: number;
-  mock_token: string | null;
-}
-
-export function requestMagicLink(email: string): Promise<ApiEnvelope<MagicLinkData>> {
-  return request<MagicLinkData>('/api/v1/auth/magic-link', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
-}
-
-export interface TokenPair {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_expires_in: number;
-}
-
-export function verifyMagicLink(token: string): Promise<ApiEnvelope<TokenPair>> {
-  return request<TokenPair>(`/api/v1/auth/verify?token=${encodeURIComponent(token)}`);
+export async function authenticatedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (!path.startsWith('/api/')) throw new AppError('validation', 'Invalid application API path.');
+  const { data: { session }, error } = await requireSupabase().auth.getSession();
+  if (error || !session) throw new AppError('authentication', 'Sign in to continue.');
+  const headers = new Headers(options.headers);
+  headers.set('Authorization', `Bearer ${session.access_token}`);
+  headers.set('Content-Type', 'application/json');
+  const response = await fetch(`${import.meta.env.VITE_API_URL ?? ''}${path}`, { ...options, headers });
+  let body: ApiEnvelope<T>;
+  try { body = await response.json(); } catch { throw new AppError('unavailable', 'The TONDE service is unavailable.'); }
+  if (!response.ok || !body.success || body.data === null) {
+    throw new AppError(response.status === 401 ? 'authentication' : response.status === 403 ? 'authorization' : 'unavailable', body.errors?.[0]?.message ?? 'The request could not be completed.');
+  }
+  return body.data;
 }
