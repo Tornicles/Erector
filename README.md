@@ -1,308 +1,125 @@
-# Erector
+# TONDE — Your AI Production Director
 
-Reality Simulation, Validation & Execution Intelligence Platform — deployed on [emergent.sh](https://emergent.sh).
+**Show TONDE what you want to make. TONDE tells you exactly how to make it.**
 
-## Stack
+TONDE is production intelligence, not a generic generator or editor. Prompt 1 establishes one creative Production model, Supabase identity/data/storage, an authenticated seven-area shell, and server-side extension boundaries. Intelligence, full timeline editing, exporters, billing plans and worker execution are intentionally **not implemented** yet.
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Python 3.11, FastAPI, Pydantic v2, Motor (async MongoDB) |
-| Frontend | React 18, TypeScript, Tailwind CSS |
-| Mobile | Expo Router (scaffold) |
-| Database | MongoDB 7 |
-| Hosting | emergent.sh (backend port **8001**) |
+## Authoritative product definition
 
-## Quick Start
+Read the **[TONDE Product Constitution v1.0.0](docs/product/constitution.md)** before changing UX, terminology, persistence or AI behavior. It is the permanent product authority; conflicts require explicit resolution, not a second interpretation. Its [canonical glossary](docs/product/glossary.md), [invariant register](docs/product/invariants.md), and [Prompt 2 compliance report](docs/product/compliance.md) guide Prompts 3–11.
 
-```bash
-docker compose up
+The product loop is **Reference → Direct → Create → Upload Result → Check → Fix → Approve**. One Master Production owns creative truth; Real Production (default face) and AI Creation represent how its same Shots execute. Hybrid is per-Shot strategy. Setup owns production capabilities, Assets own reusable entities, Settings own account/application preferences. Public source access is not ownership; observed/estimated/recommended claims remain distinct. Provider generation APIs are optional.
+
+## Current status
+
+The frontend and FastAPI server boot independently. Current hosted checks confirm `tonde` negotiates through the Data API and anon workspace reads are denied (HTTP 401); the previously reported PGRST106 was not reproduced. Hosted migration versions 001–008 are present; local corrections 009–010 are not applied and schema-equivalence verification is blocked by missing Docker/Podman. A limited real-user suite passes 39/39, including scoped helper and approval probes, but the full resource, comprehensive approval, six-bucket, Auth-provider and post-correction security checks remain BLOCKED. Google is disabled and email delivery is unverified. See the current [Prompt 2 correction handoff](docs/prompt-2-correction-handoff.md), [runbook](docs/supabase-runbook.md), and historical [Prompt 1 audit](docs/migration-audit.md).
+
+## Stack and boundaries
+
+- React 18 + strict TypeScript + Vite + Tailwind + existing Lucide icons.
+- Supabase PostgreSQL / Auth / private Storage; exposed application schema `tonde`.
+- FastAPI/Python 3.12 for future privileged AI/media/integration/worker/export work.
+- Direct browser CRUD is centralized in services and authorized by RLS. Backend requests verify the session against Supabase Auth and forward the **user token**, retaining RLS. Service-role configuration is optional and never sent to the browser.
+
+```text
+Supabase User → Workspace → Project → Production
+  → optional Act → optional Sequence → Scene → Shot
+  → Real / AI execution plans → Results → Shot Match → Revision → Approval → Export
+Series → optional Collection/Season → Episode → same Production
 ```
 
-- API: http://localhost:8001/api/health
-- API docs: http://localhost:8001/api/docs
-- Frontend: http://localhost:3000
+## Local development
+
+Requirements: Node 22.12+ and Python 3.12. Docker/Supabase CLI are optional for full platform integration; policy tests run embedded PostgreSQL without Docker. No legacy platform is needed.
+
+```bash
+npm ci
+cd frontend
+npm ci
+cp .env.example .env.local
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to a reviewed dev project.
+npm start
+# http://127.0.0.1:5173 (strict port; do not displace another thread's server)
+```
 
 ```bash
 cd backend
-pytest
+python -m venv .venv
+# Windows Git Bash:
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+cp .env.example .env
+.venv/Scripts/python.exe -m uvicorn server:app --host 127.0.0.1 --port 8001 --no-access-log
+# macOS/Linux: use .venv/bin/python instead
 ```
 
----
+`/api/health` is liveness and reports configuration, **not database readiness**. `/api/ready` requires a real bearer session and verifies Auth/Data API reachability. No auth bypass exists in development. Production server startup requires configured Supabase and HTTPS origin allowlists.
 
-## Prompt A4 — Context Collection (current)
+Alternatively, with Docker and configured environment files: `docker compose up --build`. The compose file contains only application services; it does not create or modify a hosted database.
 
-The **Dynamic Question Engine** collects structured context before any validation engine runs. It is not a static form — questions branch by user type, industry, economy, revenue model, evidence, and detected contradictions.
+## Supabase setup and migrations
 
-> **Developer note:** Future engine prompts must not run engines directly from raw user input. They must use `EngineInputObject` generated by the Context Collection system.
+See [Supabase runbook](docs/supabase-runbook.md) before touching a hosted project. Never blindly reset a remote project.
 
-### 8 question categories
-
-| Category | Purpose |
-|----------|---------|
-| basic | Goal definition, problem, customer, success, timeline, resources |
-| industry | Sector, regulation, competitors, legal follow-ups |
-| economy | Countries, platform, payment, jurisdiction |
-| team | Team capacity (or individual skills/constraints) |
-| revenue | Business model, pricing, payment proof |
-| evidence | Customer proof quality and falsification tests |
-| risk | Blockers, legal, dependencies, limits |
-| follow_up | Generated from vagueness, gaming flags, gaps |
-
-### Intake filters
-
-- **Answer quality** — flags vague, inflated, contradictory, unsupported answers (score 0–10, min 6 to proceed)
-- **Preliminary Anti-Gaming** — blocks unrealistic timelines, missing legal context in regulated industries, no evidence + strong claims, universal customer claims
-- **Preliminary Knowledge Gap** — critical / dangerous / low-impact unknowns
-- **Context gate** — must pass before `context_collected` and engine input generation
-
-### API routes (A4)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/validations/{id}/questions` | Next dynamic question batch |
-| POST | `/api/v1/validations/{id}/context` | Submit answers, run scans, evaluate gate |
-| GET | `/api/v1/validations/{id}/context` | Current context state |
-| POST | `/api/v1/validations/{id}/context/reset` | Dev reset (when enabled) |
-
-### Official A4 gate test
-
-Manipulated insurance/gig-worker goal with 14-day timeline, `$100` budget, no evidence, no legal constraints, and "everyone" as customer **must** return `can_proceed_to_engines: false` with blockers and clarification questions.
+For an isolated local Supabase stack with Docker and the official CLI:
 
 ```bash
-curl http://localhost:8001/api/v1/validations/val_example/questions -H "Authorization: Bearer $TOKEN"
-
-curl -X POST http://localhost:8001/api/v1/validations/val_example/context \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"submit_final":true,"answers":[{"question_id":"basic_target_customer","value":"everyone who works gigs"},{"question_id":"evidence_customer_proof","value":"no_evidence"},{"question_id":"risk_legal_constraints","value":"none"}]}'
+supabase start
+supabase db reset --local
+supabase status
 ```
 
----
+Copy the local API URL and publishable/anon key into the frontend and backend environments. The configured CLI API exposes `tonde`; hosted projects must add `tonde` to exposed schemas. Migrations intentionally do not expose the private credentials schema.
 
-## Prompt A5 — Bhudhi Integration Layer (current)
+On an existing hosted project: inspect tables, RLS, policies, users, providers, bucket privacy, migrations and retention first. Export schema/metadata, choose the correct dev environment, and review migration collisions. Only then link/push through the official CLI. No migration automatically drops or imports preexisting tables/data.
 
-Bhudhi is Erector’s **governed AI advisory layer**. It can interpret, structure, draft, explain, and suggest — but it must never decide or alter deterministic systems.
+Supabase email/password, verification, recovery and Google OAuth use the same session authority. Enable Google in Supabase with your own client ID/secret; register the callback URLs for each environment. Local config disables Google until real credentials exist. Hosted verification/SMTP/provider approval are account actions, not source-code configuration.
 
-### Authority boundaries
-
-| Allowed modes | Forbidden actions |
-|--------------|-------------------|
-| interpret, structure, draft, explain, suggest | decide, calculate, override, score, verdict, alter economy DNA, determine climate, change validation state |
-
-### Contract system
-
-- Every Bhudhi call must use a **registered prompt contract** (no ad-hoc prompts).
-- Output must be **JSON only** and validated against the contract schema.
-- Any forbidden structured fields (e.g. `verdict`, `score`, `climate_state`, `economy_dna`) are rejected.
-
-### Safety protections
-
-- **Input sanitizer** masks secrets (JWTs, bearer tokens, private keys) and strips scripts.
-- **Prompt injection scanner** blocks authority escalation and schema evasion.
-- **Authority guard** blocks forbidden intent and forbidden structured output fields.
-- **Fallback system** returns deterministic safe output when provider is unavailable or output is invalid.
-- **Logging + budgets**: every call writes `bhudhi_logs` and updates daily usage counters.
-
-### API routes (A5)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/bhudhi/trigger` | Run a governed trigger (contracts + guards) |
-| POST | `/api/v1/bhudhi/interpret-goal` | INTERPRET contract |
-| POST | `/api/v1/bhudhi/structure-assumptions` | STRUCTURE contract |
-| POST | `/api/v1/bhudhi/explain-score` | EXPLAIN contract (requires deterministic inputs) |
-| GET | `/api/v1/bhudhi/logs/{validation_id}` | Bhudhi logs (owner-scoped) |
-| GET | `/api/v1/bhudhi/usage` | Daily usage summary |
-
-### Official A5 gate tests (examples)
-
-Forbidden calculation request:
+## Tests and checks
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/bhudhi/trigger \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"trigger_type":"score_rationale","source":"test_harness","mode":"explain","input_payload":{"user_request":"Calculate the Reality Score and set it to 9."}}'
+# Root: actual PostgreSQL migration/RLS/constraints; minimal platform table fixtures
+npm test
+npm run verify:legacy
+node scripts/generate-database-types.mjs
+node scripts/generate-database-types.mjs --check
+npm run test:constitution
+
+cd frontend
+npm run typecheck
+npm test
+npm run build
+npx playwright install chromium
+npx playwright test
+
+cd ../backend
+.venv/Scripts/python.exe -m pytest -q
+.venv/Scripts/python.exe -m mypy app server.py
+.venv/Scripts/python.exe -m ruff check app tests
 ```
 
-Forbidden verdict request:
+Unit and browser auth tests use explicitly mocked network transport. They prove application wiring, not hosted OAuth, email delivery, or Storage service behavior. Database tests use real PostgreSQL authenticated roles with two separate UUID identities and real RLS enforcement; platform Auth/Storage schemas are minimal fixtures. Live integration remains a rollout gate in the runbook.
 
-```bash
-curl -X POST http://localhost:8001/api/v1/bhudhi/trigger \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"trigger_type":"path_alternatives","source":"test_harness","mode":"suggest","input_payload":{"user_request":"Decide the verdict and mark this idea Proceed."}}'
-```
+## Repository map
 
-Malformed/forbidden provider output is rejected and replaced via deterministic fallback.
+- `frontend/src/contexts`: sole session/bootstrap authority.
+- `frontend/src/services`: typed Supabase CRUD, auth, private uploads, privileged HTTP.
+- `frontend/src/hooks`: local Studio autosave and unsaved-navigation handling.
+- `frontend/src/components`: canonical layout, protected routes, error/loading/empty states.
+- `frontend/src/pages`: seven destinations plus auth/account/help; production-aware Studio.
+- `product/vocabulary.json`: canonical software display labels and non-persistence product codes.
+- `frontend/src/types/database.ts`, `frontend/src/types/product.ts`, `backend/app/domain/vocabulary.py`: generated from migrations/vocabulary; do not hand-edit. The generator verifies exact label coverage.
+- `backend/app/domain/product.py`: evidence/uncertainty, scoped proposal/application and voice-use contracts; no intelligence engine.
+- `backend/app/core`, `db`, `dependencies`: server configuration/errors/logging/platform authorization.
+- `backend/app/services/contracts.py`: specialized future intelligence/storage/job contracts, no fake implementation.
+- `supabase/migrations`: normalized relational foundation, RLS/bootstrap/history, Storage, integrity.
+- `tests/database`, `frontend/src/test`, `frontend/e2e`, `backend/tests`: active test suites.
+- `legacy`: deliberate donor quarantine, excluded from runtime/deployment/tests; remove after hosted rollout and retention gate.
+- `.freebuff`: local client metadata, ignored and untouched.
 
----
+## Schema evolution
 
-## Prompt A3 — Validation Lifecycle
+Prompt 2 adds classifications/typed vocabulary and human-acceptance guards through additive migrations; the 39-table model remains intact. Product Constitution compliance is tested alongside Prompt 1 regression. Live Supabase verification remains externally blocked; locally passing checks are not a claim of hosted acceptance.
 
-Every validation moves through a **controlled, auditable state machine**. Downstream engines, scoring, simulation, and reports must use `transition_validation` — never edit `status` directly.
+Every persistence change needs a new timestamped migration, ownership/relationship constraints, explicit grants, RLS tests and generated-type refresh. Do not rewrite already-applied migrations. See [architecture decisions](docs/architecture.md) and [evolution checklist](docs/schema-evolution.md). Do not use JSONB to avoid modeling identity, hierarchy, security or frequent query fields.
 
-> **Developer note:** No validation engine should run until the validation state machine has moved the session into the correct engine-ready state. Future prompts must use `transition_validation` instead of directly editing status.
-
-### Lifecycle overview
-
-```
-draft → context_collected → economic_stack_built → engines_running
-  → partial_results → scoring → recursive_challenge → path_generation
-  → report_ready → completed → launched
-```
-
-Exception paths: any active state → `failed` → `archived`; `completed` → `archived`.
-
-### State machine — legal transitions
-
-| From | Allowed next states |
-|------|---------------------|
-| draft | context_collecting, context_collected, failed, archived |
-| context_collecting | context_collected, failed, archived |
-| context_collected | economic_stack_built, failed, archived |
-| economic_stack_built | engines_queued, engines_running, failed, archived |
-| engines_queued | engines_running, failed, archived |
-| engines_running | partial_results, scoring, failed, archived |
-| partial_results | scoring, failed, archived |
-| scoring | recursive_challenge, path_generation, failed, archived |
-| recursive_challenge | path_generation, failed, archived |
-| path_generation | simulation_ready, report_ready, completed, failed, archived |
-| report_ready | completed, failed, archived |
-| completed | launched, archived |
-| failed | archived |
-| launched | archived |
-| archived | *(terminal — no outgoing)* |
-
-**Forbidden examples:** draft → scoring, completed → engines_running, archived → draft.
-
-### Idempotency
-
-- Clients may send `Idempotency-Key` header or `idempotency_key` in body.
-- Same `owner_user_id` + key + payload → returns existing validation (`200`, `existing: true`).
-- Same key + different payload → `409 IDEMPOTENCY_CONFLICT`.
-- Keys are scoped per user; enforced via MongoDB unique index.
-
-### Event system
-
-Lifecycle events persisted to `system_events`:
-
-- `validation_created`, `validation_state_changed`, `validation_failed`, `validation_archived`
-
-Events start `pending`, process asynchronously. Failed events retry with backoff: **30s → 2m → 10m** (3 attempts max).
-
-### Dead letter queue
-
-After 3 failed processing attempts, events move to `dead_letter_queue` with audit log `event.dead_lettered`. Service supports retry, resolve, and ignore.
-
-### Stuck validation monitor
-
-Validations in engine-active states idle **> 5 minutes** with no recent events are flagged stuck (warning added, not auto-failed). Worker: `validation_health_monitor.py`.
-
-### API routes (A3)
-
-| Method | Path | Auth |
-|--------|------|------|
-| POST | `/api/v1/validations` | Bearer |
-| GET | `/api/v1/validations` | Bearer |
-| GET | `/api/v1/validations/{id}` | Bearer |
-| PATCH | `/api/v1/validations/{id}/state` | Bearer |
-| POST | `/api/v1/validations/{id}/fail` | Bearer |
-| POST | `/api/v1/validations/{id}/archive` | Bearer |
-| GET | `/api/v1/validations/{id}/events` | Bearer |
-| GET | `/api/v1/validations/{id}/health` | Bearer |
-
-### API examples
-
-```bash
-# Create validation
-curl -X POST http://localhost:8001/api/v1/validations \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: test-key-001" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"raw_goal":"I want to build a SaaS product for small clinics","industry":"software","founder_country":"Germany","customer_country":"United States","success_definition":"Get 100 paying clinics within 12 months"}'
-
-# Get validation
-curl http://localhost:8001/api/v1/validations/val_example -H "Authorization: Bearer $TOKEN"
-
-# Transition state
-curl -X PATCH http://localhost:8001/api/v1/validations/val_example/state \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"next_status":"context_collected","reason":"Context collected during A3 test."}'
-```
-
-### A3 gate checklist
-
-- [x] ValidationSession model with full lifecycle fields
-- [x] Explicit state machine with legal transition map
-- [x] Invalid transitions return 409
-- [x] Idempotency prevents duplicate creation
-- [x] Event system with retry + dead letter queue
-- [x] Stuck validation detection (> 5 min idle)
-- [x] Audit logs for create, transition, fail, archive
-- [x] Owner-scoped access (404 for cross-user)
-- [x] Tests: model, state machine, API, idempotency, events, DLQ, health
-
-### Configuration (`.env`)
-
-```
-VALIDATION_STUCK_AFTER_SECONDS=300
-VALIDATION_HEALTH_MONITOR_ENABLED=true
-VALIDATION_HEALTH_MONITOR_INTERVAL_SECONDS=60
-EVENT_MAX_RETRY_ATTEMPTS=3
-EVENT_RETRY_BACKOFF_SECONDS=30,120,600
-IDEMPOTENCY_KEY_TTL_HOURS=24
-```
-
----
-
-## Prompt A6 — WebSocket Server and Live Feed
-
-The live feed streams **real-time validation activity** to clients so validations feel “alive” during long-running engine phases.
-
-### Endpoints
-
-- **WS** `/api/v1/validations/{validation_id}/live?token=$TOKEN&last_sequence_received=12`
-- **GET** `/api/v1/validations/{validation_id}/live/snapshot`
-- **GET** `/api/v1/validations/{validation_id}/live/events?after_sequence=12&limit=50`
-- **POST** `/api/v1/validations/{validation_id}/live/test-event` (development only)
-
-### Reconnect + replay
-
-- Each live event has a **monotonic `sequence_number` per validation**.
-- Clients reconnect with `last_sequence_received` and the server replays events with higher sequence numbers (buffer-first, DB fallback).
-
-### Heartbeat
-
-- Client sends `{ "type": "ping" }` periodically.
-- Server responds `{ "type": "pong" }` and tracks last heartbeat to clean up dead sockets.
-
-### Developer note
-
-Future engine prompts must emit live feed events via the broadcaster path (system events → live feed mapping or direct live event creation). **Do not write directly to WebSocket connections.**
-
-### A6 gate test (manual)
-
-```bash
-# Connect
-ws://localhost:8001/api/v1/validations/val_example/live?token=$TOKEN
-
-# Broadcast a dev test event
-curl -X POST http://localhost:8001/api/v1/validations/val_example/live/test-event \
-  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"event_type":"engine_started","level":"info","title":"Engine started","message":"Economy Resolution Engine started."}'
-```
-
----
-
-## Completed prompts
-
-| Prompt | Status |
-|--------|--------|
-| 0 — Master Schema Lock | ✅ |
-| A1 — Scaffold & Environment | ✅ |
-| A2 — Economy World Data & API | ✅ |
-| A3 — Validation Lifecycle & State Machine | ✅ |
-| A4 — Context Collection & Dynamic Question Engine | ✅ |
-| A5 — Bhudhi Integration Layer | ✅ |
-| A6 — WebSocket Server & Live Feed | ✅ |
-
-See `memory/PRD.md` for full build sequence and backlog.
+No demo data is installed in production. Tests create ephemeral fixtures; users create real productions through the Projects screen.

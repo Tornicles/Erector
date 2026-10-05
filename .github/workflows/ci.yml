@@ -1,77 +1,55 @@
-name: Erector CI
-
+name: TONDE foundation
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
-  backend-tests:
-    name: Backend Tests (Python 3.11)
+  database:
     runs-on: ubuntu-latest
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      MONGO_URL: mongodb://localhost:27017
-      DB_NAME: erector_test_db
-      APP_ENV: testing
-      JWT_SECRET: ci-test-secret-key
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/generate-database-types.mjs --check
+      - run: npm run verify:legacy
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - run: npm audit
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
           cache: pip
-
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-
-      - name: Run Prompt 0 schema tests
-        run: |
-          cd backend
-          python -m pytest ../tests/schema/ -v --tb=short
-
-      - name: Run A1 scaffold tests
-        run: |
-          cd backend
-          python -m pytest tests/ -v --tb=short
-
-  frontend-lint:
-    name: Frontend Type Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
-
-      - name: Install frontend deps
-        run: |
-          cd frontend
-          yarn install --frozen-lockfile
-
-      - name: TypeScript check
-        run: |
-          cd frontend
-          yarn tsc --noEmit
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+      - run: python -m mypy app server.py
+      - run: python -m ruff check app tests
