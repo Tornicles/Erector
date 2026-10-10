@@ -110,7 +110,7 @@ test('Home plans one Production, applies the answered decisions and opens that s
   });
   await page.goto('/home');
   await page.getByRole('textbox',{name:'Describe what you want to make'}).fill('A 30-second premium coffee commercial');
-  await page.getByRole('button',{name:'DIRECT THIS'}).click();
+  await page.locator('form[aria-label="Director intake"]').getByRole('button',{name:'DIRECT THIS'}).click();
   await expect(page.getByRole('heading',{name:'TONDE is shaping one Master Production'})).toBeVisible();
   await expect(page.getByText(/No model provider is configured, so this plan is deterministic/)).toBeVisible();
   await expect(page.getByRole('heading',{name:'Which premium coffee brand is this for? *'})).toBeVisible();

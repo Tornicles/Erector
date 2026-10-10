@@ -15,7 +15,10 @@ import { BillingCanvas } from '../prompt10/Billing';
 import { formatRuntime, type Production } from '../types/domain';
 import { PRODUCT } from '../types/product';
 import { JobsPage } from './Prompt11Pages';
-import { type DirectorCollaborationMode, type DirectorPlanResponse } from '../services/productions';
+import { prompt11Service, type Job } from '../services/prompt11';
+import { type DirectorCollaborationMode, type DirectorPlanResponse, type StudioReadModel } from '../services/productions';
+import { continueHref, deriveHomeMode, deriveLifecycle, failedJobs, homeHeroCopy, rankAttention, type HomeMode } from '../home/commandCenter';
+import { AttentionStrip, ContinueCard, LifecycleLine, LiveJobs, PriorityPanel, QuickStartBox, StartExamples } from '../home/HomeCommandCenter';
 type IntakeAttachment = { clientId: string; file: File; state: 'uploading' | 'uploaded' | 'failed'; error?: string; mediaId?: string };
 type IntakeOrigin = { source_type: Database['tonde']['Enums']['reference_source']; source_url?: string; source_description?: string; media_id?: string; provenance?: Row<'production_references'>['provenance'] };
 export function HomePage() {
@@ -23,7 +26,7 @@ export function HomePage() {
   const navigate = useNavigate();
   const [intent, setIntent] = useState(() => { try { const context=JSON.parse(localStorage.getItem('tonde:intake-context')||'null') as {description?:string}|null; return context?.description ?? ''; } catch { return ''; } });
   const [url, setUrl] = useState('');
-  const [mode, setMode] = useState<'describe' | 'upload' | 'url' | 'import' | 'record'>('describe');
+  const [source, setSource] = useState<'describe' | 'upload' | 'url' | 'import' | 'record'>('describe');
   const [attachments, setAttachments] = useState<IntakeAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,15 +41,38 @@ export function HomePage() {
   const [planBusy, setPlanBusy] = useState(false);
   const [commitBusy, setCommitBusy] = useState(false);
   const [planError, setPlanError] = useState<string|null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobsRefresh, setJobsRefresh] = useState(0);
+  const [detail, setDetail] = useState<StudioReadModel | null>(null);
   const readyToDirect = intent.trim().length > 0 || attachments.some(item => item.state === 'uploaded') || isReferenceUrl(url);
   const intakeLocked = !!createdProductionId;
   useEffect(() => {
     if (!workspaceId) { setWork([]); setWorkError(null); setWorkLoading(false); return; }
     let active = true;
     setWorkLoading(true); setWorkError(null);
-    productionService.list(workspaceId).then(items => { if (active) setWork(orderWork(items).slice(0, 8)); }).catch(failure => { if (active) setWorkError(safeError(failure).message); }).finally(() => { if (active) setWorkLoading(false); });
+    Promise.resolve().then(() => productionService.list(workspaceId)).then(items => { if (active) setWork(orderWork(items).slice(0, 8)); }).catch(failure => { if (active) setWorkError(safeError(failure).message); }).finally(() => { if (active) setWorkLoading(false); });
     return () => { active = false; };
   }, [workspaceId]);
+  useEffect(() => {
+    if (!workspaceId) { setJobs([]); setJobsError(null); setJobsLoading(false); return; }
+    let active = true;
+    setJobsLoading(true); setJobsError(null);
+    Promise.resolve().then(() => prompt11Service.jobs(workspaceId)).then(list => { if (active) setJobs(list.jobs); }).catch(failure => { if (active) setJobsError(safeError(failure).message); }).finally(() => { if (active) setJobsLoading(false); });
+    return () => { active = false; };
+  }, [workspaceId, jobsRefresh]);
+  // Autosave the intake draft so navigating away never loses substantial input.
+  useEffect(() => {
+    if (intakeLocked) return;
+    const timer = window.setTimeout(() => {
+      try {
+        if (intent.trim()) localStorage.setItem('tonde:intake-context', JSON.stringify({ description: intent }));
+        else localStorage.removeItem('tonde:intake-context');
+      } catch { /* storage unavailable — intake simply won't resume */ }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [intent, intakeLocked]);
   const addFiles = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
     if (!workspaceId) { setError('Your workspace is not ready. Retry after signing in again.'); return; }
@@ -153,30 +179,47 @@ export function HomePage() {
   const openQuestions = (plan?.questions ?? []).filter(question => !question.answered);
   const requiredOpen = openQuestions.filter(question => question.blocking && !answers[question.id]);
   const reviewCount = work.filter(item => item.approval === 'needs_review' || item.approval === 'changed_after_approval').length;
-  const draftCount = work.filter(item => item.approval === 'draft').length;
-  const approvedCount = work.filter(item => item.approval === 'approved').length;
   const spotlight = work[0] ?? null;
-  return <div className="page home-page">
-    <section className="home-hero-v3" aria-label="Director lobby">
-      <div className="home-copy">
-        <p className="eyebrow">TONDE · YOUR AI PRODUCTION DIRECTOR</p>
-        <h1>Bring the idea.<br />Leave with the plan.</h1>
-        <p className="lead">Start with a thought, movie reference, song, photo, script, product or raw footage. TONDE turns it into a production you can actually shoot, generate or combine.</p>
-      </div>
-      <div className="director-orbit" aria-label="TONDE production intelligence flow">
-        <div className="orbit-title"><span>FROM ANYTHING → ONE PRODUCTION</span><strong>TONDE understands before it directs.</strong></div>
-        <div className="orbit-source os1">MOVIE / LINK</div>
-        <div className="orbit-source os2">SONG / AUDIO</div>
-        <div className="orbit-source os3">PHOTO / FOOTAGE</div>
-        <div className="orbit-source os4">IDEA / SCRIPT</div>
-        <div className="orbit-core"><div><strong>TONDE</strong><small>DIRECTOR</small></div></div>
-        <div className="orbit-output oo1">STORY</div>
-        <div className="orbit-output oo2">SCENES + SHOTS</div>
-        <div className="orbit-output oo3">MUSIC + SOUND</div>
-        <div className="orbit-output oo4">SHOOT / AI / HYBRID</div>
-        <div className="orbit-foot"><span>Understand intent</span><span>Build executable direction</span></div>
+  useEffect(() => {
+    if (!workspaceId || !spotlight) { setDetail(null); return; }
+    let active = true;
+    Promise.resolve().then(() => productionService.studioSurface(workspaceId, spotlight.id))
+      .then(model => { if (active) setDetail(model); })
+      .catch(() => { if (active) setDetail(null); });
+    return () => { active = false; };
+  }, [workspaceId, spotlight?.id]);
+  const failed = failedJobs(jobs);
+  const attention = useMemo(() => (workspaceId ? rankAttention({ orderedWork: work, jobs }) : []), [workspaceId, work, jobs]);
+  const needsAttention = detail?.status_summary.needs_attention ?? 0;
+  const homeMode: HomeMode = workLoading || !workspaceId ? 'new'
+    : deriveHomeMode({ productions: work, failedJobs: failed.length, reviewCount, needsAttention });
+  const stages = useMemo(() => deriveLifecycle(detail), [detail]);
+  const activeStage = stages.find(stage => stage.state === 'active');
+  const hero = homeHeroCopy(homeMode, spotlight?.title ?? null, homeMode === 'active' && spotlight && activeStage && detail
+    ? `${spotlight.title} · ${activeStage.label.toLowerCase()}${needsAttention > 0 ? ` · ${needsAttention} blocker${needsAttention === 1 ? '' : 's'}` : ''}.` : null);
+  const resume = spotlight && workspaceId ? continueHref(workspaceId, spotlight.id) : '/projects';
+  const sceneCount = detail ? detail.scenes.length : null;
+  const shotCount = detail ? detail.scenes.flatMap(scene => scene.shots).length : null;
+  const resultsReady = detail ? detail.scenes.flatMap(scene => scene.shots).reduce((total, shot) => total + shot.result_count, 0) : null;
+  return <div className="page home-page home-command">
+    <section className="hm-priority-shell" aria-label="Production command center">
+      <div className="hm-priority-layout">
+        <div className="hm-priority-copy">
+          <p className="eyebrow">{hero.eyebrow}</p>
+          <h1>{hero.title}</h1>
+          <p className="hm-lead">{hero.lead}</p>
+          <div className="hm-priority-actions">
+            {homeMode === 'urgent' && attention[0] && <Link className="hm-primary" to={attention[0].href}>Resolve top blocker →</Link>}
+            {homeMode === 'active' && spotlight && <Link className="hm-primary" to={resume}>Continue in Studio →</Link>}
+            {homeMode !== 'new' && spotlight && <Link className="hm-btn" to={resume}>Open current Production</Link>}
+            {homeMode === 'active' && <Link className="hm-btn" to="/projects">All productions</Link>}
+          </div>
+          {homeMode !== 'new' && <QuickStartBox intent={intent} onChange={setIntent} onSubmit={beginDirector} disabled={!workspaceId || intakeLocked} busy={planBusy} />}
+        </div>
+        <PriorityPanel top={attention[0] ?? null} rest={attention.slice(1)} />
       </div>
     </section>
+
     {plan&&createdProductionId ? <section className="director-intake-panel" aria-label="Director intake"><header className="intake-progress"><p className="eyebrow">{requiredOpen.length?'KEY DECISIONS':plan.operation.status?'DIRECTOR BRIEF · PLAN READY':'DIRECTOR BRIEF'}</p><h2>TONDE is shaping one Master Production</h2><p>{plan.intent.primary_type.replaceAll('_',' ')}{plan.intent.runtime_ms!==null?` · ${formatRuntime(plan.intent.runtime_ms)}`:''}{plan.intent.platform?` · ${plan.intent.platform}`:''}</p></header>
       <p className="subtle">{plan.producer==='model'?'A configured model refined this plan through the validated provider contract.':'No model provider is configured, so this plan is deterministic. Nothing here is presented as model reasoning.'}</p>
       {plan.limitations.length>0&&<ul className="capability-notes">{plan.limitations.map(note=><li key={note}>{note}</li>)}</ul>}
@@ -204,16 +247,16 @@ export function HomePage() {
       <label className="sr-only" htmlFor="director-intent">Describe what you want to make</label>
       <textarea id="director-intent" aria-label="Describe what you want to make" value={intent} onChange={event => setIntent(event.target.value)} placeholder={'I want to create a 4-minute crime short in Lagos. I have two actors and a phone. I want the tension to feel cinematic, but the story must be original.'} rows={5} disabled={intakeLocked} />
       <div className="home-input-bottom">
-        <div className="input-sources" role="tablist" aria-label="How would you like to start?">{([['upload','＋ Upload'],['url','↗ Paste link'],['import','▤ Script / Doc'],['record','◉ Record']] as const).map(([key,label]) => <button key={key} type="button" role="tab" aria-selected={mode === key} className={mode === key ? 'active' : ''} onClick={() => { setMode(key); if (key === 'upload') inputRef.current?.click(); }}>{label}</button>)}</div>
-        <button type="button" className="ghost-btn" disabled={!workspaceId} title={!workspaceId ? 'Connect a Supabase workspace to upload private media' : undefined} onClick={() => { setMode('upload'); inputRef.current?.click(); }}>Add reference</button>
+        <div className="input-sources" role="tablist" aria-label="How would you like to start?">{([['upload','＋ Upload'],['url','↗ Paste link'],['import','▤ Script / Doc'],['record','◉ Record']] as const).map(([key,label]) => <button key={key} type="button" role="tab" aria-selected={source === key} className={source === key ? 'active' : ''} onClick={() => { setSource(key); if (key === 'upload') inputRef.current?.click(); }}>{label}</button>)}</div>
+        <button type="button" className="ghost-btn" disabled={!workspaceId} title={!workspaceId ? 'Connect a Supabase workspace to upload private media' : undefined} onClick={() => { setSource('upload'); inputRef.current?.click(); }}>Add reference</button>
         <button className="direct-btn" disabled={!workspaceId || !readyToDirect || planBusy || attachments.some(item => item.state === 'uploading')}>{planBusy ? 'Planning…' : <>DIRECT THIS <span aria-hidden="true">→</span></>}</button>
       </div>
       <div className="home-examples" aria-label="Example intakes">{['Plan my wedding shoot','Make a story from this song','I want something inspired by this movie'].map(example => <button key={example} type="button" onClick={() => setIntent(example)}>“{example}”</button>)}</div>
-      {mode === 'url' && <label className="intake-secondary">Reference URL<input aria-label="Reference URL" inputMode="url" type="url" placeholder="Paste a supported reference link" value={url} onChange={event => setUrl(event.target.value)} disabled={intakeLocked}/>{url&&<small className="subtle">{referenceProvider(url)} · Access and media analysis are not verified.</small>}</label>}
+      {source === 'url' && <label className="intake-secondary">Reference URL<input aria-label="Reference URL" inputMode="url" type="url" placeholder="Paste a supported reference link" value={url} onChange={event => setUrl(event.target.value)} disabled={intakeLocked}/>{url&&<small className="subtle">{referenceProvider(url)} · Access and media analysis are not verified.</small>}</label>}
       {!workspaceId && <div className="capability-note" role="status">Local preview only — connect a Supabase workspace to create Productions, load work or upload private media.</div>}
-      {mode === 'upload' && !workspaceId && <div className="capability-note" role="status">Private uploads need a connected Supabase workspace.</div>}
-      {mode === 'import' && <div className="capability-note" role="status">No external import source is connected yet. Upload a file or paste a reference URL instead.</div>}
-      {mode === 'record' && <div className="capability-note" role="status">Recording is not configured in this workspace yet. You can upload an audio file when ready.</div>}
+      {source === 'upload' && !workspaceId && <div className="capability-note" role="status">Private uploads need a connected Supabase workspace.</div>}
+      {source === 'import' && <div className="capability-note" role="status">No external import source is connected yet. Upload a file or paste a reference URL instead.</div>}
+      {source === 'record' && <div className="capability-note" role="status">Recording is not configured in this workspace yet. You can upload an audio file when ready.</div>}
       <input ref={inputRef} className="sr-only" type="file" multiple disabled={!workspaceId} accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,application/pdf,text/plain" onChange={event => { void addFiles(event.target.files); event.currentTarget.value = ''; }} aria-label="Upload references" />
       {attachments.length > 0 && <><ul className="attachment-list" aria-label="Reference uploads">{attachments.map(item => <li key={item.clientId}><span className="attachment-type">{item.file.type.split('/')[0] || 'file'}</span><span>{item.file.name}<small>{item.state === 'uploaded' ? 'Uploaded · not analyzed' : item.state === 'uploading' ? 'Uploading…' : item.error}</small></span>{item.state==='failed'&&<button type="button" disabled={intakeLocked} onClick={()=>void addFiles([item.file])}>Retry upload</button>}<button type="button" aria-label={`Remove ${item.file.name} from intake only; uploaded media is retained`} disabled={intakeLocked} onClick={() => setAttachments(current => current.filter(candidate => candidate.clientId !== item.clientId))}><X size={15} /></button></li>)}</ul><p className="intake-truth">Up to 8 files, 50 MB each. Removing a file here only removes it from intake; uploaded private media is retained.</p></>}
       {planError&&!plan&&<div role="alert" className="intake-error"><p className="error-text">{planError}</p><p className="subtle">Nothing was generated yet — no Brief, Story, or Scenes. Your text is kept above; DIRECT THIS again to retry the plan.</p>{createdProductionId&&<Link className="text-link" to={`/studio/${createdProductionId}`}>Or open the saved Production and plan from Studio <ArrowUpRight size={14}/></Link>}</div>}
@@ -221,36 +264,13 @@ export function HomePage() {
       <label className="collaboration-select">How should TONDE work?<select value={collaboration} onChange={event=>setCollaboration(event.target.value as typeof collaboration)}><option value="guide_step_by_step">Guide Me Step-by-Step</option><option value="stop_at_major_decisions">Build It, Stop at Major Decisions</option><option value="complete_first_draft">Build Complete First Draft</option></select></label>
       <p className="intake-truth">References are saved to this production. Uploading does not mean TONDE has analyzed them.</p>
     </form>}
-    <section className="home-section" aria-labelledby="your-work-heading">
-      <div className="home-section-head"><div><p className="eyebrow">CONTINUE NOW</p><h2 id="your-work-heading">Your active production</h2><p>Not a dashboard. The next real thing TONDE needs from you.</p></div><Link className="ghost-btn" to="/projects">All productions</Link></div>
-      {workLoading ? <LoadingState label="Loading your work…" /> : workError ? <ErrorState message={workError} retry={() => { if(!workspaceId)return;setWorkLoading(true); productionService.list(workspaceId).then(items => setWork(orderWork(items).slice(0, 8))).catch(failure => setWorkError(safeError(failure).message)).finally(() => setWorkLoading(false)); }} /> : !workspaceId ? <EmptyState title="Connect a workspace to see Your Work">Your Productions and private uploads appear here when Supabase is configured.</EmptyState> : spotlight ? <article className="spotlight">
-        <div className="spotlight-visual"><div className="spotlight-overlay"><span className="badge">{PRODUCT.productionTypes[spotlight.production_type]} · {spotlight.execution_method === 'ai' ? 'AI CREATION' : spotlight.execution_method === 'hybrid' ? 'HYBRID' : 'REAL PRODUCTION'}</span><div><div className="scene-dots" aria-hidden="true"><i className={spotlight.approval === 'approved' ? 'done' : ''} /><i className={spotlight.approval === 'approved' ? 'done' : ''} /><i /><i /><i /></div></div></div></div>
-        <div className="spotlight-info">
-          <p className="eyebrow">{spotlight.title}</p>
-          <h3>{spotlight.approval === 'needs_review' || spotlight.approval === 'changed_after_approval' ? 'A decision is waiting.' : spotlight.approval === 'approved' ? 'Approved — keep directing.' : 'Keep shaping this production.'}</h3>
-          <p className="desc">{PRODUCT.approvals[spotlight.approval]}{spotlight.planned_duration_ms !== null ? ` · ${formatRuntime(spotlight.planned_duration_ms)}` : ''} · Updated {new Date(spotlight.updated_at).toLocaleDateString()}</p>
-          <div className="spotlight-stats">
-            <div className="spotlight-stat"><strong>{work.length}</strong><small>Active</small></div>
-            <div className="spotlight-stat"><strong>{reviewCount}</strong><small>Need review</small></div>
-            <div className="spotlight-stat"><strong>{draftCount}</strong><small>Drafts</small></div>
-            <div className="spotlight-stat"><strong>{approvedCount}</strong><small>Approved</small></div>
-          </div>
-          <div className="next-action">
-            <div><strong>{spotlight.approval === 'needs_review' || spotlight.approval === 'changed_after_approval' ? 'Review the current state and approve or revise it.' : 'Open Studio to continue directing this production.'}</strong><small>Changes only what you approve; history is preserved.</small></div>
-            <button className="primary-btn" onClick={() => navigate(`/studio/${spotlight.id}`)}>Open in Studio</button>
-          </div>
-        </div>
-      </article> : <EmptyState title="Your first production starts here">Describe it above and Direct This. Your next meaningful actions will appear here.</EmptyState>}
-    </section>
-    <section className="home-section" aria-label="Production pulse">
-      <div className="home-section-head"><div><p className="eyebrow">PRODUCTION PULSE</p><h2>What is moving</h2></div></div>
-      <div className="pulse-grid">
-        <button type="button" className="pulse" onClick={() => navigate('/projects')}><div className="num">{reviewCount}</div><div className="label">Need your decision</div><p>Productions waiting for review that TONDE will not guess on.</p></button>
-        <button type="button" className="pulse" onClick={() => navigate('/projects')}><div className="num">{work.length}</div><div className="label">Active productions</div><p>Real workspace productions, newest most urgent first.</p></button>
-        <button type="button" className="pulse" onClick={() => navigate('/discover')}><div className="num">{approvedCount}</div><div className="label">Approved</div><p>Productions you have explicitly accepted at their version.</p></button>
-        <button type="button" className="pulse" onClick={() => navigate('/projects')}><div className="num">{draftCount}</div><div className="label">Drafts shaping</div><p>Early productions still being understood and planned.</p></button>
-      </div>
-    </section>
+    <AttentionStrip items={attention} />
+      {workLoading ? <LoadingState label="Loading your work…" /> : workError ? <ErrorState message={workError} retry={() => { if(!workspaceId)return;setWorkLoading(true); productionService.list(workspaceId).then(items => setWork(orderWork(items).slice(0, 8))).catch(failure => setWorkError(safeError(failure).message)).finally(() => setWorkLoading(false)); }} /> : !workspaceId ? <EmptyState title="Connect a workspace to see Your Work">Your Productions and private uploads appear here when Supabase is configured.</EmptyState> : spotlight ? <>
+      <ContinueCard production={spotlight} sceneCount={sceneCount} shotCount={shotCount} resultsReady={resultsReady} blockers={needsAttention} href={resume} />
+      <LifecycleLine stages={stages} productionTitle={spotlight.title} />
+    </> : <EmptyState title="Your first production starts here">Describe it above and Direct This. Your next meaningful actions will appear here.</EmptyState>}
+        <LiveJobs jobs={jobs} loading={jobsLoading} error={jobsError} onRetry={() => setJobsRefresh(value => value + 1)} />
+    {homeMode === 'new' && !workLoading && <StartExamples onUse={setIntent} />}
   </div>;
 }
 type ProjectFilter = 'all' | 'draft' | 'review' | 'approved' | 'changed' | 'archived';

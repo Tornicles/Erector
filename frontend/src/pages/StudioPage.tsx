@@ -30,6 +30,7 @@ import { ExportsCanvas } from '../prompt10/Exports';
 import { ProductionShotMatchCanvas } from '../studio/ProductionShotMatch';
 import { type ExecutionFace, type Production } from '../types/domain';
 import { DEFAULT_EXECUTION_FACE, PRODUCT } from '../types/product';
+import { saveStudioContext } from '../home/commandCenter';
 
 type StudioTool =
   | 'Brief' | 'References' | 'Story' | 'Script' | 'Reality Check'
@@ -128,6 +129,9 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   // made in the same tick compose instead of one silently replacing the other.
   const liveSearch = useRef(params.toString());
   liveSearch.current = params.toString();
+  // Persist the exact Studio context so Home can resume it later.
+  const studioSearch = params.toString();
+  useEffect(() => { saveStudioContext(workspaceId, initial.id, studioSearch); }, [workspaceId, initial.id, studioSearch]);
   const writeParams = useCallback((mutate: (search: URLSearchParams) => void) => {
     const search = new URLSearchParams(liveSearch.current);
     mutate(search);
