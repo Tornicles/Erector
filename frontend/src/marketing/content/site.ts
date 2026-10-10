@@ -18,17 +18,23 @@
  *                          the source archive 1:1 (trailing slash optional).
  */
 
+export type AreaKey = 'area1' | 'area2' | 'area3' | 'area4';
+
+/** Preserved original design file per area (reference, `public/marketing/originals/`). */
+export const AREA_FILES: Record<AreaKey, string> = {
+  area1: 'tonde_brand_product_area1.html',
+  area2: 'tonde_creation_modes_area2.html',
+  area3: 'tonde_solutions_discover_area3.html',
+  area4: 'tonde_resources_company_area4.html',
+};
+
 export interface EmbedSpec {
   kind: 'embed';
   path: string;
   title: string;
   description: string;
-  /** Legacy working copy served from /marketing/legacy/. */
-  file:
-    | 'tonde_brand_product_area1.html'
-    | 'tonde_creation_modes_area2.html'
-    | 'tonde_solutions_discover_area3.html'
-    | 'tonde_resources_company_area4.html';
+  /** Native area runner (`native/runners/<area>.ts`), ported from the original design. */
+  area: AreaKey;
   anchor: string;
 }
 
@@ -91,16 +97,16 @@ function embed(
   path: string,
   title: string,
   description: string,
-  file: EmbedSpec['file'],
+  area: EmbedSpec['area'],
   anchor: string,
 ): EmbedSpec {
-  return { kind: 'embed', path, title: `TONDE | ${title}`, description, file, anchor };
+  return { kind: 'embed', path, title: `TONDE | ${title}`, description, area, anchor };
 }
 
-const AREA1 = 'tonde_brand_product_area1.html' as const;
-const AREA2 = 'tonde_creation_modes_area2.html' as const;
-const AREA3 = 'tonde_solutions_discover_area3.html' as const;
-const AREA4 = 'tonde_resources_company_area4.html' as const;
+const AREA1: AreaKey = 'area1';
+const AREA2: AreaKey = 'area2';
+const AREA3: AreaKey = 'area3';
+const AREA4: AreaKey = 'area4';
 
 export const MARKETING_ROUTES: MarketingSpec[] = [
   embed('/', 'Your AI Production Director', 'Describe what you want to create. TONDE connects direction and execution.', AREA1, 'home'),
@@ -198,6 +204,45 @@ export const MARKETING_ROUTES: MarketingSpec[] = [
 ];
 
 export const END_CTA_COPY = END_CTA_PARAGRAPH;
+
+/** area + anchor → served SPA path, for legacy cross-link resolution. */
+let areaAnchorPaths: Map<string, string> | null = null;
+function areaAnchorTable(): Map<string, string> {
+  if (!areaAnchorPaths) {
+    areaAnchorPaths = new Map();
+    for (const route of MARKETING_ROUTES) {
+      if (route.kind === 'embed') areaAnchorPaths.set(`${route.area}#${route.anchor}`, route.path);
+    }
+  }
+  return areaAnchorPaths;
+}
+
+function normalizeAreaFile(file: string): AreaKey | null {
+  if (file === 'area1' || file === 'area2' || file === 'area3' || file === 'area4') return file;
+  const base = file.split('/').pop() ?? file;
+  for (const [area, name] of Object.entries(AREA_FILES)) {
+    if (base === name || base === name.replace(/\.html$/, '') || base === area) return area as AreaKey;
+  }
+  return null;
+}
+
+/**
+ * Resolve a navigation intent recorded by the legacy runtime to an SPA path.
+ * Returns null when the intent targets prototype auth (served by AuthPage) or
+ * an unknown destination.
+ */
+export function resolveLegacyNav(
+  currentArea: AreaKey,
+  intent: { file: string; hash: string } | { href: string },
+): string | null {
+  if ('href' in intent) return legacyPathToSpa(intent.href);
+  if (intent.hash === '__auth__') return '/login';
+  const area = normalizeAreaFile(intent.file) ?? currentArea;
+  if (intent.hash === 'login' || intent.hash === 'signup' || intent.hash === 'forgot') {
+    return intent.hash === 'login' ? '/login' : intent.hash === 'signup' ? '/signup' : '/forgot-password';
+  }
+  return areaAnchorTable().get(`${area}#${intent.hash}`) ?? null;
+}
 
 export interface NavLink {
   label: string;

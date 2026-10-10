@@ -117,17 +117,6 @@
 .tmk main {
   flex: 1;
 }
-.tmk .embedded-page {
-  min-height: 70vh;
-  overflow: hidden;
-}
-.tmk .embedded-page iframe {
-  width: 100%;
-  display: block;
-  min-height: 980px;
-  border: 0;
-  overflow: hidden;
-}
 .tmk .site-footer {
   border-top: 1px solid var(--tmk-line);
   padding: 55px 0 26px;

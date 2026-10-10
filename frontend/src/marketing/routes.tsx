@@ -1,6 +1,6 @@
 import type { RouteObject } from 'react-router-dom';
-import { EmbedPage } from './components/EmbedPage';
 import { MarketingLayout } from './components/MarketingLayout';
+import { NativeAreaPage } from './native/NativeAreaPage';
 import { NativePage } from './components/NativePage';
 import { MARKETING_ROUTES } from './content/site';
 
@@ -9,7 +9,7 @@ export const marketingRouteObjects: RouteObject[] = MARKETING_ROUTES.map((spec) 
   path: spec.path === '/' ? '/' : spec.path.replace(/^\//, ''),
   element: (
     <MarketingLayout>
-      {spec.kind === 'embed' ? <EmbedPage spec={spec} /> : <NativePage spec={spec} />}
+      {spec.kind === 'embed' ? <NativeAreaPage spec={spec} /> : <NativePage spec={spec} />}
     </MarketingLayout>
   ),
 }));

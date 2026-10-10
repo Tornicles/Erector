@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /marketing/legacy/
 Disallow: /marketing/originals/
 Disallow: /home
 Disallow: /studio

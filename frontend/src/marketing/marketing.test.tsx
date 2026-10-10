@@ -64,22 +64,22 @@ describe('marketing route table', () => {
     }
   });
 
-  it('references only the four preserved legacy working copies', () => {
-    const known = new Set([
+  it('renders natively from the four ported areas; originals preserved, iframes gone', () => {
+    const knownAreas = new Set(['area1', 'area2', 'area3', 'area4']);
+    const knownFiles = new Set([
       'tonde_brand_product_area1.html',
       'tonde_creation_modes_area2.html',
       'tonde_solutions_discover_area3.html',
       'tonde_resources_company_area4.html',
     ]);
     for (const route of MARKETING_ROUTES) {
-      if (route.kind === 'embed') expect(known.has(route.file)).toBe(true);
+      if (route.kind === 'embed') expect(knownAreas.has(route.area)).toBe(true);
     }
-    const legacyDir = join(process.cwd(), 'public', 'marketing', 'legacy');
-    for (const file of known) {
-      expect(existsSync(join(legacyDir, file))).toBe(true);
-    }
+    // No iframe payload remains in the served site.
+    expect(existsSync(join(process.cwd(), 'public', 'marketing', 'legacy'))).toBe(false);
+    // The four original designs stay preserved as immutable reference.
     const originalsDir = join(process.cwd(), 'public', 'marketing', 'originals');
-    for (const file of known) {
+    for (const file of knownFiles) {
       expect(existsSync(join(originalsDir, file))).toBe(true);
     }
   });

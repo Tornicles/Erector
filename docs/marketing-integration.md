@@ -46,12 +46,35 @@ Auth (real `AuthPage`, never the prototype embeds): `/login`, `/signup`,
 - Marketing CSS is namespaced under `.tmk` (test asserts every selector).
 - `frontend/public/sitemap.xml` + `robots.txt` (app routes disallowed).
 
+## Prompt 2 — native completion
+
+All 31 embed routes now render natively (no iframes). Each area script runs
+inside the scoped runtime (`src/marketing/native/legacyRuntime.ts`) with
+styles ported to `styles/legacy-areas.css` (`.tmk`-scoped, keyframes prefixed).
+Navigation, toasts, modals, tabs, search, kit/face/studio selectors, case steps
+and the Director preview run from the original logic; cross-area links,
+prototype-auth calls and "Area N will be built next" placeholder alerts are
+bridged to real SPA routes/auth. Entrance animations restored (the embed
+`animation:none` override is gone). `public/marketing/legacy/` deleted (~770KB
+payload removed); `EmbedPage` and the height-clamp bridge deleted with it.
+
+## Vercel readiness
+
+- Root `vercel.json` (deployment track) owns routing: frontend service
+  (`frontend/`, Vite preset with SPA fallback) serves all public and
+  authenticated routes — refresh and deep links work; `/api/*` routes to the
+  backend service. No nested frontend config is added, to avoid conflicts.
+  Static files (sitemap, robots, originals) keep filesystem precedence.
+- Client env is publishable-only (`VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_API_URL`, preview flag);
+  `verify-boundaries.mjs` rejects service-role/secret browser vars.
+- Set `VITE_API_URL` per Vercel environment (preview vs production backend);
+  preview/production separation itself is Vercel project configuration.
+
 ## Known limitations
 
-- Embeds render the full stacked legacy document (height clamp mirrors the
-  source bridge); full native migration of the four interactive originals is
-  future work — originals are preserved for it.
-- `tonde.io` domain routing / SPA fallback for the production host is not
-  configured in this repo (no vercel/netlify config exists); `vite preview`
-  fallback verified locally, deep links need host-side fallback.
 - `gh` is unauthenticated in this environment; the PR may need opening manually.
+- Provider-backed AI/media generation remains unconfigured and unclaimed;
+  the Director preview sketches plan shapes from keywords and never claims
+  submission, real-media analysis, or generation (legacy copy already carries
+  the no-manufactured-approval language).
