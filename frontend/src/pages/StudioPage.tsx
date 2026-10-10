@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowUpRight, BookOpen, Camera, Clapperboard, Compass, FileText, Film, Gauge, Layers, Lightbulb,
-  List, Library, Music, Network, Scissors, Send, ShieldCheck, Smartphone, Sparkles, Users, Package, PackageCheck, Palette, Shirt, Target, Repeat, Rows, GitBranch, ClipboardCheck,
+  BookOpen, Camera, Clapperboard, Compass, FileText, Film, Gauge, Layers, Lightbulb,
+  List, Library, Music, Network, Scissors, Send, ShieldCheck, Sparkles, Users, Package, PackageCheck, Palette, Shirt, Target, Repeat, Rows, GitBranch, ClipboardCheck,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  productionService, type DirectorCommandPreview, type DirectorCommandResult, type DirectorStudio,
+  productionService, type DirectorStudio,
   type StudioApproval, type StudioReadModel, type StudioScene, type StudioShot, type StudioWriteResult,
 } from '../services/productions';
 import { AppError, safeError } from '../services/errors';
 import { useAutosave, useUnsavedNavigation } from '../hooks/useAutosave';
 import { ErrorState, LoadingState, PartialState } from '../components/StateComponents';
-import { BriefCanvas, DirectorCommandResultPanel, RealityCanvas, ReferenceCanvas, ScriptCanvas, StoryCanvas, TechniqueTable } from '../components/StudioCanvases';
+import { BriefCanvas, RealityCanvas, ReferenceCanvas, ScriptCanvas, StoryCanvas, TechniqueTable } from '../components/StudioCanvases';
 import { AssetCanvas, AudioCanvas, FoundationCanvas, SceneCanvas, ShotCanvas, TimingInspector } from '../studio/StudioCanvases5';
+import { HybridBoard, IdeaLabCanvas, STUDIO_RAIL, StudioDrawer, StudioInspector, StudioTopBar, viewForTool, type StudioMode } from '../studio/StudioEight';
 import { StudioTimeline, approvalLabel, formatMs, type TimelineZoom } from '../studio/StudioTimeline';
 import { RealProductionCanvas } from '../studio/RealProduction';
 import { AiCreationCanvas } from '../studio/AICreation';
@@ -27,12 +28,12 @@ import { ProductionReadinessCanvas } from '../studio/ProductionReadiness';
 import { PublishingCanvas } from '../prompt10/Publishing';
 import { ExportsCanvas } from '../prompt10/Exports';
 import { ProductionShotMatchCanvas } from '../studio/ProductionShotMatch';
-import { formatRuntime, type ExecutionFace, type Production } from '../types/domain';
+import { type ExecutionFace, type Production } from '../types/domain';
 import { DEFAULT_EXECUTION_FACE, PRODUCT } from '../types/product';
 
 type StudioTool =
   | 'Brief' | 'References' | 'Story' | 'Script' | 'Reality Check'
-  | 'Real Production' | 'AI Creation' | 'Movie Mode' | 'Series'
+  | 'Real Production' | 'AI Creation' | 'Hybrid' | 'Idea' | 'Movie Mode' | 'Series'
   | 'Scenes' | 'Shots' | 'Impact' | 'Continuity' | 'Memory' | 'Versions' | 'Readiness'
   | 'Publishing' | 'Exports'
   | 'Characters' | 'World' | 'Products' | 'Wardrobe' | 'Style'
@@ -116,7 +117,9 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   const requestedTool = (params.get('tool') as StudioTool) ?? 'Scenes';
   // The face bar and the tool list must agree: a deep link to the AI face opens AI Creation,
   // and an unknown tool name falls back rather than rendering a blank canvas.
-  const tool = FACE_TOOL_NAMES.includes(requestedTool) ? requestedTool : (TOOLS.some(item => item.name === requestedTool) ? requestedTool : 'Scenes');
+  // Idea and Hybrid are Studio views over the same vocabulary, not separate backends.
+  const tool = requestedTool === 'Idea' || requestedTool === 'Hybrid' ? requestedTool
+    : FACE_TOOL_NAMES.includes(requestedTool) ? requestedTool : (TOOLS.some(item => item.name === requestedTool) ? requestedTool : 'Scenes');
   const selectedSceneId = params.get('scene');
   const selectedShotId = params.get('shot');
   // React Router builds its params from the render that created the writer, so a handler
@@ -327,26 +330,28 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   };
 
   const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
+  const mode: StudioMode = tool === 'Hybrid' ? 'hybrid' : face;
+  const view = viewForTool(tool);
+  const setMode = (next: StudioMode) => {
+    if (next === 'hybrid') { setUrl({ tool: 'Hybrid' }); return; }
+    setFace(next);
+    if (tool === 'AI Creation' || tool === 'Real Production') setUrl({ tool: FACE_TOOL[next] });
+  };
 
   return <div className="studio-shell studio5-shell">
-    <header className="production-header">
-      <div>
-        <p className="eyebrow">MASTER PRODUCTION</p>
-        <label className="sr-only" htmlFor="production-title">Production title</label>
+    <StudioTopBar
+      typeBadge={PRODUCT.productionTypes[initial.production_type as keyof typeof PRODUCT.productionTypes] ?? initial.production_type.replaceAll('_', ' ')}
+      titleEditor={<><label className="sr-only" htmlFor="production-title">Production title</label>
         <input id="production-title" aria-label="Production title" value={title.value}
-          onChange={event => title.setValue(event.target.value)} maxLength={160} disabled={!!initial.locked_at} />
-      </div>
-      <div className="production-meta">
-        <span>{PRODUCT.productionTypes[initial.production_type as keyof typeof PRODUCT.productionTypes] ?? initial.production_type.replaceAll('_', ' ')}</span>
-        <span>{formatRuntime(initial.planned_duration_ms)}</span>
-        <span className="pill">{approvalLabel(model?.production.approval ?? initial.approval)}</span>
-        {model?.production.locked_at && <span className="pill">Locked</span>}
-        <span role="status" title={title.lastSavedAt ? `Last saved ${title.lastSavedAt.toLocaleTimeString()}` : undefined}>{SAVE_LABELS[title.state]}</span>
-        <button type="button" className="text-link" onClick={() => {
-          setActionNote('Export packages are generated with Prompt 10. Nothing is exported yet.');
-        }}>Export · later</button>
-      </div>
-    </header>
+          onChange={event => title.setValue(event.target.value)} maxLength={160} disabled={!!initial.locked_at} /></>}
+      saveState={SAVE_LABELS[title.state]}
+      reviewCount={model?.status_summary.needs_attention ?? 0}
+      mode={mode} onMode={setMode}
+      onPreview={() => setUrl({ tool: 'Movie Mode' })}
+      onShare={() => setUrl({ tool: 'Publishing' })}
+      onExport={() => setUrl({ tool: 'Exports' })}
+      directorOpen={directorOpen} onToggleDirector={() => setDirectorOpen(value => !value)}
+    />
 
     {title.error && <div className="save-error" role="alert">{title.error}
       <button onClick={title.state === 'conflict' ? reload : title.retry}>{title.state === 'conflict' ? 'Reload latest' : 'Retry save'}</button></div>}
@@ -357,40 +362,41 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     {actionError && <div className="save-error" role="alert">{actionError}<button onClick={() => setActionError(null)}>Dismiss</button></div>}
     {actionNote && <p className="studio5-note" role="status">{actionNote}</p>}
 
-    <div className="studio-face-bar">
-      <div role="group" aria-label="Execution face">
-        <button aria-pressed={face === 'real'} className={face === 'real' ? 'selected' : ''}
-          onClick={() => { setFace('real'); if (tool === FACE_TOOL.ai) setUrl({ tool: FACE_TOOL.real }); }}>
-          <Camera size={16} /> {PRODUCT.executionFaces.real.toUpperCase()}</button>
-        <button aria-pressed={face === 'ai'} className={face === 'ai' ? 'selected' : ''}
-          onClick={() => { setFace('ai'); if (tool === FACE_TOOL.real) setUrl({ tool: FACE_TOOL.ai }); }}>
-          <Sparkles size={16} /> {PRODUCT.executionFaces.ai.toUpperCase()}</button>
-      </div>
-      <span className="subtle">One Master Production, one set of Shots. {face === 'real'
-        ? 'Real execution planning shows how to capture each Shot with the Setup you own.'
-        : 'AI Creation shows what to generate, with which model, references and continuity. Hybrid Shots keep one Shot identity.'}
-        {' '}Switching faces never changes the Production, Scene or Shot.</span>
-      {face === 'real' && <Link className="text-link" to={`/on-set/${initial.id}`}>
-        <Smartphone size={14} /> On-Set Mode</Link>}
-      <button className="director-toggle" onClick={() => setDirectorOpen(!directorOpen)} aria-expanded={directorOpen}>
-        {directorOpen ? 'Hide Director' : 'Show Director'}</button>
-    </div>
-
-    <div className={`studio-workspace ${directorOpen ? '' : 'director-hidden'}`}>
-      <aside className="production-tools" aria-label="Production tools">
-        <p className="eyebrow">CREATIVE</p>
-        {TOOLS.filter(item => item.group === 'creative').map(({ name, icon: Icon }) =>
-          <button key={name} onClick={() => setUrl({ tool: name })} aria-pressed={tool === name} className={tool === name ? 'selected' : ''}>
-            <Icon size={17} />{name}</button>)}
-        <p className="eyebrow">PRODUCTION ENTITIES</p>
-        {TOOLS.filter(item => item.group === 'execution').map(({ name, icon: Icon }) =>
-          <button key={name} onClick={() => setUrl({ tool: name })} aria-pressed={tool === name} className={tool === name ? 'selected' : ''}>
-            <Icon size={17} />{name}</button>)}
-      </aside>
+    <div className="studio-workspace">
+      <nav className="s8-rail" aria-label="Studio functions">
+        {STUDIO_RAIL.map(({ view: itemView, label, access, icon: Icon }) => {
+          const active = view === itemView;
+          const open = () => {
+            if (itemView === 'idea') setUrl({ tool: 'Idea' });
+            else if (itemView === 'story') setUrl({ tool: 'Story' });
+            else if (itemView === 'script') setUrl({ tool: 'Script' });
+            else if (itemView === 'scenes') setUrl({ tool: 'Scenes' });
+            else if (itemView === 'shots') setUrl({ tool: 'Shots' });
+            else if (itemView === 'produce') setUrl({ tool: face === 'ai' ? 'AI Creation' : 'Real Production' });
+            else if (itemView === 'edit') setUrl({ tool: 'Audio' });
+            else setUrl({ tool: 'Results' });
+          };
+          // Names come from visible content exactly like the previous toolbox, so role
+          // queries keep working; only Edit carries an aria-label because the legacy
+          // Edit tool in All studio tools shares its visible name.
+          return <button key={itemView} type="button" aria-label={itemView === 'edit' ? access : undefined}
+            title={access} aria-pressed={active}
+            className={active ? 'active' : ''} onClick={open}><Icon size={17} aria-hidden="true" /><span>{label}</span></button>;
+        })}
+      </nav>
+      {model ? <StudioDrawer view={view} model={model} surface={surface}
+        selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
+        onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+        onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
+        onOpenTool={name => setUrl({ tool: name as StudioTool })}
+        allTools={TOOLS.filter(item => !['Story', 'Script', 'Scenes', 'Shots', 'Results'].includes(item.name))}
+        activeTool={tool} />
+        : <aside className="s8-drawer" aria-label="Loading Studio tools"><LoadingState label="Loading tools…" /></aside>}
 
       <section className="working-canvas" aria-label="Production working canvas">
         <div className="canvas-heading">
           <p className="eyebrow">{PRODUCT.executionFaces[face].toUpperCase()} / {tool.toUpperCase()}</p>
+          <span className="pill">{approvalLabel(model?.production.approval ?? initial.approval)}</span>
           {model && <span className="pill">{providerLabel}</span>}
         </div>
         {modelLoading && !model
@@ -467,10 +473,26 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
               {tool === 'Exports' && <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />}
               {['Characters', 'World', 'Products', 'Wardrobe', 'Style'].includes(tool) &&
                 <AssetCanvas model={model} tool={tool} busy={busy} onSelectAsset={setSelectedAssetId} />}
-              {tool === 'Audio' && <AudioCanvas workspaceId={workspaceId} productionId={initial.id} model={model}
+              {tool === 'Idea' && (surfaceError && !surface
+                ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+                : !surface ? <LoadingState label="Loading Director intelligence…" />
+                  : <IdeaLabCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface}
+                    onOpenTool={name => setUrl({ tool: name as StudioTool })} refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} />)}
+              {tool === 'Hybrid' && <HybridBoard scenes={model.scenes} busy={busy}
+                onSetExecution={(shot, method) => { void shotActions.bulk([shot.id], { execution_method: method }); }}
+                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} />}
+              {tool === 'Audio' && <><AudioCanvas workspaceId={workspaceId} productionId={initial.id} model={model}
                 productionType={initial.production_type} durationMs={initial.planned_duration_ms}
                 references={(surface?.references ?? []).map(reference => ({ reference_id: reference.reference_id, source_identity: reference.source_identity, shaping_ready: reference.shaping_ready }))}
-                onChanged={() => { setAttempt(value => value + 1); setSurfaceAttempt(value => value + 1); }} busy={busy || !!model.production.locked_at} />}
+                onChanged={() => { setAttempt(value => value + 1); setSurfaceAttempt(value => value + 1); }} busy={busy || !!model.production.locked_at} />
+                <section className="s8-edit-structure" aria-label="Edit structure">
+                  <h3>Edit structure</h3>
+                  <p className="subtle">The semantic edit follows Scene order. Timing {model.timing.status}{model.timing.target_ms ? ` against ${formatMs(model.timing.target_ms)}` : ''}.</p>
+                  <ol>{model.scenes.map(scene => <li key={scene.id}>
+                    <button type="button" className="text-link" onClick={() => setUrl({ scene: scene.id, shot: null })}>Scene {scene.order} · {scene.title}</button>
+                    <span> — {formatMs(scene.duration_ms)} · {scene.shots.length} Shot{scene.shots.length === 1 ? '' : 's'}</span>
+                  </li>)}</ol>
+                </section></>}
               {['Prompts', 'Edit'].includes(tool) &&
                 <FoundationCanvas model={model} tool={tool} busy={busy} onReconcile={sceneActions.reconcile} />}
               {tool === 'Results' && <ProductionShotMatchCanvas workspaceId={workspaceId}
@@ -519,13 +541,16 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
             </>}
       </section>
 
-      <DirectorPanel open={directorOpen} workspaceId={workspaceId} productionId={initial.id} surface={surface}
-        refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} face={face}
-        scope={{ scene: selectedScene, shot: selectedShot }} />
+      {directorOpen && model && <StudioInspector workspaceId={workspaceId} productionId={initial.id} surface={surface} model={model}
+        refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} face={mode === 'hybrid' ? 'Hybrid' : PRODUCT.executionFaces[face]}
+        scope={{ scene: selectedScene, shot: selectedShot }} />}
     </div>
 
     {model && <StudioTimeline model={model} zoom={zoom} setZoom={setZoom}
       selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
+      moments={(surface?.story?.beats ?? []).map(beat => ({ id: beat.id, title: beat.name }))}
+      resultsByShot={Object.fromEntries(model.scenes.flatMap(scene => scene.shots
+        .filter(shot => shot.result_count > 0).map(shot => [shot.id, shot.result_count])))}
       onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
       onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
       onMoveScene={(sceneId, direction) => { const scene = scenes.find(item => item.id === sceneId); if (scene) void sceneActions.move(scene, direction); }}
@@ -538,75 +563,4 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
 
 function selectedShotList(scenes: StudioScene[], shotId: string): StudioShot | null {
   return scenes.flatMap(scene => scene.shots).find(shot => shot.id === shotId) ?? null;
-}
-
-function DirectorPanel({ open, workspaceId, productionId, surface, refresh, face, scope }: {
-  open: boolean; workspaceId: string; productionId: string; surface: DirectorStudio | null;
-  refresh: () => void; face: ExecutionFace; scope: { scene: StudioScene | null; shot: StudioShot | null };
-}) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<DirectorCommandPreview | null>(null);
-  const [result, setResult] = useState<DirectorCommandResult | null>(null);
-  const examples = ['Make this Shot more tense.', 'Make this Scene shorter.', 'Add a reaction Shot.',
-    'Make Scene 3 possible with one actor.', 'Move the Product reveal earlier.', 'Give me three alternative endings'];
-  const run = async (apply: boolean, direction: string) => {
-    if (!direction.trim()) return;
-    setBusy(true); setError(null); setPreview(null);
-    try {
-      const payload = await productionService.directorCommand(workspaceId, productionId, {
-        text: direction.trim(), apply, expected_production_revision: surface?.production.revision,
-      });
-      setResult(payload);
-      if (apply) setText('');
-      refresh();
-    } catch (failure) { setError(safeError(failure).message); }
-    finally { setBusy(false); }
-  };
-  const showPreview = async () => {
-    if (!text.trim()) return;
-    setBusy(true); setError(null);
-    try { setPreview(await productionService.directorCommandPreview(workspaceId, productionId, text.trim())); }
-    catch (failure) { setError(safeError(failure).message); }
-    finally { setBusy(false); }
-  };
-  return <aside className={`director-panel ${open ? 'director-open' : 'director-collapsed'}`} aria-label="TONDE Director">
-    <div className="director-heading"><span className="director-symbol">T</span>
-      <div><h2>TONDE Director</h2>
-        <p>{surface ? (surface.provider.configured ? 'Model-assisted production intelligence' : 'Deterministic production intelligence · no provider configured') : 'Connecting to production intelligence'}</p></div>
-    </div>
-    {!open ? null : <>
-      <p className="studio5-scope" role="status">
-        Scope: {scope.shot ? `Shot “${scope.shot.title}”` : scope.scene ? `Scene “${scope.scene.title}”` : 'whole Production'}
-        {scope.shot && scope.scene ? ` in Scene ${scope.scene.order}` : ''} · {PRODUCT.executionFaces[face].toUpperCase()} face.
-        Only this scope is sent with your direction.
-      </p>
-      <label htmlFor="director-message">Message to the Director</label>
-      <textarea id="director-message" value={text} onChange={event => setText(event.target.value)}
-        placeholder={scope.shot ? '“Make this Shot more tense.”' : '“Make Scene 1 more intense.”'} rows={4} />
-      <div className="director-examples" role="group" aria-label="Example directions">
-        {examples.map(example => <button type="button" key={example} disabled={busy} onClick={() => setText(example)}>{example}</button>)}
-      </div>
-      <div className="director-actions">
-        <button type="button" disabled={busy || !text.trim()} onClick={() => void showPreview()}>Preview change</button>
-        <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void run(false, text)}>
-          Ask the Director <ArrowUpRight size={14} /></button>
-      </div>
-      {preview && <div className="command-preview" role="status">
-        <p className="eyebrow">{preview.kind.replaceAll('_', ' ')} · {preview.scope} · confidence {preview.confidence}</p>
-        <p>{preview.rationale}</p>
-        <p className="subtle">Operations: {preview.operations.join(', ') || 'none'}
-          {preview.scene_order ? ` · Scene ${preview.scene_order}` : ''}
-          {preview.target_runtime_ms ? ` · ${formatMs(preview.target_runtime_ms)}` : ''}</p>
-      </div>}
-      {error && <p role="alert" className="error-text">{error}</p>}
-      {result && <><DirectorCommandResultPanel result={result} />
-        {!result.applied && result.plan && <button type="button" className="primary" disabled={busy} onClick={() => void run(true, text)}>
-          <Send size={14} />Apply to this Production</button>}
-        {result.changes.length > 0 && <p className="subtle">Affected: {result.changes.join('; ')}</p>}
-      </>}
-      {result && <button type="button" className="text-link" onClick={() => { setResult(null); setPreview(null); setText(''); }}>Clear Director answer</button>}
-    </>}
-  </aside>;
 }

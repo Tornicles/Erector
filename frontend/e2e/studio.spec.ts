@@ -171,7 +171,7 @@ test('Studio edits canonical Scenes and Shots, keeps one Master Production and s
   expect(writes.find(write => write.path.endsWith(`/studio/scenes/${sceneA}`))?.body).toMatchObject({ title: 'Cold open', expected_revision: 1 });
 
   // 3. Creating a Shot persists into the selected Scene.
-  await page.getByRole('button', { name: 'Shots' }).click();
+  await page.getByRole('button', { name: 'Shots', exact: true }).click();
   await page.getByLabel('New Shot title').fill('Kettle clicks');
   await page.getByRole('button', { name: /Add Shot/ }).click();
   await expect(page.getByLabel('New Shot title')).toHaveValue('');

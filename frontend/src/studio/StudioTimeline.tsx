@@ -26,7 +26,7 @@ export function approvalLabel(approval: string) {
 
 export function StudioTimeline({
   model, zoom, setZoom, selectedSceneId, selectedShotId, onSelectScene, onSelectShot,
-  onMoveScene, onMoveShot, onDropScene, onDropShot, busy,
+  onMoveScene, onMoveShot, onDropScene, onDropShot, busy, moments, resultsByShot,
 }: {
   model: StudioReadModel; zoom: TimelineZoom; setZoom: (next: TimelineZoom) => void;
   selectedSceneId: string | null; selectedShotId: string | null;
@@ -35,7 +35,7 @@ export function StudioTimeline({
   onMoveShot: (shot: { id: string; scene_id: string | null }, direction: -1 | 1) => void;
   onDropScene: (draggedId: string, targetId: string) => void;
   onDropShot: (draggedId: string, targetId: string, sceneId: string) => void;
-  busy: boolean;
+  busy: boolean; moments?: Array<{ id: string; title: string }>; resultsByShot?: Record<string, number>;
 }) {
   const total = model.timing.total_ms || 0;
   const scenes = model.timeline;
@@ -70,8 +70,13 @@ export function StudioTimeline({
           total={scenes.length} zoom={zoom} selected={scene.scene_id === selectedSceneId}
           selectedShotId={selectedShotId} onSelectScene={onSelectScene} onSelectShot={onSelectShot}
           onMoveScene={onMoveScene} onMoveShot={onMoveShot} onDropScene={onDropScene} onDropShot={onDropShot}
-          busy={busy} share={scene.share} />)}
+          busy={busy} share={scene.share} resultsByShot={resultsByShot} />)}
       </ol>}
+
+    {moments && moments.length > 0 && <div className="studio5-moments" aria-label="Story moments">
+      <span className="eyebrow">Moments</span>
+      <ol>{moments.map(moment => <li key={moment.id}>{moment.title}</li>)}</ol>
+    </div>}
 
     {model.runtime_conflict && <RuntimeConflictPanel model={model} />}
   </section>;
@@ -79,7 +84,7 @@ export function StudioTimeline({
 
 function SceneBlock({
   scene, index, total, zoom, selected, selectedShotId, onSelectScene, onSelectShot, onMoveScene, onMoveShot,
-  onDropScene, onDropShot, busy, share,
+  onDropScene, onDropShot, busy, share, resultsByShot,
 }: {
   scene: StudioTimelineScene & { share: number }; index: number; total: number; zoom: TimelineZoom;
   selected: boolean; selectedShotId: string | null;
@@ -88,7 +93,7 @@ function SceneBlock({
   onMoveShot: (shot: { id: string; scene_id: string | null }, direction: -1 | 1) => void;
   onDropScene: (draggedId: string, targetId: string) => void;
   onDropShot: (draggedId: string, targetId: string, sceneId: string) => void;
-  busy: boolean; share: number;
+  busy: boolean; share: number; resultsByShot?: Record<string, number>;
 }) {
   return <li className={`studio5-scene-block ${selected ? 'selected' : ''}`} style={{ flexBasis: `${share}%` }}>
     <div className="studio5-scene-head">
@@ -141,6 +146,7 @@ function SceneBlock({
             <span className="studio5-shot-order">{index + 1}.{shotIndex + 1}</span>
             <span className="studio5-shot-title">{shot.title}</span>
             <span className="studio5-shot-duration">{formatMs(shot.duration_ms ?? 0)}</span>
+            {(resultsByShot?.[shot.shot_id] ?? 0) > 0 && <span className="studio5-shot-results">· {resultsByShot?.[shot.shot_id]} Result{(resultsByShot?.[shot.shot_id] ?? 0) === 1 ? '' : 's'}</span>}
             {shot.locked && <Lock size={11} aria-label="locked" />}
           </button>
           {zoom === 'shot' && <div className="studio5-shot-actions">
