@@ -218,9 +218,13 @@ async def run_operation(
         ) from exc
     except ProviderFailed as exc:
         logger.warning('director_provider_failed', extra={'context': {'operation': keyed.operation_type}})
+        # The provider names its own failure (bad key, unknown model, rate limit,
+        # timeout); surfacing that reason tells the creator which setting to fix
+        # instead of one opaque message for five different problems.
+        reason = str(exc) or 'The AI provider could not complete this operation.'
         raise AppError(
             'DIRECTOR_PROVIDER_FAILED', 'provider',
-            'The AI provider could not complete this operation. No Production content was changed; retry or continue manually.',
+            f'{reason} No Production content was changed; retry or continue manually.',
             503,
         ) from exc
     return OperationOutcome(
