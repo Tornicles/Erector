@@ -15,8 +15,14 @@ export async function authenticatedRequest<T>(path: string, options: RequestInit
   headers.set('Content-Type', 'application/json');
   const baseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
   const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
-  let body: ApiEnvelope<T>;
-  try { body = await response.json(); } catch { throw new AppError('unavailable', 'The TONDE service is unavailable.'); }
+  let body: ApiEnvelope<T> | null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!body || typeof body.success !== 'boolean') {
+    // Not a TONDE API envelope: no backend serves this route (frontend-only deployment,
+    // wrong API address, or a crashed function returning an HTML error page). Report the
+    // observed address and status instead of claiming the service itself failed.
+    throw new AppError('unavailable', `The TONDE API did not answer at ${baseUrl || 'this site'}${path} (HTTP ${response.status}). The backend may not be deployed for this address.`);
+  }
   if (!response.ok || !body.success || body.data === null) {
     throw new AppError(response.status === 401 ? 'authentication' : response.status === 403 ? 'authorization' : 'unavailable', body.errors?.[0]?.message ?? 'The request could not be completed.');
   }

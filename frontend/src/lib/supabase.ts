@@ -19,8 +19,10 @@ export function validatePublicConfiguration(url?: string, key?: string): string 
   } else if (!key.startsWith('sb_publishable_')) return 'Use a Supabase publishable or anon key.';
   return null;
 }
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Pasted environment values often carry stray whitespace; trim before validating so a
+// leading/trailing space never reports a good key as invalid.
+const url = import.meta.env.VITE_SUPABASE_URL?.trim() || undefined;
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || undefined;
 export const configurationError = validatePublicConfiguration(url, key);
 const localPreview = import.meta.env.VITE_TONDE_LOCAL_PREVIEW === '1' && configurationError !== null;
 export const supabase = configurationError ? null : createClient<Database, 'tonde'>(url!, key!, {
