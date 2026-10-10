@@ -51,8 +51,25 @@ class SupabaseGateway:
             raise AppError('SUPABASE_UNAVAILABLE', 'unavailable', 'The application data platform is temporarily unavailable.', 503) from exc
         if response.status_code in (401, 403):
             raise AppError('AUTHENTICATION_REQUIRED', 'authentication', 'Your session is invalid or expired. Please sign in again.', 401)
+        if response.status_code == 404:
+            raise AppError('SUPABASE_SCHEMA_MISSING', 'unavailable',
+                'The application data platform has not applied the required database migration for this request.', 503)
         if response.status_code >= 400:
-            raise AppError('SUPABASE_REQUEST_FAILED', 'database', 'The application data request could not be completed.', 503)
+            detail: Any = None
+            try:
+                detail = response.json()
+            except ValueError:
+                detail = None
+            code = str((detail or {}).get('code') or '') if isinstance(detail, dict) else ''
+            message = str((detail or {}).get('message') or '') if isinstance(detail, dict) else ''
+            if code in ('PGRST202', 'PGRST204', '42883', '42P01'):
+                raise AppError('SUPABASE_SCHEMA_MISSING', 'unavailable',
+                    'The application data platform has not applied the required database migration for this request.', 503)
+            if code == '42501' or response.status_code == 401:
+                raise AppError('DIRECTOR_ACCESS_DENIED', 'authorization',
+                    'You do not have access to this workspace.', 403)
+            raise AppError('SUPABASE_REQUEST_FAILED', 'database',
+                message[:400] or 'The application data request could not be completed.', 503)
         try:
             return response.json()
         except ValueError as exc:

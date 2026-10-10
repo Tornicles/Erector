@@ -79,6 +79,26 @@ def test_server_workspace_authorization_two_identities(client):
     assert response.json()['errors'][0]['type'] == 'authorization'
 
 
+def test_platform_read_failures_name_their_cause():
+    def missing_table(request):
+        if request.url.path == '/auth/v1/user':
+            return httpx.Response(200, json={'id': A})
+        return httpx.Response(404, json={'code': '42P01', 'message': 'relation "tonde.director_briefs" does not exist'})
+    with TestClient(create_app(settings(), httpx.MockTransport(missing_table))) as client:
+        response = client.get(f'/api/v1/workspaces/{WORKSPACE}/access', headers={'Authorization': 'Bearer user-a'})
+        assert response.status_code == 503
+        assert 'migration' in response.json()['errors'][0]['message'].lower()
+
+    def denied(request):
+        if request.url.path == '/auth/v1/user':
+            return httpx.Response(200, json={'id': A})
+        return httpx.Response(400, json={'code': '42501', 'message': 'permission denied for table productions'})
+    with TestClient(create_app(settings(), httpx.MockTransport(denied))) as client:
+        response = client.get(f'/api/v1/workspaces/{WORKSPACE}/access', headers={'Authorization': 'Bearer user-a'})
+        assert response.status_code == 403
+        assert response.json()['errors'][0]['type'] == 'authorization'
+
+
 def test_provider_network_failure_is_safe():
     def unavailable(request):
         raise httpx.ConnectError('sensitive-provider-url-and-key', request=request)
