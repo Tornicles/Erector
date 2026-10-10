@@ -1,8 +1,10 @@
 # Master Prompt 02 — Requirement Compliance
 
-**Constitution:** 1.0.0 (2026-10-05).  
+**Constitution:** 1.3.0 (2026-10-09); the preceding amendment was 1.2.0 (2026-10-08).  
 **Internal Prompt 2 requirements:** PASS as a locally implemented contract/test foundation, not complete hosted/runtime capability; historical dispositions below are superseded by the [current correction handoff](../prompt-2-correction-handoff.md).  
-**Current hosted Prompt 1/2/3 acceptance / sequence advancement:** BLOCKED; see the [correction handoff](../prompt-2-correction-handoff.md). Older requirement dispositions below are the historical Prompt 2 report, not proof of current hosted readiness.  
+**Current hosted Prompt 1/2/3 acceptance / sequence advancement:** BLOCKED, externally only; see the [Pre-Prompt-10 certification](../pre-prompt10-final-certification.md). Older requirement dispositions below are the historical Prompt 2 report, not proof of current hosted readiness.  
+**Current hosted state (2026-10-08):** the migration ledger records **001–030**, the untruncated catalog comparison reports **0 differences** from local (`hosted-final-diff.json` = `[]`), and the expanded two-user hosted runner reports **538 pass / 1 blocked / 0 fail**. Every hosted figure below (39/39 scoped runner, ledger 001–008, effect state 001–014, 009–010 unapplied) is the record of the run that wrote it and is superseded; do not read it as present state.
+
 **Meaning of PASS:** the requested Prompt 2 definition/contract/test foundation is implemented, not that every described future intelligence feature works.
 
 ## Complete requirement coverage
@@ -11,7 +13,7 @@ Each numbered Master Prompt 02 requirement is accounted for below. The grouped r
 
 | Requirements | Status | Evidence / resolution |
 |---|---|---|
-| 1 | PASS local / BLOCKED hosted | Current correction reran local foundation suites and a scoped live two-user runner (39/39, scoped). Hosted history lists 001–008, but full semantic equivalence is unproven; local 009–010 are unapplied. `tonde` is exposed and anon table reads are denied; all six observed buckets are private, but only one bucket/resource slice is live-tested. Google is disabled and email delivery unverified; see the [correction handoff](../prompt-2-correction-handoff.md). |
+| 1 | PASS local / BLOCKED hosted | The Prompt 2 pass reran local foundation suites and a scoped live two-user runner (39/39, scoped) against an unproven 001–008 ledger. That is superseded: the hosted ledger now records 001–030, the untruncated catalog comparison is 0 differences, and the expanded two-user runner reports 538 pass / 1 blocked / 0 fail. `tonde` is exposed and anon table reads are denied; all six buckets are private and live-tested. Residual BLOCKED is external only — mail capacity, Google sign-in, plan-gated leaked-password protection. See the [Pre-Prompt-10 certification](../pre-prompt10-final-certification.md). |
 | 2 | PASS | `constitution.md` is authoritative, conflict rule explicit; README/AGENTS/architecture reference it. |
 | 3–5 | PASS | Constitution §1–2: canonical identity/promise/category/one Director, SHOW/UNDERSTAND/direct/execute/check/fix lifecycle. |
 | 6 | PASS | §2 and §12 define Shot Match loop and future Prompt 9 implementation boundary. |
@@ -50,6 +52,8 @@ Each numbered Master Prompt 02 requirement is accounted for below. The grouped r
 ## Evidence locations
 
 - Human product authority: [Constitution](constitution.md), [Glossary](glossary.md), [Invariant register](invariants.md).
+- Pre-Prompt 10 amendments A–C: [handoff](../pre-prompt10-product-amendment-handoff.md), Production Kit / Reference Identity + Creator Purpose / first-class conditional Audio Plan.
+- Prompt 10 amendment D: [Constitution §21](constitution.md), publication/publishing-authorization/destination-connection/export-artifact/entitlement/usage-event/subscription/webhook-receipt [glossary terms](glossary.md) and [INV-40–48](invariants.md).
 - Persistence: [vocabulary migration](../../supabase/migrations/202610050006_product_vocabulary.sql), [human acceptance migration](../../supabase/migrations/202610050007_human_acceptance.sql). Earlier migrations unchanged.
 - Shared vocabulary: [source labels/codes](../../product/vocabulary.json), [generator](../../scripts/generate-database-types.mjs), generated TS and Python.
 - Domain contracts: [product contracts](../../backend/app/domain/product.py), [service contracts](../../backend/app/services/contracts.py).
@@ -58,7 +62,7 @@ Each numbered Master Prompt 02 requirement is accounted for below. The grouped r
 
 ## External acceptance gate — precise requirement and verification
 
-A current read-only pass found hosted history 001–008 and canonical `product_film`/`trailer` enum values, but semantic migration equivalence/schema diff is blocked by missing Docker/Podman. Hosted authenticated acceptance is **39/39 for its stated narrow runner scope only**. It includes limited creator/service-role approval probes, but not comprehensive resource/bucket/approval-matrix acceptance. All six TONDE buckets are private; Google is disabled; email delivery is unverified. Local repair migrations 009–010 are not hosted; security advisor warnings remain. Overall is BLOCKED; see the [correction handoff](../prompt-2-correction-handoff.md). Do not treat previous gate deferral as acceptance.
+The Prompt 2 read-only pass found hosted history 001–008 and canonical `product_film`/`trailer` enum values, and could not diff semantically because Docker/Podman were missing. Both limitations are now resolved rather than restated: the ledger records 001–030, effects match, and equivalence is compared untruncated through the Management API instead of `db diff`. Hosted authenticated acceptance is **538 pass / 1 blocked / 0 fail**, not the superseded 39/39 narrow-runner figure. All six TONDE buckets are private and live-tested. Residual BLOCKED is external only: Google is disabled, email delivery is unverified, leaked-password protection is refused (`HTTP 402`). Overall is BLOCKED for external reasons; see the [Pre-Prompt-10 certification](../pre-prompt10-final-certification.md). Do not treat previous gate deferral as acceptance.
 
 After authorized configuration access is supplied:
 
@@ -68,6 +72,20 @@ After authorized configuration access is supplied:
 4. Confirm email/signup/verification/recovery and Google OAuth callbacks for the chosen application origin. No account provisioning is performed here.
 5. With two real authenticated users, test bootstrap idempotence, user-token Data API CRUD/isolation, private uploads/signed access, approval guard, Studio default/save and backend `/api/ready`. Check anonymous/other-workspace rejection through actual Supabase HTTP.
 6. Record results without secrets. Only then mark full Prompt 1/2 hosted precondition and unconditional Prompt 3 gate PASS.
+
+## Pre-Prompt 10 constitutional amendments (v1.1.0)
+
+The amendments are authoritative in [Constitution §§18–20](constitution.md), [glossary](glossary.md), [invariant register INV-33–39](invariants.md) and the [implementation handoff](../pre-prompt10-product-amendment-handoff.md). Internal implementation claims are not certified until the amendment's full gate is completed; hosted rollout remains separately blocked/unapplied and is not implied by local tests.
+
+## Prompt 10 constitutional amendment (v1.2.0)
+
+Amendment D is authoritative in [Constitution §21](constitution.md), the [glossary terms](glossary.md) for publication, destination connection, destination state unknown, reconciliation, export artifact, entitlement, usage event, subscription and webhook receipt, and the [invariant register INV-40–48](invariants.md). It resolves the §16 social-scheduler boundary without changing execution-face, approval, lock or versioning rules. Real-world provider acceptance (publishing provider credentials and payment-provider test mode) remains **DEFERRED BY OWNER**; the implementation ships interfaces plus controlled adapters and never claims a provider result it did not receive.
+
+## Prompt 11 constitutional amendment (v1.3.0, the Director correction)
+
+Amendment E is authoritative in [Constitution §22](constitution.md), the [glossary terms](glossary.md) for Director, AI Playbook, AI Tool Knowledge, External AI tool, Result check and External tool cost, and the [invariant register INV-49–54](invariants.md). It records the owner's product-direction correction: TONDE is the production Director, not the final media-generation engine. AI Creation is an execution strategy TONDE directs — the playbook and the tool-specific prompt are TONDE's deliverable, the creator executes them in the external tool they own, and every Result returns to TONDE to be checked as ACCEPT or FIX. AI Tool Knowledge is documented, sourced, reviewed knowledge and never a connection; external tools are execution destinations and never TONDE Production truth; TONDE bills for the TONDE service only and does not resell generation. Direct media generation is not required and a future connector stays optional and unbuilt.
+
+Enforcement in this release: `tonde.ai_director_boundary()`, `ai_tool_profiles` with draft/review/version rules, `production_ai_tools` (the Production Kit's AI tools), `ai_playbook_for_shot`, `ai_playbook_prompt_compile` and `ai_result_check` over a closed criteria set, with `tests/database/prompt11-ai-director.test.mjs` covering the tool-knowledge lifecycle, tool-specific adaptation, the Result check and correction loop, the cost split and the zero-media-generation-credential acceptance case. The durable worker vocabulary was corrected with it: no worker class exists to call a media-generation provider, and the AI job types describe TONDE's own direction work. The generalized Prompt 10 provider architecture is untouched.
 
 ## What tests cannot prove
 

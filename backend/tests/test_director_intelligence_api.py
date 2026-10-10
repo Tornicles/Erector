@@ -120,6 +120,20 @@ def make_client(*, member: bool = True, revision: int = 1, references: list[dict
             assert payload['target_production'] == PRODUCTION
             state['operations'].append(record)
             return httpx.Response(200, json={'operation_id': record['operation_id'], 'status': record['status']})
+        if path == '/rest/v1/rpc/reference_identity_save':
+            payload = json.loads(request.content)
+            reference = next(row for row in state['references'] if row['id'] == payload['target_reference'])
+            assert payload['expected_revision'] == reference.get('revision', 1)
+            reference.update(payload['values_json'])
+            reference.update({'identity_provenance': 'creator_supplied', 'source_identity_verified_at': '2026-10-07T00:00:00Z',
+                              'revision': reference.get('revision', 1) + 1, 'identity_revision': reference.get('identity_revision', 1) + 1})
+            return httpx.Response(200, json=deepcopy(reference))
+        if path == '/rest/v1/rpc/claim_reference_analysis_pinned':
+            payload = json.loads(request.content)
+            reference = next(row for row in state['references'] if row['id'] == payload['target_reference'])
+            assert payload['expected_identity_revision'] == reference['identity_revision']
+            state['claims'].append(payload)
+            return httpx.Response(200, json={'identity_revision': reference['identity_revision'], 'status': payload['stage_status']})
         if path == '/rest/v1/rpc/claim_reference_analysis':
             payload = json.loads(request.content)
             state['claims'].append(payload)
@@ -536,13 +550,22 @@ def test_line_operation_returns_alternatives_without_applying_them():
 SEEDED_REFERENCE = {
     'id': REFERENCE, 'source_type': 'upload', 'source_url': None, 'source_description': 'Creator voice take',
     'media_id': None, 'rights_classification': 'user_owned', 'state': 'active', 'created_at': '2026-01-01T00:00:00Z',
+    'revision': 1, 'identity_revision': 1,
 }
+
+
+def attest_reference(client):
+    response = client.post(f'/api/v1/workspaces/{WORKSPACE}/productions/{PRODUCTION}/references/{REFERENCE}', headers=HEADERS,
+        json={'expected_revision': 1, 'source_identity': 'Creator voice take', 'source_identity_verified': True,
+              'creator_purpose': 'Learn the delivery pacing for this Production.'})
+    assert response.status_code == 200, response.text
 
 
 def test_uploaded_audio_reference_is_preprocessed_analysed_and_persisted():
     client, state = make_client(references=[dict(SEEDED_REFERENCE)])
     payload = base64.b64encode(build_wav([0.6] * 3200 + [0.0] * 4800 + [0.6] * 3200)).decode()
     with client:
+        attest_reference(client)
         response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
             'reference_id': REFERENCE, 'source_type': 'upload', 'data_base64': payload,
             'mime': 'audio/wav', 'filename': 'voice.wav', 'role': 'sound',
@@ -576,6 +599,7 @@ def test_reference_analysis_of_unavailable_media_fails_without_fabricating_analy
 def test_metadata_only_reference_records_limited_capability():
     client, state = make_client(references=[dict(SEEDED_REFERENCE)])
     with client:
+        attest_reference(client)
         response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
             'reference_id': REFERENCE, 'source_type': 'social_url',
         })
@@ -596,6 +620,8 @@ def test_creating_a_reference_requires_workspace_membership_and_is_scoped():
     with client:
         response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
             'source_type': 'upload', 'data_base64': base64.b64encode(build_wav([0.4] * 1600)).decode(),
+            'source_identity': 'Creator voice take', 'source_identity_verified': True,
+            'creator_purpose': 'Learn delivery pacing for this Production.',
             'mime': 'audio/wav', 'filename': 'voice.wav',
         })
     assert response.status_code == 200, response.text
@@ -607,6 +633,7 @@ def test_creating_a_reference_requires_workspace_membership_and_is_scoped():
 def test_reference_media_that_is_not_decodable_is_rejected_before_analysis():
     client, state = make_client(references=[dict(SEEDED_REFERENCE)])
     with client:
+        attest_reference(client)
         response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
             'reference_id': REFERENCE, 'source_type': 'upload', 'data_base64': 'not-base64!!',
         })

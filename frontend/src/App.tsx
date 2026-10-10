@@ -4,8 +4,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppLayout } from './components/AppLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthPage } from './pages/AuthPage';
-import { DiscoverPage, FoundationPage, HomePage, ProjectsPage } from './pages/FoundationPages';
+import { FoundationPage, HomePage, ProjectsPage } from './pages/FoundationPages';
 import { StudioPage } from './pages/StudioPage';
+import { OnSetPage } from './pages/OnSetPage';
+import { DiscoverPage, JobsPage, ProductionIntelligencePage, ProductionKnowledgePage } from './pages/Prompt11Pages';
 import { ErrorState, LoadingState } from './components/StateComponents';
 function AuthCallback() {
   const { loading, session, error, retry } = useAuth();
@@ -22,8 +24,13 @@ export const appRoutes = [
     { path: '/home', element: <HomePage /> },
     { path: '/studio', element: <ProjectsPage studio /> },
     { path: '/studio/:productionId', element: <StudioPage /> },
+    { path: '/on-set/:productionId', element: <OnSetPage /> },
     { path: '/projects', element: <ProjectsPage /> },
     { path: '/discover', element: <DiscoverPage /> },
+    { path: '/jobs', element: <JobsPage /> },
+    { path: '/knowledge', element: <ProductionKnowledgePage /> },
+    { path: '/devices-scenes', element: <ProductionIntelligencePage /> },
+    { path: '/studio/:productionId/intelligence', element: <ProductionIntelligencePage /> },
     { path: '/assets', element: <FoundationPage area="assets" /> },
     { path: '/setup', element: <FoundationPage area="setup" /> },
     { path: '/settings', element: <FoundationPage area="settings" /> },

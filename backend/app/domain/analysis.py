@@ -197,7 +197,7 @@ class Finding(AnalysisModel):
 
     @model_validator(mode='after')
     def observation_needs_evidence(self) -> 'Finding':
-        if self.epistemic == EpistemicClass.observed and self.category != FindingCategory.story and not self.evidence:
+        if self.epistemic == EpistemicClass.observed and not self.evidence:
             raise ValueError('An observed finding must cite evidence.')
         return self
 

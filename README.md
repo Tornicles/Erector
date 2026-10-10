@@ -12,7 +12,7 @@ The product loop is **Reference → Direct → Create → Upload Result → Chec
 
 ## Current status
 
-The frontend and FastAPI server boot independently. Current hosted checks confirm `tonde` negotiates through the Data API and anon workspace reads are denied (HTTP 401); the previously reported PGRST106 was not reproduced. Hosted migration versions 001–008 are present; local corrections 009–010 are not applied and schema-equivalence verification is blocked by missing Docker/Podman. A limited real-user suite passes 39/39, including scoped helper and approval probes, but the full resource, comprehensive approval, six-bucket, Auth-provider and post-correction security checks remain BLOCKED. Google is disabled and email delivery is unverified. See the current [Prompt 2 correction handoff](docs/prompt-2-correction-handoff.md), [runbook](docs/supabase-runbook.md), and historical [Prompt 1 audit](docs/migration-audit.md).
+The frontend and FastAPI server boot independently. The hosted development project was reconciled on 2026-10-08: the migration ledger records **001–030** and the hosted `tonde` effect state matches the source migrations — proven by a two-sided untruncated catalog comparison (4087 identities, 0 differences) — and the expanded two-user hosted acceptance run reports **538 pass / 1 blocked / 0 fail**. Local gates pass: root 230/230, frontend 220/220 plus typecheck/build, Playwright 20/20, backend pytest 398 with mypy and ruff clean. What is still **not accepted** is external: real signup verification and password-reset email delivery (no custom SMTP; signup answers HTTP 429), Google sign-in (disabled, empty redirect_uri), and plan-gated leaked-password protection (HTTP 402). See the [pre-Prompt 10 certification report](docs/pre-prompt10-final-certification.md), the [Prompts 1–9 audit](docs/system-gap-audit-prompt1-9-final.md), and the [runbook](docs/supabase-runbook.md).
 
 ## Stack and boundaries
 
@@ -118,7 +118,7 @@ Unit and browser auth tests use explicitly mocked network transport. They prove 
 
 ## Schema evolution
 
-Prompt 2 adds classifications/typed vocabulary and human-acceptance guards through additive migrations; the 39-table model remains intact. Product Constitution compliance is tested alongside Prompt 1 regression. Live Supabase verification remains externally blocked; locally passing checks are not a claim of hosted acceptance.
+Schema history is additive: Prompt 2 added classifications/typed vocabulary and human-acceptance guards, and migrations 011–030 extended the foundation without rewriting applied history. Product Constitution compliance is tested alongside Prompt 1 regression. Hosted equivalence and acceptance were re-read from both sides on 2026-10-08; what remains externally blocked is real Auth email delivery and Google sign-in — locally passing checks are not a claim of hosted acceptance.
 
 Every persistence change needs a new timestamped migration, ownership/relationship constraints, explicit grants, RLS tests and generated-type refresh. Do not rewrite already-applied migrations. See [architecture decisions](docs/architecture.md) and [evolution checklist](docs/schema-evolution.md). Do not use JSONB to avoid modeling identity, hierarchy, security or frequent query fields.
 

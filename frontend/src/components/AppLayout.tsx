@@ -81,9 +81,12 @@ export function AppLayout() {
     { label: 'Open Studio', detail: 'Choose a Production to open', path: '/studio' },
     { label: 'Go to Assets', detail: 'Reusable production entities', path: '/assets' },
     { label: 'Open Assets to search', detail: 'Browse reusable production entities', path: '/assets' },
-    { label: 'Open Setup', detail: 'Cameras, software and tools', path: '/setup' },
-    { label: 'Open Setup to add a camera', detail: 'Add a production tool to your capabilities', path: '/setup' },
+    { label: 'Open Production Kit', detail: 'Cameras, software and tools', path: '/setup' },
+    { label: 'Open Production Kit to add a camera', detail: 'Add a production tool to your capabilities', path: '/setup' },
     { label: 'Open Discover', detail: 'Production knowledge and references', path: '/discover' },
+    { label: 'Open Jobs', detail: 'Durable processing status and reprocessing', path: '/jobs' },
+    { label: 'Open Production Knowledge', detail: 'Sourced guidance and Tutorial Intelligence', path: '/knowledge' },
+    { label: 'Open Devices and Scenes', detail: 'Camera capabilities and Scene requirements', path: '/devices-scenes' },
     { label: 'Open Settings', detail: 'Application and account preferences', path: '/settings' },
   ].filter(command => `${command.label} ${command.detail}`.toLowerCase().includes(query.toLowerCase()));
   const exactCommand = commands.find(command => command.label.toLowerCase() === query.trim().toLowerCase());

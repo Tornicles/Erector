@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -23,7 +24,29 @@ from app.services.director import DirectorRepository, draft_and_check, interpret
 from app.services.ai.provider import DirectorModelProvider, build_provider
 from app.services.media.frames import FrameExtractor, build_frame_extractor
 from app.middleware.request_id import RequestIDMiddleware
+from app.routers.ai_creation import register_ai_creation_routes
+from app.routers.ai_director import register_ai_director_routes
+from app.routers.long_form import register_long_form_routes
+from app.routers.production_continuity import register_production_continuity_routes
+from app.routers.production_intelligence import register_production_intelligence_routes
+from app.routers.production_memory import register_production_memory_routes
+from app.routers.production_versioning import register_production_versioning_routes
+from app.routers.production_readiness import register_production_readiness_routes
+from app.routers.production_shot_match import register_production_shot_match_routes
+from app.routers.billing import register_billing_routes
+from app.routers.jobs import register_job_routes
+from app.routers.knowledge import register_knowledge_routes
+from app.routers.device_scene import register_device_scene_routes
+from app.routers.discover import register_discover_routes
+from app.routers.media import register_media_routes
 from app.routers.director_intelligence import register_director_intelligence_routes
+from app.routers.exports import register_export_routes
+from app.routers.integrations import register_integration_routes
+from app.routers.publishing import register_publishing_routes
+from app.routers.real_production import register_real_production_routes
+from app.routers.studio import register_studio_routes
+from app.worker.handlers import HandlerContext, build_handlers
+from app.worker.runtime import build_worker
 
 
 
@@ -43,9 +66,34 @@ def create_app(
         application.state.ai_provider = provider
         application.state.frame_extractor = frame_extractor or build_frame_extractor(config.ffmpeg_path)
         async with httpx.AsyncClient(timeout=10, transport=transport, follow_redirects=False) as client:
-            application.state.gateway = SupabaseGateway(config, client)
+            gateway = SupabaseGateway(config, client)
+            application.state.gateway = gateway
+            application.state.worker = None
+            stop = asyncio.Event()
+            worker_task: asyncio.Task | None = None
+            if config.worker_enabled:
+                # A worker claims durable work. It runs only when a deployment has explicitly enabled it
+                # and has a service credential; otherwise the API answers and no work is claimed.
+                def worker_service_token() -> str:
+                    secret = config.supabase_service_role_key
+                    if secret is None:
+                        raise AppError('WORKER_NOT_CONFIGURED', 'unavailable',
+                            'The worker has no service credential, so it cannot claim durable work.', 503)
+                    return secret.get_secret_value()
+                runtime = build_worker(config, gateway, build_handlers(HandlerContext(gateway, worker_service_token)), logger=logger)
+                application.state.worker = runtime
+                worker_task = asyncio.create_task(runtime.run_forever(stop))
+                logger.info('worker_started', extra={'context': {'event': 'worker_started',
+                    'worker_id': runtime.worker_id, 'worker_class': runtime.worker_class}})
             logger.info('startup', extra={'context': {'event': 'application_started'}})
             yield
+            if worker_task is not None:
+                stop.set()
+                try:
+                    await asyncio.wait_for(worker_task, timeout=max(1.0, config.worker_shutdown_grace_seconds))
+                except asyncio.TimeoutError:
+                    worker_task.cancel()
+                    logger.error('worker_shutdown_timeout', extra={'context': {'event': 'worker_shutdown_timeout'}})
         close = getattr(provider, 'aclose', None)
         if callable(close):
             await close()
@@ -136,7 +184,7 @@ def create_app(
                 'answered_decisions': payload.answered_decisions,
             }
             evidence: list[EvidenceItem] = []
-            for reference in context['references']:
+            for reference in context['shaping_references']:
                 source_type = reference['source_type']
                 kind: Literal['description', 'upload', 'url', 'asset', 'document', 'audio', 'video', 'image'] = source_type if source_type in {'description', 'url', 'audio', 'video', 'image', 'asset', 'document'} else 'upload'
                 evidence.append(EvidenceItem(
@@ -207,12 +255,34 @@ def create_app(
         return envelope(request, result)
 
     register_director_intelligence_routes(application, config, logger, envelope)
+    register_studio_routes(application, config, logger, envelope)
+    register_real_production_routes(application, config, logger, envelope)
+    register_ai_creation_routes(application, config, logger, envelope)
+    register_long_form_routes(application, config, logger, envelope)
+    register_production_intelligence_routes(application, config, logger, envelope)
+    register_production_continuity_routes(application, config, logger, envelope)
+    register_production_memory_routes(application, config, logger, envelope)
+    register_production_versioning_routes(application, config, logger, envelope)
+    register_production_readiness_routes(application, config, logger, envelope)
+    register_production_shot_match_routes(application, config, logger, envelope)
+    register_export_routes(application, config, logger, envelope)
+    register_integration_routes(application, config, logger, envelope)
+    register_publishing_routes(application, config, logger, envelope)
+    register_billing_routes(application, config, logger, envelope)
+    register_job_routes(application, config, logger, envelope)
+    register_ai_director_routes(application, config, logger, envelope)
+    register_media_routes(application, config, logger, envelope)
+    register_knowledge_routes(application, config, logger, envelope)
+    register_device_scene_routes(application, config, logger, envelope)
+    register_discover_routes(application, config, logger, envelope)
 
     @application.get('/api/ready')
     async def readiness(request: Request, user: CurrentUser = Depends(get_current_user), gateway: SupabaseGateway = Depends(get_gateway)):
         await gateway.request('GET', '/rest/v1/profiles', token=request.state.access_token, schema=True,
             params={'user_id': f'eq.{user.id}', 'select': 'user_id', 'limit': '1'})
-        return envelope(request, {'status': 'ready', 'database': 'reachable', 'auth': 'verified', 'schema': 'tonde'})
+        worker = getattr(request.app.state, 'worker', None)
+        return envelope(request, {'status': 'ready', 'database': 'reachable', 'auth': 'verified',
+            'schema': 'tonde', 'worker': ('running' if worker is not None else 'disabled')})
 
     return application
 

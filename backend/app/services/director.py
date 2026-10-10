@@ -37,6 +37,15 @@ class UnconfiguredDirectorProvider:
         )
 
 
+def reference_is_shaping_ready(reference: dict[str, Any]) -> bool:
+    return (
+        bool(str(reference.get('source_identity') or '').strip())
+        and reference.get('identity_provenance') in {'source_metadata', 'creator_supplied'}
+        and bool(reference.get('source_identity_verified_at'))
+        and bool(str(reference.get('creator_purpose') or '').strip())
+    )
+
+
 def reference_capability(reference: dict[str, Any]) -> dict[str, Any]:
     source = reference.get('source_type')
     if reference.get('media_id'):
@@ -80,15 +89,20 @@ def build_operation_context(
             'runtime_ms': intent.runtime_ms,
         }
     if operation == 'reference':
+        shaping_references = [reference for reference in (references or []) if reference_is_shaping_ready(reference)]
         return {
             'goal': intent.goal[:1200],
             'references': [
                 {
                     'source_type': reference.get('source_type'),
+                    'source_identity': str(reference.get('source_identity') or '')[:500],
+                    'identity_provenance': reference.get('identity_provenance'),
+                    'creator_purpose': str(reference.get('creator_purpose') or '')[:1200],
+                    'learning_targets': [str(value)[:200] for value in reference.get('learning_targets', [])[:20]],
                     'source_description': str(reference.get('source_description') or '')[:2000],
                     'capability': reference_capability(reference),
                 }
-                for reference in (references or [])[:8]
+                for reference in shaping_references[:8]
             ],
         }
     if operation == 'reality':
@@ -205,7 +219,7 @@ class DirectorRepository:
             'GET', '/rest/v1/production_references', token=token, schema=True,
             params={
                 'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}',
-                'select': 'id,source_type,source_url,source_description,media_id,provenance',
+                'select': 'id,source_type,source_url,source_description,media_id,provenance,source_identity,source_provider,identity_provenance,source_identity_verified_at,creator_purpose,learning_targets,revision',
                 'order': 'created_at.desc', 'limit': '8',
             },
         )
@@ -225,7 +239,9 @@ class DirectorRepository:
                 'limit': '1',
             },
         )
-        return {'production': production, 'references': references, 'setup': setup, 'intake': rows[0] if rows else None}
+        shaping_references = [reference for reference in references if reference_is_shaping_ready(reference)]
+        return {'production': production, 'references': references, 'shaping_references': shaping_references,
+            'setup': setup, 'intake': rows[0] if rows else None}
 
     async def save_intent(
         self, workspace_id: UUID, production_id: UUID, revision: int | None,

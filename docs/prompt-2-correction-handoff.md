@@ -1,5 +1,14 @@
 # Prompt 2 correction + Prompt 3 reconciliation handoff
 
+> **Superseded hosted state (dated correction, 2026-10-08).** Every hosted migration
+> statement below is the record of the day it was written. As of 2026-10-08 the linked
+> project's ledger records **001–030** with matching `tonde` effects, the untruncated
+> catalog comparison reports **0 differences over 4087 identities**
+> (`test-results/pre-prompt10/hosted-final-diff.json`), and the expanded two-user runner
+> reports **538 pass / 1 blocked / 0 fail**. The only remaining blockers are external
+> (mail capacity, Google sign-in, plan-gated leaked-password protection). See the
+> [Pre-Prompt-10 certification](pre-prompt10-final-certification.md).
+
 **Review date:** 2026-10-05 (hosted migration re-verification update)  
 **Overall status: BLOCKED.** Migrations 009 and 010 were manually applied to hosted. Their targeted effects were verified before reconciling the migration ledger with Supabase's history-only repair command; neither migration SQL was rerun. The ledger now matches through 010 by version/name. Complete schema equivalence remains unverified because linked `db diff` needs unavailable Docker/Podman. The full resource/RPC/approval/Storage matrix and Auth/provider gates remain blocked.
 

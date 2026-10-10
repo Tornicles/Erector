@@ -229,6 +229,21 @@ def _capability_dict(report: CapabilityReport) -> dict[str, Any]:
         'producer': report.producer,
     }
 
+def reference_shaping_is_ready(reference: dict[str, Any], analysis: dict[str, Any] | None = None) -> bool:
+    ready = (
+        bool(str(reference.get('source_identity') or '').strip())
+        and reference.get('identity_provenance') in {'source_metadata', 'creator_supplied'}
+        and bool(reference.get('source_identity_verified_at'))
+        and bool(str(reference.get('creator_purpose') or '').strip())
+    )
+    if not ready or analysis is None:
+        return ready
+    return (
+        analysis.get('analyzed_at') is not None
+        and analysis.get('identity_revision') is not None
+        and analysis.get('identity_revision') == reference.get('identity_revision')
+    )
+
 
 def analyzed_reference_payload(
     reference: dict[str, Any], analysis: ReferenceAnalysis | None, findings: list[dict[str, Any]] | None = None,
@@ -241,25 +256,36 @@ def analyzed_reference_payload(
         'source_type': reference.get('source_type'),
         'source_url': reference.get('source_url'),
         'source_description': (reference.get('source_description') or '')[:600],
+        'source_identity': reference.get('source_identity'),
+        'source_provider': reference.get('source_provider'),
+        'identity_provenance': reference.get('identity_provenance') or 'unknown',
+        'source_identity_verified_at': reference.get('source_identity_verified_at'),
+        'creator_purpose': reference.get('creator_purpose'),
+        'learning_targets': reference.get('learning_targets') or [],
+        'revision': reference.get('revision', 1),
+        'shaping_ready': bool(str(reference.get('source_identity') or '').strip())
+            and reference.get('identity_provenance') in {'source_metadata', 'creator_supplied'}
+            and bool(reference.get('source_identity_verified_at'))
+            and bool(str(reference.get('creator_purpose') or '').strip()),
         'rights_classification': reference.get('rights_classification'),
         'state': reference.get('state'),
-        'role': (analysis.role.value if analysis else 'style'),
-        # Availability is always shown, even before any analysis has run.
+        'role': (analysis.role.value if analysis and reference_shaping_is_ready(reference) else 'style'),
+        # Availability and saved-analysis status are reported only after shaping eligibility.
         'capability': _capability_dict(capability),
-        'status': (analysis.status.value if analysis else 'not_started'),
-        'stages': [stage.value for stage in analysis.stages] if analysis else [],
-        'summary': analysis.summary if analysis else '',
-        'producer': analysis.producer if analysis else 'deterministic',
+    'status': analysis.status.value if analysis and reference_shaping_is_ready(reference) else 'not_started',
+    'stages': [stage.value for stage in analysis.stages] if analysis and reference_shaping_is_ready(reference) else [],
+    'summary': analysis.summary if analysis and reference_shaping_is_ready(reference) else '',
+        'producer': analysis.producer if analysis and reference_shaping_is_ready(reference) else 'deterministic',
         'producer_note': '',
         'findings': [],
         'techniques': [],
         'style': {},
         'causal': [],
-        'adaptation_notes': analysis.adaptation_notes if analysis else [],
-        'limitations': analysis.limitations if analysis else [],
+        'adaptation_notes': analysis.adaptation_notes if analysis and reference_shaping_is_ready(reference) else [],
+        'limitations': analysis.limitations if analysis and reference_shaping_is_ready(reference) else [],
         'analyzed_at': None,
     }
-    if findings:
+    if findings and reference_shaping_is_ready(reference):
         payload['findings'] = [
             {
                 'finding_id': row.get('finding_id'),
@@ -282,7 +308,7 @@ def analyzed_reference_payload(
             }
             for row in findings
         ]
-    if analysis is not None:
+    if analysis is not None and reference_shaping_is_ready(reference):
         payload['techniques'] = [
             {
                 'canonical_id': technique.canonical_id,
@@ -327,6 +353,7 @@ def studio_surface(
     analyses_by_reference: dict[str, dict[str, Any]],
     findings_by_analysis: dict[str, list[dict[str, Any]]],
     analyses: dict[str, ReferenceAnalysis],
+    shaping_analyses_by_reference: dict[str, dict[str, Any]] | None = None,
     technique_rows: list[dict[str, Any]],
     decision_rows: list[dict[str, Any]],
     operation_rows: list[dict[str, Any]],
@@ -336,6 +363,15 @@ def studio_surface(
 ) -> dict[str, Any]:
     """Assemble the Brief / Reference / Story / Script / Reality Check Studio surfaces."""
 
+    shaping_analysis_rows = shaping_analyses_by_reference if shaping_analyses_by_reference is not None else analyses_by_reference
+    eligible_reference_ids = {
+        str(reference.get('id')) for reference in references
+        if reference_shaping_is_ready(reference, shaping_analysis_rows.get(str(reference.get('id'))))
+    }
+    current_techniques = {technique.canonical_id for reference_id, analysis in analyses.items()
+                          if reference_id in eligible_reference_ids for technique in analysis.techniques}
+    safe_technique_rows = [row for row in technique_rows
+                          if row.get('technique_source') != 'reference' or row.get('canonical_id') in current_techniques]
     scene_payloads: list[dict[str, Any]] = []
     for row in scene_rows:
         detail = row.get('scene_detail') or {}
@@ -405,6 +441,7 @@ def studio_surface(
         # The readable record persisted by the apply operation: Brief, Story and Script text.
         'documents': {
             str(row.get('document_type')): {
+                'document_id': (str(row.get('id')) if row.get('id') else None),
                 'title': row.get('title'), 'content': row.get('content'),
                 'revision': row.get('revision'), 'updated_at': row.get('updated_at'),
             }
@@ -419,9 +456,9 @@ def studio_surface(
         'references': [
             analyzed_reference_payload(
                 reference,
-                analyses.get(str(reference.get('id'))),
-                findings_by_analysis.get(str((analyses_by_reference.get(str(reference.get('id'))) or {}).get('id')), [])
-                if analyses_by_reference.get(str(reference.get('id'))) else [],
+                analyses.get(str(reference.get('id'))) if str(reference.get('id')) in eligible_reference_ids else None,
+                findings_by_analysis.get(str(shaping_analysis_rows[str(reference.get('id'))]['id']), [])
+                if str(reference.get('id')) in shaping_analysis_rows else [],
             )
             for reference in references
         ],
@@ -440,7 +477,7 @@ def studio_surface(
                 'conditions': row.get('conditions') or [],
                 'limitations': row.get('limitations') or [],
             }
-            for row in technique_rows
+            for row in safe_technique_rows
         ],
         'decisions': [
             {

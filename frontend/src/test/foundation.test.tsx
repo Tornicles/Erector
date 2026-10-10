@@ -6,7 +6,7 @@ import { AuthContext, AuthProvider, useAuth } from '../contexts/AuthContext';
 import { appRoutes } from '../App';
 import { StudioComposition } from '../pages/StudioPage';
 import { AppError } from '../services/errors';
-import { productionService, type DirectorBrief, type DirectorPlanResponse, type DirectorStudio } from '../services/productions';
+import { productionService, type DirectorBrief, type DirectorPlanResponse, type DirectorStudio, type StudioReadModel } from '../services/productions';
 import { authService } from '../services/auth';
 import { durationMs, formatRuntime, type Production } from '../types/domain';
 import { validateFile } from '../services/media';
@@ -22,6 +22,12 @@ vi.mock('../lib/supabase', async importOriginal => {
   const client = { auth: mocks.auth, rpc: mocks.rpc, from: mocks.from };
   return { ...original, configurationError: null, localPreview: false, supabase: client, requireSupabase: () => client };
 });
+const prompt11Mocks = vi.hoisted(() => ({
+  discover: vi.fn(), saveDiscover: vi.fn(), previewDiscover: vi.fn(), applyDiscover: vi.fn(),
+  knowledge: vi.fn(), deviceReadiness: vi.fn(), sceneIntelligence: vi.fn(), jobs: vi.fn(),
+  cancelJob: vi.fn(), requeueJob: vi.fn(),
+}));
+vi.mock('../services/prompt11', () => ({ prompt11Service: prompt11Mocks }));
 vi.mock('../services/productions', () => ({
   PAGE_SIZE: 40,
   productionService: {
@@ -30,6 +36,10 @@ vi.mock('../services/productions', () => ({
     directorProviderStatus: vi.fn(), directorStudioSurface: vi.fn(), directorPlan: vi.fn(), directorCommit: vi.fn(),
     directorCommand: vi.fn(), directorCommandPreview: vi.fn(), analyzeDirectorReference: vi.fn(), saveDirectorBrief: vi.fn(),
     recordDirectorDecisions: vi.fn(), directorStoryAlternatives: vi.fn(), directorDialogueOperation: vi.fn(),
+    studioSurface: vi.fn(), studioTiming: vi.fn(), createStudioScene: vi.fn(), updateStudioScene: vi.fn(),
+    reorderStudioScenes: vi.fn(), archiveStudioScene: vi.fn(), createStudioShot: vi.fn(), updateStudioShot: vi.fn(),
+    moveStudioShot: vi.fn(), reorderStudioShots: vi.fn(), archiveStudioShot: vi.fn(), setStudioApproval: vi.fn(),
+    setStudioLock: vi.fn(), reconcileStudioRuntime: vi.fn(),
   },
 }));
 const userId = '00000000-0000-4000-8000-000000000001';
@@ -81,9 +91,39 @@ const studioFixture = (): DirectorStudio => ({
   runtime_fit: { target_ms: 30000, assigned_ms: 30000, dialogue_ms: 2200, action_ms: 27800, slack_ms: 0, status: 'fits' },
   documents: { script: { title: 'North Bean — Slow Craft', content: 'North Bean — Slow Craft\n\nINT. ROASTERY — DAWN\n\nSteam curls through a shaft of window light.\n\nBARISTA\n  Give it a minute.\n\n>> CUT TO:', revision: 1, updated_at: '2026-10-05T00:00:00Z' } },
   reality: realityFixture, reality_source_revision: 3, setup_listed: ['Phone camera'], reality_used_setup: true,
-  references: [{ reference_id: '00000000-0000-4000-8000-000000000012', source_type: 'video', source_url: null, source_description: 'Premium coffee ad', rights_classification: 'unknown', state: 'analyzed', role: 'lighting', capability: { capability: 'metadata_only', media_bytes: 'unavailable', modalities: {}, note: 'Only container metadata was readable; no frames or audio were available.', producer: 'unverified' }, status: 'partial', stages: ['queued', 'preprocessing', 'analyzing'], summary: 'Metadata-only analysis.', producer: 'deterministic', findings: [{ finding_id: 'finding-1', category: 'lighting', statement: 'The read metadata lists a slow shutter.', epistemic: 'observed', confidence: 'medium', evidence: [{ kind: 'measurement', start_ms: null, end_ms: null, frame_id: null, detail: 'container metadata' }], technique_id: null, limitations: [] }], techniques: [{ canonical_id: 'low-key-bounce', name: 'Low-key bounce', category: 'lighting', description: 'Shape with a single soft source.', purpose: 'Keep falloff deep.', effect: 'Premium contrast.', importance: 'essential', confidence: 'medium', practical_concept: 'One soft source plus a bounce card.', ai_concept: 'Describe one soft source with deep falloff.', conditions: ['Dark room'], limitations: [] }], style: { palette: ['warm'], sections: [{ section: 'lighting', description: 'Soft window light', directives: ['Expose for highlights'], epistemic: 'estimated', confidence: 'medium' }] }, causal: [{ question: 'What makes this feel premium?', explanation: 'Deep falloff and a slow reveal.', drivers: ['low-key-bounce'], confidence: 'medium' }], adaptation_notes: ['Use your own window light.'], limitations: ['No frames were extracted.'] }],
+  references: [{ reference_id: '00000000-0000-4000-8000-000000000012', source_type: 'video', source_url: null, source_description: 'Premium coffee ad', source_identity: 'A sample coffee campaign', source_provider: null, identity_provenance: 'creator_supplied', source_identity_verified_at: '2026-10-07T00:00:00Z', creator_purpose: 'Learn the light quality for this coffee production.', learning_targets: ['lighting'], revision: 1, shaping_ready: true, rights_classification: 'unknown', state: 'analyzed', role: 'lighting', capability: { capability: 'metadata_only', media_bytes: 'unavailable', modalities: {}, note: 'Only container metadata was readable; no frames or audio were available.', producer: 'unverified' }, status: 'partial', stages: ['queued', 'preprocessing', 'analyzing'], summary: 'Metadata-only analysis.', producer: 'deterministic', findings: [{ finding_id: 'finding-1', category: 'lighting', statement: 'The read metadata lists a slow shutter.', epistemic: 'observed', confidence: 'medium', evidence: [{ kind: 'measurement', start_ms: null, end_ms: null, frame_id: null, detail: 'container metadata' }], technique_id: null, limitations: [] }], techniques: [{ canonical_id: 'low-key-bounce', name: 'Low-key bounce', category: 'lighting', description: 'Shape with a single soft source.', purpose: 'Keep falloff deep.', effect: 'Premium contrast.', importance: 'essential', confidence: 'medium', practical_concept: 'One soft source plus a bounce card.', ai_concept: 'Describe one soft source with deep falloff.', conditions: ['Dark room'], limitations: [] }], style: { palette: ['warm'], sections: [{ section: 'lighting', description: 'Soft window light', directives: ['Expose for highlights'], epistemic: 'estimated', confidence: 'medium' }] }, causal: [{ question: 'What makes this feel premium?', explanation: 'Deep falloff and a slow reveal.', drivers: ['low-key-bounce'], confidence: 'medium' }], adaptation_notes: ['Use your own window light.'], limitations: ['No frames were extracted.'] }],
   techniques: [{ canonical_id: 'low-key-bounce', name: 'Low-key bounce', category: 'lighting', description: 'Shape with a single soft source.', purpose: 'Keep falloff deep.', effect: 'Premium contrast.', importance: 'essential', confidence: 'medium', practical_concept: 'One soft source plus a bounce card.', ai_concept: 'Describe one soft source with deep falloff.', conditions: ['Dark room'], limitations: [] }],
   decisions: [], operations: [], provider: { provider: 'openai_compatible', configured: false, model_profile: 'default', capabilities: [], notes: [], ffmpeg_available: false, ffmpeg_note: 'ffmpeg is not installed.' }, reference_roles: { '00000000-0000-4000-8000-000000000012': 'lighting' },
+});
+const studioSceneId = '00000000-0000-4000-8000-000000000010';
+const studioShotId = '00000000-0000-4000-8000-000000000014';
+const studioReadModelFixture = (): StudioReadModel => ({
+  production: { id: productionId, workspace_id: workspaceId, title: 'North Bean — Slow Craft', production_type: 'commercial', custom_type: null, execution_method: 'real', planned_duration_ms: 30000, calculated_duration_ms: 30000, approval: 'draft', locked_at: null, revision: 3, lifecycle: 'active', updated_at: '2026-10-05T00:00:00Z' },
+  scenes: [{
+    id: studioSceneId, order: 1, sort_order: 1024, title: 'Roastery dawn', purpose: 'Establish the craft', story_beat: 'Hook',
+    description: 'Steam and light.', action_lines: ['Steam curls through a shaft of window light.'], opening_state: 'Darkness',
+    ending_state: 'The first sip', visual_intent: 'Warm backlight', dialogue_notes: 'Keep the label readable.',
+    environment_asset_id: '00000000-0000-4000-8000-000000000015', planned_duration_ms: 30000, duration_ms: 30000,
+    timing: 'derived', approval: 'draft', locked_at: null, revision: 2, updated_at: '2026-10-05T00:00:00Z',
+    character_asset_ids: ['00000000-0000-4000-8000-000000000016'], dialogue_lines: 1, shot_count: 1, bindings: [],
+    shots: [{
+      id: studioShotId, scene_id: studioSceneId, order: 1, sort_order: 1024, title: 'Steam reveal', description: 'Backlit steam.',
+      action: '', purpose: 'establish', subject: 'steam', framing: 'wide', angle: 'eye level', movement: 'slow push',
+      composition: 'centred', transition: 'cut', story_relationship: 'opens the Story', story_beat: 'Hook', creative_notes: '',
+      execution_method: 'real', planned_duration_ms: 30000, approval: 'draft', locked_at: null, revision: 1,
+      updated_at: '2026-10-05T00:00:00Z', result_count: 0, bindings: [],
+    }],
+  }],
+  orphan_shots: [],
+  assets: [{ id: '00000000-0000-4000-8000-000000000016', asset_type: 'character', name: 'Barista', description: 'Hands and apron.', approval: 'draft', locked_at: null, revision: 1, metadata: {}, used_by_scenes: [studioSceneId] }],
+  documents: { script: { title: 'North Bean — Slow Craft', content: 'INT. ROASTERY — DAWN', revision: 1, updated_at: '2026-10-05T00:00:00Z', approval: 'draft', locked_at: null } },
+  timing: { total_ms: 30000, target_ms: 30000, delta_ms: 0, status: 'fits', scene_states: [{ scene_id: studioSceneId, order: 1024, duration_ms: 30000, shots: 1, timing: 'derived' }] },
+  runtime_conflict: false,
+  timeline: [{ scene_id: studioSceneId, order: 1, title: 'Roastery dawn', duration_ms: 30000, timing: 'derived', approval: 'draft', locked: false, execution_methods: ['real'], shots: [{ shot_id: studioShotId, order: 1, title: 'Steam reveal', duration_ms: 30000, execution_method: 'real', approval: 'draft', locked: false }] }],
+  status_summary: { production_approval: 'draft', production_locked: false, scenes: 1, shots: 1, scenes_locked: 0, shots_locked: 0, approval_counts: { draft: 2 }, needs_attention: 0 },
+  truncated: false,
+  provider: { provider: 'openai_compatible', configured: false, model_profile: 'default', capabilities: [], notes: [], ffmpeg_available: false, ffmpeg_note: 'ffmpeg is not installed.' },
+  capabilities: { frame_extraction: false, frame_extraction_note: 'ffmpeg is not installed.', timeline_editing: true, shot_execution: false, ai_prompt_compilation: false, note: 'Real execution planning arrives with Prompt 6 and AI creation with Prompt 7.' },
 });
 function route(path: string, signedIn = true) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
@@ -94,6 +134,19 @@ beforeEach(() => {
   localStorage.clear();
   vi.mocked(productionService.directorStudioSurface).mockResolvedValue(studioFixture());
   vi.mocked(productionService.directorProviderStatus).mockResolvedValue(studioFixture().provider);
+  vi.mocked(productionService.studioSurface).mockResolvedValue(studioReadModelFixture());
+  vi.mocked(productionService.createStudioScene).mockResolvedValue({ scene_id: studioSceneId, revision: 1, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.updateStudioScene).mockResolvedValue({ scene_id: studioSceneId, revision: 3, approval: 'draft', timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.reorderStudioScenes).mockResolvedValue({ scenes: 1, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.archiveStudioScene).mockResolvedValue({ scene_id: studioSceneId, archived_shots: 0, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.createStudioShot).mockResolvedValue({ shot_id: studioShotId, revision: 1, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.updateStudioShot).mockResolvedValue({ shot_id: studioShotId, revision: 2, approval: 'draft', timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.moveStudioShot).mockResolvedValue({ shot_id: studioShotId, scene_id: studioSceneId, revision: 2, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.reorderStudioShots).mockResolvedValue({ shots: 1, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.archiveStudioShot).mockResolvedValue({ shot_id: studioShotId, archived: true, timing: studioReadModelFixture().timing });
+  vi.mocked(productionService.setStudioApproval).mockResolvedValue({ scope: 'shot', id: studioShotId, approval: 'approved', revision: 2 });
+  vi.mocked(productionService.setStudioLock).mockResolvedValue({ scope: 'shot', id: studioShotId, locked: true, revision: 2 });
+  vi.mocked(productionService.reconcileStudioRuntime).mockResolvedValue({ adjusted_ms: 0, timing: studioReadModelFixture().timing });
   vi.mocked(productionService.directorCommandPreview).mockResolvedValue({ kind: 'scene_intensity', scope: 'scene', confidence: 'high', rationale: 'I will intensify Scene 1 within the runtime it already has.', operations: ['intensify_scene'], signals: ['scene 1'], reference_role: null, target_runtime_ms: null, scene_order: 1 });
   vi.mocked(productionService.directorCommand).mockResolvedValue({ command: { kind: 'scene_intensity', scope: 'scene', confidence: 'high', rationale: 'I will intensify Scene 1.', operations: ['intensify_scene'], signals: [], scene_order: 1, reference_role: null, target_runtime_ms: null, parameters: {} }, rationale: 'Scene 1 intensification', answer: 'Scene 1 is more intense inside its existing runtime.', changes: ['Scene 1 intensified'], operations: ['intensify_scene'], limitations: [], causal: [], story_alternatives: [], line_alternatives: {}, reference_role: null, adaptations_applied: [], plan: null, producer: 'deterministic', applied: null });
   const query: Record<string, any> = {};
@@ -119,7 +172,7 @@ beforeEach(() => {
   for (const action of ['signInWithPassword','signUp','signInWithOAuth','resetPasswordForEmail','updateUser','signOut'] as const) mocks.auth[action].mockResolvedValue({ data: { session }, error: null });
 });
 describe('canonical application routes', () => {
-  it.each([['/home','What do you want to make'],['/studio','Studio'],['/projects','Projects'],['/discover','Discover'],['/assets','Assets'],['/setup','Setup'],['/settings','Settings']])('%s renders inside the authenticated seven-area shell', async (path, title) => {
+  it.each([['/home','What do you want to make'],['/studio','Studio'],['/projects','Projects'],['/discover','Discover'],['/assets','Assets'],['/setup','Production Kit'],['/settings','Settings']])('%s renders inside the authenticated seven-area shell', async (path, title) => {
     route(path);
     expect(await screen.findByRole('heading', { level: 1, name: new RegExp(title) })).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'Main navigation' }).querySelectorAll('a')).toHaveLength(7);
@@ -176,20 +229,40 @@ describe('canonical application routes', () => {
     const router=route('/home');
     fireEvent.keyDown(window,{key:'k',ctrlKey:true});
     expect(await screen.findByRole('dialog',{name:'Global search and commands'})).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Search or go to a TONDE area'),{target:{value:'Open Setup'}});
-    fireEvent.click(screen.getByRole('option',{name:'Open Setup Cameras, software and tools'}));
+    fireEvent.change(screen.getByLabelText('Search or go to a TONDE area'),{target:{value:'Open Production Kit'}});
+    fireEvent.click(screen.getByRole('option',{name:'Open Production Kit Cameras, software and tools'}));
     await waitFor(()=>expect(router.state.location.pathname).toBe('/setup'));
   });
-  it('Discover can search a technique, save it, and hand it to Home without fabricating analysis', async () => {
-    const router=route('/discover');
+  it('Discover can search curated items, save one, and preview/apply Create This with confirmation', async () => {
+    const item = (saved: boolean) => ({
+      item_id: 'item-1', canonical_id: 'canon-1', item_kind: 'technique', title: 'Handheld Tension',
+      summary: 'A carried camera keeps the frame alert.', visibility: 'curated', review_state: 'reviewed',
+      provenance: { source_label: 'ASC Manual', rights_classification: 'reference_only' },
+      applicability: {}, source_state: 'available', usable: true, saved,
+    });
+    vi.mocked(productionService.list).mockResolvedValue([{ ...production }]);
+    prompt11Mocks.discover.mockResolvedValue({ items: [item(false)], count: 1, meaning: '' });
+    route('/discover');
     expect(await screen.findByRole('heading',{name:'Discover'})).toBeVisible();
-    fireEvent.change(screen.getByRole('textbox',{name:'Search production knowledge'}),{target:{value:'handheld tension'}});
-    expect(screen.getByRole('heading',{name:'Handheld Tension'})).toBeVisible();
+    expect(await screen.findByRole('heading',{name:'Handheld Tension'})).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox',{name:'Search Discover'}),{target:{value:'handheld'}});
+    await waitFor(()=>expect(prompt11Mocks.discover).toHaveBeenCalledWith(workspaceId,'handheld'));
+    prompt11Mocks.discover.mockResolvedValue({ items: [item(true)], count: 1, meaning: '' });
+    prompt11Mocks.saveDiscover.mockResolvedValue({});
     fireEvent.click(screen.getByRole('button',{name:/^Save$/}));
-    expect(screen.getByRole('button',{name:/^Saved$/})).toHaveAttribute('aria-pressed','true');
-    fireEvent.click(screen.getByRole('button',{name:/^Direct This$/}));
-    await waitFor(()=>expect(router.state.location.pathname).toBe('/home'));
-    await waitFor(()=>expect((screen.getByRole('textbox',{name:'Describe what you want to make'}) as HTMLTextAreaElement).value).toContain('Handheld Tension'));
+    const unsave=await screen.findByRole('button',{name:/^Unsave$/});
+    expect(unsave).toHaveAttribute('aria-pressed','true');
+    prompt11Mocks.previewDiscover.mockResolvedValue({ application_id: 'app-1', state: 'previewed',
+      impact: { confirmation: 'HANDHELD-TENSION APPLY', changes: [{ object: 'reference', detail: 'Adds an attributed reference' }],
+        creates_nothing: true, meaning: 'Preview meaning' } });
+    await waitFor(()=>expect(screen.getByRole('button',{name:/Create This/})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:/Create This/}));
+    expect(await screen.findByRole('dialog',{name:'Preview Create This'})).toBeVisible();
+    expect(screen.getByText('HANDHELD-TENSION APPLY')).toBeVisible();
+    prompt11Mocks.applyDiscover.mockResolvedValue({ application_id: 'app-1', state: 'applied', meaning: 'Applied.' });
+    fireEvent.click(screen.getByRole('button',{name:/Apply with canonical confirmation/}));
+    expect(await screen.findByText('Applied.')).toBeVisible();
+    expect(prompt11Mocks.applyDiscover).toHaveBeenCalledWith(workspaceId,'app-1','HANDHELD-TENSION APPLY');
   });
   it('Home upload/URL mode truthfully gates unsupported import and recording actions', async () => {
     route('/home');
@@ -253,10 +326,10 @@ describe('Studio Director intelligence surfaces', () => {
     vi.mocked(productionService.directorCommand).mockResolvedValueOnce(result(false)).mockResolvedValueOnce(result(true));
     studio();
     fireEvent.change(await screen.findByLabelText('Message to the Director'), { target: { value: 'Make Scene 1 more intense.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview change' }));
     await waitFor(() => expect(productionService.directorCommandPreview).toHaveBeenCalledWith(workspaceId, productionId, 'Make Scene 1 more intense.'));
     expect(await screen.findByText(/I will intensify Scene 1 within the runtime it already has\./)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: /Send direction/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Ask the Director/ }));
     await waitFor(() => expect(productionService.directorCommand).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({ text: 'Make Scene 1 more intense.', apply: false })));
     expect(await screen.findByText('Scene 1 is more intense inside its existing runtime.')).toBeVisible();
     expect(screen.getByText(/Use Apply to persist it/)).toBeVisible();
@@ -356,5 +429,5 @@ it('rejects browser secrets, unsafe durations and executable/oversize uploads', 
   expect(()=>durationMs(3.2)).toThrow();expect(()=>durationMs(-1)).toThrow();
   expect(()=>validateFile({size:100,type:'application/x-msdownload',name:'run.exe'})).toThrow();
   expect(()=>validateFile({size:60*1024*1024,type:'video/mp4',name:'large.mp4'})).toThrow();
-  expect(validateFile({size:100,type:'image/png',name:'reference.png'})).toBe('image');
+  expect(validateFile({size:100,type:'image/png',name:'reference.png'},{purposes:[{purpose:'reference',max_bytes:10_000_000,supported_mime_types:['image/png']}]},'reference')).toBe('image');
 });

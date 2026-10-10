@@ -1,8 +1,17 @@
 # Prompt 1 engineering handoff
 
+> **Superseded hosted state (dated correction, 2026-10-08).** Every hosted migration
+> statement below is the record of the day it was written. As of 2026-10-08 the linked
+> project's ledger records **001–030** with matching `tonde` effects, the untruncated
+> catalog comparison reports **0 differences over 4087 identities**
+> (`test-results/pre-prompt10/hosted-final-diff.json`), and the expanded two-user runner
+> reports **538 pass / 1 blocked / 0 fail**. The only remaining blockers are external
+> (mail capacity, Google sign-in, plan-gated leaked-password protection). See the
+> [Pre-Prompt-10 certification](pre-prompt10-final-certification.md).
+
 ## Status
 
-**Local foundation is present; current combined acceptance is BLOCKED.** On 2026-10-05 the linked hosted project was re-inspected read-only. The migration list reports versions 001–008 locally/remotely; 009–010 are pending local corrections. The latest scoped hosted runner passed 39/39. Its cleanup is best-effort in `finally`; a separate post-run read-only audit found zero matching temporary users, profiles, workspaces, memberships, acceptance projects/productions, media records, or registered test objects. This is not complete tenant/resource, six-bucket Storage, approval-matrix, email/Google or schema-diff proof. See the [correction handoff](prompt-2-correction-handoff.md) and [acceptance log](supabase-acceptance-log.md). No hosted migration was applied.
+**Local foundation is present; current combined acceptance is BLOCKED.** On 2026-10-05 the linked hosted project was re-inspected read-only. The migration list then reported versions 001–008 locally/remotely. Migrations 009–010 were afterwards applied by hand and the ledger reconciled, and the authoritative per-version matrix (read-only re-verified 2026-10-07) is in the [Prompts 1–9 audit](system-gap-audit-prompt1-9-final.md): the hosted ledger records 001–010 while the hosted effect state is 001–014 present and 015–025 absent, so 011–014 were applied without ledger rows and only 015–025 are genuinely unapplied. The latest scoped hosted runner passed 39/39. Its cleanup is best-effort in `finally`; a separate post-run read-only audit found zero matching temporary users, profiles, workspaces, memberships, acceptance projects/productions, media records, or registered test objects. This is not complete tenant/resource, six-bucket Storage, approval-matrix, email/Google or schema-diff proof. See the [correction handoff](prompt-2-correction-handoff.md) and [acceptance log](supabase-acceptance-log.md). No hosted migration was applied.
 
 ## What changed
 

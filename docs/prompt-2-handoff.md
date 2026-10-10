@@ -1,5 +1,14 @@
 # Prompt 2 engineering handoff
 
+> **Superseded hosted state (dated correction, 2026-10-08).** Every hosted migration
+> statement below is the record of the day it was written. As of 2026-10-08 the linked
+> project's ledger records **001–030** with matching `tonde` effects, the untruncated
+> catalog comparison reports **0 differences over 4087 identities**
+> (`test-results/pre-prompt10/hosted-final-diff.json`), and the expanded two-user runner
+> reports **538 pass / 1 blocked / 0 fail**. The only remaining blockers are external
+> (mail capacity, Google sign-in, plan-gated leaked-password protection). See the
+> [Pre-Prompt-10 certification](pre-prompt10-final-certification.md).
+
 ## Gate (historical record; superseded by correction review)
 
 **Historical internal Prompt 2 implementation report: PASS.**  
@@ -7,7 +16,7 @@
 
 Historical narrative: local project configuration appeared concurrently during earlier verification. Earlier handoffs conflict about whether remote migration changes were made. Current CLI evidence lists hosted versions 001–008; authorship is unknown. Do not rely on this prior narrative in place of the correction report.
 
-Current hosted evidence is in the [correction handoff](prompt-2-correction-handoff.md), not in this historical narrative. The latest 39/39 runner is limited-scope. Local repairs 009–010 are not applied; hosted security advisor warnings remain. Data API `tonde` negotiation works and anon reads are denied (HTTP 401), but the former PGRST106 condition is not present. Google is disabled and email delivery is not verified. Do not treat this record's historic claim or gate deferral as full hosted acceptance.
+Current hosted evidence is in the [correction handoff](prompt-2-correction-handoff.md), not in this historical narrative. The latest 39/39 runner is limited-scope. Local repairs 009–010 have since been applied by hand with the ledger reconciled to 001–010; read-only re-verification on 2026-10-07 puts the hosted effect state at 001–014, so migrations 011–014 were also applied without ledger rows and only 015–025 are genuinely unapplied. Hosted security advisor warnings remain until a re-run after the forward rollout. Data API `tonde` negotiation works and anon reads are denied (HTTP 401), but the former PGRST106 condition is not present. Google is disabled and email delivery is not verified. Do not treat this record's historic claim or gate deferral as full hosted acceptance.
 
 ### Gate deferral (owner decision, 2026-10-05)
 
@@ -46,7 +55,7 @@ Added Product Film/Trailer to the existing production type vocabulary. Kept esta
 
 ## Schema impact (historical Prompt 2 implementation record)
 
-At initial Prompt 2 implementation only additive migrations 006–007 were introduced. The current forward security corrections also include migrations 009–010; linked hosted state is 001–008, so both corrections are pending. See the current [reconciliation matrix](prompt-2-correction-handoff.md#3-migration-reconciliation). Earlier Prompt 1 migrations remain unchanged. Table count remains 39. Classification adds `product_film`/`trailer`; eight bounded text/check workflows become typed enums (reference source/rights/state, dialogue kind, binding role/inheritance, message role, proposal state), bringing the SQL enum count to 17. Values/defaults/identities/history are preserved; no data import, table/bucket rename or deletion.
+At initial Prompt 2 implementation only additive migrations 006–007 were introduced. The current forward security corrections also include migrations 009–010; the linked hosted state was then 001–008, and both corrections have since been applied by hand and the ledger reconciled to 001–010 (read-only re-verified 2026-10-07: ledger 001–010, effect state 001–014, only 015–025 unapplied). See the current [reconciliation matrix](prompt-2-correction-handoff.md#3-migration-reconciliation). Earlier Prompt 1 migrations remain unchanged. Table count remains 39. Classification adds `product_film`/`trailer`; eight bounded text/check workflows become typed enums (reference source/rights/state, dialogue kind, binding role/inheritance, message role, proposal state), bringing the SQL enum count to 17. Values/defaults/identities/history are preserved; no data import, table/bucket rename or deletion.
 
 Human-acceptance triggers reject automatic system/service-role Approved/Final transitions, reject simultaneous content-change/new-approval requests, and reset accepted Result evidence edits to Needs Review. The initial Prompt 2 migration recreated the Director message INSERT policy with identical authorization and made no Storage change. Subsequent local-only migration 010 relocates policy helpers and rewrites dependent policies/trigger/RPC bodies; it has not been applied remotely. Casts require table locks; review hosted counts/external schema and schedule safely. Reversing enum changes is a reviewed new migration, not deleting migration history.
 
@@ -72,7 +81,7 @@ Browser/transport tests use explicit fixtures; PostgreSQL fixtures include minim
 
 ## External blocker and exact follow-up
 
-Outstanding hosted follow-up: review and safely apply the forward-only local corrections 009–010 to the confirmed project, verify PostgREST policies and security advisor output, run complete two-user resource/RPC/approval/six-bucket Storage acceptance, and resolve email/Google configuration if required. The hosted migration list currently reports 001–008; local 009–010 are not hosted. Full schema semantic diff is blocked by missing Docker/Podman. See the [runbook](supabase-runbook.md) and current [correction handoff](prompt-2-correction-handoff.md); do not reset or infer hosted acceptance from mocks.
+Outstanding hosted follow-up: review and safely apply the forward-only local corrections 009–010 to the confirmed project, verify PostgREST policies and security advisor output, run complete two-user resource/RPC/approval/six-bucket Storage acceptance, and resolve email/Google configuration if required. The hosted migration ledger now reports 001–010 after 009–010 were applied by hand and history repaired; the hosted effect state is 001–014, so 011–014 were applied without ledger rows while 015–025 are not hosted at all. Full schema semantic diff is blocked by missing Docker/Podman. See the [runbook](supabase-runbook.md) and current [correction handoff](prompt-2-correction-handoff.md); do not reset or infer hosted acceptance from mocks.
 
 ## Current correction status
 

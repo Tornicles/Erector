@@ -36,6 +36,8 @@ from app.domain.analysis import (
     TechniqueImportance,
 )
 from app.services.ai.orchestration import OperationOutcome
+from app.services.director import reference_is_shaping_ready
+from app.services.studio import reference_shaping_is_ready
 
 logger = logging.getLogger('tonde.studio')
 
@@ -68,7 +70,7 @@ class StudioRepository:
         production = await self.production(workspace_id, production_id, token)
         scope = {'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}'}
         references = await self._rows('/rest/v1/production_references', token, {
-            **scope, 'select': 'id,source_type,source_url,source_description,media_id,rights_classification,state,created_at',
+            **scope, 'select': 'id,source_type,source_url,source_description,media_id,rights_classification,state,created_at,source_identity,source_provider,identity_provenance,source_identity_verified_at,creator_purpose,learning_targets,identity_revision,revision',
             'order': 'created_at.desc', 'limit': '12',
         })
         setup = await self._rows('/rest/v1/production_resources', token, {
@@ -99,7 +101,7 @@ class StudioRepository:
         })
         analysis_rows = await self._rows('/rest/v1/reference_analyses', token, {
             **scope,
-            'select': 'id,reference_id,role,capability,status,stages,progress,summary,capabilities,style,causal,adaptation_notes,limitations,media_metadata,producer,model_profile,producer_note,analyzed_at,revision',
+            'select': 'id,reference_id,role,capability,status,stages,progress,summary,capabilities,style,causal,adaptation_notes,limitations,media_metadata,producer,model_profile,producer_note,analyzed_at,identity_revision,revision',
             'order': 'created_at.desc', 'limit': '12',
         })
         analysis_ids = [str(row['id']) for row in analysis_rows]
@@ -123,7 +125,7 @@ class StudioRepository:
             })
         document_rows = await self._rows('/rest/v1/creative_documents', token, {
             **scope, 'document_type': 'in.(brief,story,script)',
-            'select': 'document_type,title,content,revision,updated_at', 'order': 'updated_at.desc', 'limit': '12',
+            'select': 'id,document_type,title,content,revision,updated_at', 'order': 'updated_at.desc', 'limit': '12',
         })
         decision_rows = await self._rows('/rest/v1/director_decisions', token, {
             **scope, 'select': 'decision_id,question,answer,priority,impact,decided_by,decision_source,is_correction,updated_at',
@@ -135,30 +137,45 @@ class StudioRepository:
             'order': 'created_at.desc', 'limit': '20',
         })
         analyses_by_reference = {str(row['reference_id']): row for row in analysis_rows}
+        references_by_id = {str(row['id']): row for row in references}
+        shaping_analyses_by_reference = {
+            reference_id: row for reference_id, row in analyses_by_reference.items()
+            if reference_shaping_is_ready(references_by_id.get(reference_id, {}), row)
+        }
+        shaping_analysis_ids = {str(row['id']) for row in shaping_analyses_by_reference.values()}
         findings_by_analysis: dict[str, list[dict[str, Any]]] = {}
         for row in findings:
-            findings_by_analysis.setdefault(str(row['analysis_id']), []).append(row)
+            if str(row['analysis_id']) in shaping_analysis_ids:
+                findings_by_analysis.setdefault(str(row['analysis_id']), []).append(row)
         techniques_by_id = {str(row['id']): row for row in technique_rows}
         links_by_analysis: dict[str, list[dict[str, Any]]] = {}
         for row in link_rows:
-            links_by_analysis.setdefault(str(row['analysis_id']), []).append(row)
+            if str(row['analysis_id']) in shaping_analysis_ids:
+                links_by_analysis.setdefault(str(row['analysis_id']), []).append(row)
         analyses = {
             reference_id: rebuild_analysis(
                 row, findings_by_analysis.get(str(row['id']), []),
                 [techniques_by_id.get(str(link['technique_id']), {}) | {'importance': link.get('importance'), 'evidence': link.get('evidence')}
                  for link in links_by_analysis.get(str(row['id']), []) if str(link['technique_id']) in techniques_by_id],
             )
-            for reference_id, row in analyses_by_reference.items()
+            for reference_id, row in shaping_analyses_by_reference.items()
         }
+        shaping_technique_ids = {str(link['technique_id']) for rows in links_by_analysis.values() for link in rows}
+        shaping_techniques = [
+            row for row in technique_rows
+            if row.get('technique_source') != 'reference' or str(row.get('id')) in shaping_technique_ids
+        ]
         return {
-            'production': production, 'references': references, 'setup': setup,
+            'production': production, 'references': references,
+            'shaping_references': [row for row in references if reference_is_shaping_ready(row)], 'setup': setup,
             'intake': intake_rows[0] if intake_rows else None,
             'brief_row': brief_rows[0] if brief_rows else None,
             'story_row': story_rows[0] if story_rows else None,
             'scene_rows': scene_rows, 'dialogue_rows': dialogue_rows,
             'reality_row': reality_rows[0] if reality_rows else None,
             'analysis_rows': analysis_rows, 'findings_by_analysis': findings_by_analysis,
-            'technique_rows': technique_rows, 'decision_rows': decision_rows, 'operation_rows': operation_rows,
+            'shaping_analyses_by_reference': shaping_analyses_by_reference,
+            'technique_rows': shaping_techniques, 'decision_rows': decision_rows, 'operation_rows': operation_rows,
             'document_rows': document_rows,
             'analyses_by_reference': analyses_by_reference, 'analyses': analyses,
         }
@@ -195,16 +212,25 @@ class StudioRepository:
             'decision_list': decisions, 'decision_source': source,
         })
 
+    async def begin_reference_analysis(self, workspace_id: UUID, production_id: UUID, reference_id: UUID, token: str, *, identity_revision: int) -> dict[str, Any]:
+        return await self.rpc('claim_reference_analysis_pinned', token, {
+            'target_workspace': str(workspace_id), 'target_production': str(production_id), 'target_reference': str(reference_id),
+            'expected_identity_revision': identity_revision, 'stage_status': 'preprocessing',
+            'stage_list': ['queued', 'preprocessing'], 'progress_pct': 10,
+            'producer_note': 'Preprocessing container metadata, frames and audio.',
+        })
+
     async def claim_reference_analysis(self, workspace_id: UUID, production_id: UUID, reference_id: UUID, token: str, *, status: str, stages: list[str], progress: int, note: str = '') -> dict[str, Any]:
         return await self.rpc('claim_reference_analysis', token, {
             'target_workspace': str(workspace_id), 'target_production': str(production_id), 'target_reference': str(reference_id),
             'stage_status': status, 'stage_list': stages, 'progress_pct': progress, 'producer_note': note[:600],
         })
 
-    async def save_reference_analysis(self, workspace_id: UUID, production_id: UUID, reference_id: UUID, token: str, analysis: ReferenceAnalysis, *, techniques: list[Technique] | None = None, operation_id: UUID | None = None) -> dict[str, Any]:
+    async def save_reference_analysis(self, workspace_id: UUID, production_id: UUID, reference_id: UUID, token: str, analysis: ReferenceAnalysis, *, identity_revision: int, techniques: list[Technique] | None = None, operation_id: UUID | None = None) -> dict[str, Any]:
         return await self.rpc('save_reference_analysis', token, {
             'target_workspace': str(workspace_id), 'target_production': str(production_id), 'target_reference': str(reference_id),
             'analysis': {
+                'identity_revision': identity_revision,
                 'role': analysis.role.value, 'capability': analysis.capability.capability.value, 'status': analysis.status.value,
                 'stages': [stage.value for stage in analysis.stages], 'progress': 100 if analysis.status == AnalysisStatus.complete else (60 if analysis.status == AnalysisStatus.partial else (0 if analysis.status == AnalysisStatus.failed else 50)),
                 'summary': analysis.summary, 'capabilities': analysis.capability.model_dump(mode='json'),

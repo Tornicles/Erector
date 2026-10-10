@@ -86,6 +86,29 @@ export function BriefCanvas({ workspaceId, productionId, surface, refresh }: Can
   </form>;
 }
 
+function ReferenceIdentityForm({ reference, busy, onSave }: {
+  reference: DirectorReferenceSurface; busy: boolean;
+  onSave: (identity: string, purpose: string, provider: string, targets: string, identityVerified: boolean) => Promise<void>;
+}) {
+  const [identity, setIdentity] = useState(reference.source_identity ?? '');
+  const [purpose, setPurpose] = useState(reference.creator_purpose ?? '');
+  const [provider, setProvider] = useState(reference.source_provider ?? '');
+  const [targets, setTargets] = useState(joinList(reference.learning_targets));
+  const [identityVerified, setIdentityVerified] = useState(reference.identity_provenance === 'creator_supplied' && !!reference.source_identity_verified_at);
+  const changed = identity !== (reference.source_identity ?? '') || purpose !== (reference.creator_purpose ?? '')
+    || provider !== (reference.source_provider ?? '') || targets !== joinList(reference.learning_targets)
+    || identityVerified !== (reference.identity_provenance === 'creator_supplied' && !!reference.source_identity_verified_at);
+  return <form className="reference-identity-form" aria-label={`Reference identity for ${reference.source_description || reference.reference_id}`}
+    onSubmit={event => { event.preventDefault(); void onSave(identity, purpose, provider, targets, identityVerified); }}>
+    <label>What is this Reference?<input required maxLength={500} value={identity} onChange={event => { setIdentity(event.target.value); setIdentityVerified(false); }} placeholder="Film title, creator, campaign, image subject…" /></label>
+    <label className="settings-toggle"><input type="checkbox" checked={identityVerified} onChange={event => setIdentityVerified(event.target.checked)} />I have checked and verified this identity against the Reference</label>
+    <label>Reference provider (optional)<input maxLength={160} value={provider} onChange={event => setProvider(event.target.value)} placeholder="Creator, studio, platform…" /></label>
+    <label>Why did you provide it?<textarea required maxLength={2000} rows={2} value={purpose} onChange={event => setPurpose(event.target.value)} placeholder="What should TONDE learn or consider for this Production?" /></label>
+    <label>What should TONDE learn? (optional, comma-separated)<input value={targets} onChange={event => setTargets(event.target.value)} placeholder="lighting, pacing, sound" /></label>
+    <div className="intel-actions"><button type="submit" disabled={busy || !changed || !identity.trim() || !purpose.trim()}>{busy ? 'Saving…' : reference.shaping_ready ? 'Save identity and purpose' : 'Save identity and purpose to unlock analysis'}</button></div>
+  </form>;
+}
+
 export function ReferenceCanvas({ workspaceId, productionId, surface, refresh }: CanvasProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,34 +116,66 @@ export function ReferenceCanvas({ workspaceId, productionId, surface, refresh }:
   const [role, setRole] = useState('style');
   const [sourceType, setSourceType] = useState<'description' | 'url'>('description');
   const [sourceValue, setSourceValue] = useState('');
+  const [sourceIdentity, setSourceIdentity] = useState('');
+  const [sourceProvider, setSourceProvider] = useState('');
+  const [creatorPurpose, setCreatorPurpose] = useState('');
+  const [learningTargets, setLearningTargets] = useState('');
   const roles = ['story', 'camera', 'lighting', 'composition', 'movement', 'pacing', 'color', 'sound', 'style', 'character', 'product', 'environment'];
-  const analyze = async (referenceId: string, assignedRole: string) => {
-    setBusy(referenceId); setError(null); setNotice(null);
-    try { const result = await productionService.analyzeDirectorReference(workspaceId, productionId, { reference_id: referenceId, role: assignedRole }); setNotice(`Analysis ${result.status}: ${result.findings_saved ?? result.findings.length} finding(s), ${result.techniques_saved ?? result.techniques.length} technique(s) saved.`); refresh(); }
+  const ready = (reference: DirectorReferenceSurface) => reference.shaping_ready;
+  const analyze = async (reference: DirectorReferenceSurface, assignedRole: string) => {
+    if (!ready(reference)) { setError('Complete the Reference identity and creator purpose before analysis.'); return; }
+    setBusy(reference.reference_id); setError(null); setNotice(null);
+    try { const result = await productionService.analyzeDirectorReference(workspaceId, productionId, { reference_id: reference.reference_id, role: assignedRole }); setNotice(`Analysis ${result.status}: ${result.findings_saved ?? result.findings.length} finding(s), ${result.techniques_saved ?? result.techniques.length} technique(s) saved.`); refresh(); }
     catch (failure) { setError(safeError(failure).message); }
     finally { setBusy(null); }
   };
-  const addAndAnalyze = async (event: FormEvent) => {
+  const addReference = async (event: FormEvent) => {
     event.preventDefault(); if (!sourceValue.trim()) return;
     setBusy('new'); setError(null); setNotice(null);
     try {
-      const referenceId = await productionService.addReference(workspaceId, productionId, sourceType === 'url' ? { source_type: 'url', source_url: sourceValue.trim() } : { source_type: 'description', source_description: sourceValue.trim() });
-      setSourceValue('');
-      const result = await productionService.analyzeDirectorReference(workspaceId, productionId, { reference_id: referenceId, role });
-      setNotice(`${sourceType === 'url' ? 'URL' : 'Written'} reference analysed: ${result.status} (${result.capability.capability.replaceAll('_', ' ')}).`);
+      const identityReady = false;
+      await productionService.addReference(workspaceId, productionId, {
+        ...(sourceType === 'url' ? { source_type: 'url' as const, source_url: sourceValue.trim() } : { source_type: 'description' as const, source_description: sourceValue.trim() }),
+        source_identity: sourceIdentity.trim() || null,
+        source_provider: sourceProvider.trim() || null,
+        identity_provenance: 'unknown', source_identity_verified: identityReady,
+        creator_purpose: creatorPurpose.trim() || null,
+        learning_targets: splitList(learningTargets).slice(0, 20),
+      });
+      setSourceValue(''); setSourceIdentity(''); setSourceProvider(''); setCreatorPurpose(''); setLearningTargets('');
+      setNotice('Reference saved. Complete its identity and creator purpose before it can shape a Production.');
       refresh();
     } catch (failure) { setError(safeError(failure).message); }
     finally { setBusy(null); }
   };
+  const saveIdentity = async (reference: DirectorReferenceSurface, identity: string, purpose: string, provider: string, targets: string, identityVerified: boolean) => {
+    setBusy(reference.reference_id); setError(null); setNotice(null);
+    try {
+      await productionService.updateReference(workspaceId, productionId, reference.reference_id, reference.revision, {
+        source_identity: identity.trim() || null,
+        source_provider: provider.trim() || null,
+        identity_provenance: identityVerified && identity.trim() ? 'creator_supplied' : identity.trim() ? 'creator_supplied' : 'unknown',
+        source_identity_verified: identityVerified,
+        creator_purpose: purpose.trim() || null,
+        learning_targets: splitList(targets).slice(0, 20),
+      });
+      setNotice('Reference identity and purpose saved.'); refresh();
+    } catch (failure) { setError(safeError(failure).message); }
+    finally { setBusy(null); }
+  };
+  const analyzeNew = async (reference: DirectorReferenceSurface, assignedRole: string) => {
+    await analyze(reference, assignedRole);
+  };
   return <div className="intel-panel" aria-label="Reference analysis">
     <header className="intel-heading"><div><p className="eyebrow">REFERENCE INTELLIGENCE</p><h3>{surface.references.length} reference(s) on this Production</h3></div><span className="pill">{Object.keys(surface.reference_roles).length} role(s) assigned</span></header>
     <p className="subtle">TONDE states what it could actually access. Metadata-only, inaccessible and unavailable media never produce fabricated observations.</p>
-    <form className="inline-form reference-add" onSubmit={addAndAnalyze}><label>New reference<select value={sourceType} onChange={event => setSourceType(event.target.value as 'description' | 'url')}><option value="description">Written description</option><option value="url">Reference URL (metadata only)</option></select></label><label>{sourceType === 'url' ? 'URL' : 'Description'}<input required value={sourceValue} onChange={event => setSourceValue(event.target.value)} placeholder={sourceType === 'url' ? 'https://…' : 'What are we looking at?'} /></label><label>Intended role<select value={role} onChange={event => setRole(event.target.value)}>{roles.map(value => <option key={value} value={value}>{value.replaceAll('_', ' ')}</option>)}</select></label><button className="primary" disabled={busy !== null || !sourceValue.trim()}><Plus size={15} />{busy === 'new' ? 'Analysing…' : 'Add & analyse'}</button></form>
+    <form className="inline-form reference-add" onSubmit={addReference}><label>New reference<select value={sourceType} onChange={event => setSourceType(event.target.value as 'description' | 'url')}><option value="description">Written description</option><option value="url">Reference URL (metadata only)</option></select></label><label>{sourceType === 'url' ? 'URL' : 'Description'}<input required value={sourceValue} onChange={event => setSourceValue(event.target.value)} placeholder={sourceType === 'url' ? 'https://…' : 'What are we looking at?'} /></label><label>What is it? (optional until ready)<input maxLength={500} value={sourceIdentity} onChange={event => setSourceIdentity(event.target.value)} placeholder="Film title, creator, campaign…" /></label><label>Why provide it? (optional until ready)<textarea maxLength={2000} rows={2} value={creatorPurpose} onChange={event => setCreatorPurpose(event.target.value)} placeholder="What should TONDE learn or consider?" /></label><label>Provider (optional)<input maxLength={160} value={sourceProvider} onChange={event => setSourceProvider(event.target.value)} /></label><label>Learning targets (optional)<input value={learningTargets} onChange={event => setLearningTargets(event.target.value)} placeholder="lighting, pacing, sound" /></label><button className="primary" disabled={busy !== null || !sourceValue.trim()}><Plus size={15} />{busy === 'new' ? 'Saving…' : 'Save reference'}</button></form>
+    <p className="subtle">A Reference can be saved before it is identified. TONDE will not analyze or use it to shape a Production until you separately identify the source and state your purpose.</p>
     {error && <p role="alert" className="error-text">{error}</p>}{notice && <p role="status" className="subtle">{notice}</p>}
-    {!surface.references.length ? <EmptyState title="No references recorded">Add a written description, a URL or an uploaded file. Analysis always states its capability before it makes a claim.</EmptyState> : <ul className="reference-list">{surface.references.map(reference => <li key={reference.reference_id} className="reference-card">
-      <header><div><h4>{reference.source_description || reference.source_url || 'Uploaded reference'}</h4><p className="subtle">{reference.source_type.replaceAll('_', ' ')} · {reference.rights_classification.replaceAll('_', ' ')} · {reference.state.replaceAll('_', ' ')}</p></div><span className="pill">{reference.role.replaceAll('_', ' ')}</span></header>
-      <ReferenceFindings reference={reference} />
-      <div className="intel-actions"><button type="button" disabled={busy !== null} onClick={() => void analyze(reference.reference_id, reference.role)}><RefreshCw size={14} />{busy === reference.reference_id ? 'Analysing…' : reference.status === 'not_started' ? 'Analyse now' : 'Re-analyse'}</button><label className="inline-role">Role<select value={reference.role} onChange={event => setRole(event.target.value)} aria-label={`Role for ${reference.source_description || reference.reference_id}`}>{roles.map(value => <option key={value} value={value}>{value.replaceAll('_', ' ')}</option>)}</select></label><button type="button" disabled={busy !== null} onClick={() => void analyze(reference.reference_id, role)}><Scan size={14} /> Analyse with this role</button></div>
+    {!surface.references.length ? <EmptyState title="No references recorded">Add a written description or a URL. Analysis always states its capability before it makes a claim.</EmptyState> : <ul className="reference-list">{surface.references.map(reference => <li key={reference.reference_id} className="reference-card">
+      <header><div><h4>{reference.source_identity || reference.source_description || reference.source_url || 'Unidentified Reference'}</h4><p className="subtle">{reference.source_type.replaceAll('_', ' ')} · {reference.rights_classification.replaceAll('_', ' ')} · {reference.state.replaceAll('_', ' ')}</p></div><span className="pill">{ready(reference) ? reference.role.replaceAll('_', ' ') : 'Identity needed'}</span></header>
+      <ReferenceIdentityForm key={`${reference.reference_id}:${reference.revision}`} reference={reference} busy={busy !== null} onSave={(identity, purpose, provider, targets, verified) => saveIdentity(reference, identity, purpose, provider, targets, verified)} />
+      {ready(reference) ? <><p><strong>Creator purpose:</strong> {reference.creator_purpose}</p>{reference.learning_targets.length > 0 && <p className="subtle"><strong>Learning targets:</strong> {joinList(reference.learning_targets)}</p>}<ReferenceFindings reference={reference} /><div className="intel-actions"><label className="inline-role">Intended role<select value={role} onChange={event => setRole(event.target.value)} aria-label={`Role for ${reference.source_identity || reference.reference_id}`}>{roles.map(value => <option key={value} value={value}>{value.replaceAll('_', ' ')}</option>)}</select></label><button type="button" disabled={busy !== null} onClick={() => void analyzeNew(reference, role)}><Scan size={14} />{busy === reference.reference_id ? 'Analysing…' : reference.status === 'not_started' ? 'Analyse Reference' : 'Re-analyse'}</button></div></> : <p className="capability-note" role="status">Saved, but excluded from Director evidence and Production shaping until its identity has verified provenance and its creator purpose is complete.</p>}
     </li>)}</ul>}
   </div>;
 }
@@ -159,7 +214,7 @@ export function StoryCanvas({ workspaceId, productionId, surface, refresh }: Can
   </div>;
 }
 
-export function ScriptCanvas({ workspaceId, productionId, surface, refresh }: CanvasProps) {
+export function ScriptCanvas({ workspaceId, productionId, surface, refresh, onSelectScene }: CanvasProps & { onSelectScene?: (sceneId: string) => void }) {
   const [alternatives, setAlternatives] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -191,7 +246,9 @@ export function ScriptCanvas({ workspaceId, productionId, surface, refresh }: Ca
     {Object.keys(alternatives).length > 0 && <ul className="line-alternatives" aria-label="Line alternatives">{Object.entries(alternatives).map(([lineId, options]) => <li key={lineId}><p className="eyebrow">{lineId}</p><ul>{options.map(option => <li key={option}>{option}</li>)}</ul></li>)}</ul>}
     {document?.content ? <section aria-label="Script document"><h4>Persisted Script</h4><pre className="script-document">{document.content}</pre></section> : <p className="subtle">No persisted Script document exists yet.</p>}
     <section aria-label="Structured dialogue"><h4>Structured Scenes and Dialogue</h4><ol className="script-scenes">{surface.scenes.map(scene => <li key={scene.id}>
-      <header><p className="eyebrow">SCENE {scene.order ?? '—'}</p><h4>{scene.title}</h4><span className="pill">{formatRuntime(scene.planned_duration_ms)}</span></header>
+      <header><p className="eyebrow">SCENE {scene.order ?? '—'}</p>{onSelectScene
+        ? <h4><button type="button" className="text-link" onClick={() => onSelectScene(scene.id)}>{scene.title}</button></h4>
+        : <h4>{scene.title}</h4>}<span className="pill">{formatRuntime(scene.planned_duration_ms)}</span></header>
       {scene.environment && <p className="subtle">Environment: {scene.environment}</p>}
       {scene.action_lines.length > 0 && <ul className="action-lines" aria-label={`Action for scene ${scene.order ?? ''}`}>{scene.action_lines.map(line => <li key={line}>{line}</li>)}</ul>}
       {scene.products.length > 0 && <p className="subtle">Product direction: {joinList(scene.products)}</p>}

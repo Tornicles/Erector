@@ -320,6 +320,13 @@ test('reference analysis persists capability, staged progress, findings and tech
     "insert into tonde.production_references(workspace_id,production_id,source_type,source_description,rights_classification) values($1,$2,'upload','Creator reference','user_owned') returning id",
     [wa, production],
   ));
+  // Amendment B: identity and creator purpose are established by the scoped creator action, not
+  // written beside it, before an analysis of the Reference counts as Production shaping evidence.
+  await asUser(A, () => scalar('select tonde.reference_identity_save($1,$2,$3,$4,$5)',
+    [wa, production, reference, 1, JSON.stringify({
+      source_identity: 'Creator reference upload', source_identity_verified: true,
+      creator_purpose: 'Learn the camera movement and the reveal pacing for this Production',
+    })]));
 
   const claimed = await asUser(A, () => scalar(
     "select tonde.claim_reference_analysis($1,$2,$3,'preprocessing',array['queued','preprocessing'],10,'Preprocessing metadata and frames.')",
@@ -328,6 +335,7 @@ test('reference analysis persists capability, staged progress, findings and tech
   assert.equal(claimed.status, 'preprocessing');
 
   const analysis = {
+    identity_revision: await scalar('select identity_revision from tonde.production_references where id=$1', [reference]),
     role: 'camera', capability: 'partial_media_available', status: 'complete',
     stages: ['queued', 'preprocessing', 'analyzing', 'synthesizing'],
     progress: 100, summary: 'A slow push reveals the Product after a lifestyle setup.',

@@ -1,114 +1,563 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Camera, Sparkles, List, FileText, Layers, Film, ArrowUpRight, BookOpen, Compass, Gauge, RefreshCw, Send } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import {
+  ArrowUpRight, BookOpen, Camera, Clapperboard, Compass, FileText, Film, Gauge, Layers, Lightbulb,
+  List, Library, Music, Network, Scissors, Send, ShieldCheck, Smartphone, Sparkles, Users, Package, PackageCheck, Palette, Shirt, Target, Repeat, Rows, GitBranch, ClipboardCheck,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { productionService, PAGE_SIZE, type DirectorCommandResult, type DirectorCommandPreview, type DirectorStudio } from '../services/productions';
+import {
+  productionService, type DirectorCommandPreview, type DirectorCommandResult, type DirectorStudio,
+  type StudioApproval, type StudioReadModel, type StudioScene, type StudioShot, type StudioWriteResult,
+} from '../services/productions';
 import { AppError, safeError } from '../services/errors';
 import { useAutosave, useUnsavedNavigation } from '../hooks/useAutosave';
 import { ErrorState, LoadingState, PartialState } from '../components/StateComponents';
 import { BriefCanvas, DirectorCommandResultPanel, RealityCanvas, ReferenceCanvas, ScriptCanvas, StoryCanvas, TechniqueTable } from '../components/StudioCanvases';
-import { formatRuntime, type ExecutionFace, type Production, type Scene } from '../types/domain';
+import { AssetCanvas, AudioCanvas, FoundationCanvas, SceneCanvas, ShotCanvas, TimingInspector } from '../studio/StudioCanvases5';
+import { StudioTimeline, approvalLabel, formatMs, type TimelineZoom } from '../studio/StudioTimeline';
+import { RealProductionCanvas } from '../studio/RealProduction';
+import { AiCreationCanvas } from '../studio/AICreation';
+import { MovieModeCanvas } from '../studio/MovieMode';
+import { SeriesStudioCanvas } from '../studio/SeriesStudio';
+import { ProductionIntelligenceCanvas } from '../studio/ProductionIntelligence';
+import { ProductionContinuityCanvas } from '../studio/ProductionContinuity';
+import { ProductionMemoryCanvas } from '../studio/ProductionMemory';
+import { ProductionVersioningCanvas } from '../studio/ProductionVersioning';
+import { ProductionReadinessCanvas } from '../studio/ProductionReadiness';
+import { PublishingCanvas } from '../prompt10/Publishing';
+import { ExportsCanvas } from '../prompt10/Exports';
+import { ProductionShotMatchCanvas } from '../studio/ProductionShotMatch';
+import { formatRuntime, type ExecutionFace, type Production } from '../types/domain';
 import { DEFAULT_EXECUTION_FACE, PRODUCT } from '../types/product';
+
+type StudioTool =
+  | 'Brief' | 'References' | 'Story' | 'Script' | 'Reality Check'
+  | 'Real Production' | 'AI Creation' | 'Movie Mode' | 'Series'
+  | 'Scenes' | 'Shots' | 'Impact' | 'Continuity' | 'Memory' | 'Versions' | 'Readiness'
+  | 'Publishing' | 'Exports'
+  | 'Characters' | 'World' | 'Products' | 'Wardrobe' | 'Style'
+  | 'Prompts' | 'Audio' | 'Edit' | 'Results';
+
+// Each execution face has a face of its own, but both are the same Production with the same Shots.
+const FACE_TOOL: Record<ExecutionFace, StudioTool> = { real: 'Real Production', ai: 'AI Creation' };
+const FACE_TOOL_NAMES: StudioTool[] = ['Real Production', 'AI Creation'];
+
+const TOOLS: Array<{ name: StudioTool; icon: typeof Layers; group: 'creative' | 'execution' }> = [
+  { name: 'Brief', icon: Compass, group: 'creative' },
+  { name: 'Story', icon: BookOpen, group: 'creative' },
+  { name: 'Script', icon: FileText, group: 'creative' },
+  { name: 'Movie Mode', icon: Rows, group: 'creative' },
+  { name: 'Impact', icon: Network, group: 'creative' },
+  { name: 'Continuity', icon: ShieldCheck, group: 'creative' },
+  { name: 'Memory', icon: Library, group: 'creative' },
+  { name: 'Versions', icon: GitBranch, group: 'creative' },
+  { name: 'Scenes', icon: List, group: 'creative' },
+  { name: 'Shots', icon: Clapperboard, group: 'creative' },
+  { name: 'References', icon: Film, group: 'creative' },
+  { name: 'Real Production', icon: Camera, group: 'execution' },
+  { name: 'AI Creation', icon: Sparkles, group: 'execution' },
+  { name: 'Characters', icon: Users, group: 'execution' },
+  { name: 'World', icon: Layers, group: 'execution' },
+  { name: 'Products', icon: Package, group: 'execution' },
+  { name: 'Wardrobe', icon: Shirt, group: 'execution' },
+  { name: 'Style', icon: Palette, group: 'execution' },
+  { name: 'Prompts', icon: Lightbulb, group: 'execution' },
+  { name: 'Audio', icon: Music, group: 'execution' },
+  { name: 'Edit', icon: Scissors, group: 'execution' },
+  { name: 'Results', icon: Target, group: 'execution' },
+  { name: 'Series', icon: Repeat, group: 'execution' },
+  { name: 'Readiness', icon: ClipboardCheck, group: 'execution' },
+  { name: 'Publishing', icon: Send, group: 'execution' },
+  { name: 'Exports', icon: PackageCheck, group: 'execution' },
+  { name: 'Reality Check', icon: Gauge, group: 'execution' },
+];
+
+const SAVE_LABELS = { idle: 'No unsaved changes', dirty: 'Unsaved changes', saving: 'Saving…', saved: 'Saved', failed: 'Save failed', offline: 'Offline · not saved', conflict: 'Conflict · not saved' } as const;
+
 export function StudioPage() {
-  const { productionId } = useParams(); const { workspaceId } = useAuth();
-  const [production, setProduction] = useState<Production | null>(null); const [error, setError] = useState<string | null>(null); const [attempt, setAttempt] = useState(0);
+  const { productionId } = useParams();
+  const { workspaceId } = useAuth();
+  const [production, setProduction] = useState<Production | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!workspaceId || !productionId) return;
     let active = true; setProduction(null); setError(null);
     productionService.get(workspaceId, productionId).then(data => {
       if (active) { setProduction(data); localStorage.setItem(`tonde:${workspaceId}:production`, data.id); }
-    }).catch(e => { if (active) setError(safeError(e).message); });
+    }).catch(failure => { if (active) setError(safeError(failure).message); });
     return () => { active = false; };
   }, [workspaceId, productionId, attempt]);
-  if (error) return <ErrorState message={error} retry={() => setAttempt(v => v + 1)} />;
+  if (error) return <ErrorState message={error} retry={() => setAttempt(value => value + 1)} />;
   if (!production) return <LoadingState label="Opening your production…" />;
-  return <StudioComposition key={production.id} initial={production} reload={() => setAttempt(v => v + 1)} />;
+  return <StudioComposition key={production.id} initial={production} reload={() => setAttempt(value => value + 1)} />;
 }
-const STUDIO_TOOLS: Array<[string, typeof Layers]> = [
-  ['Overview', Layers], ['Brief', Compass], ['References', Film], ['Story', BookOpen], ['Script', FileText], ['Reality Check', Gauge], ['Scenes & shots', List],
-];
+
 export function StudioComposition({ initial, reload }: { initial: Production; reload: () => void }) {
   const workspaceId = initial.workspace_id;
+  const [params, setParams] = useSearchParams();
   const [face, setFace] = useState<ExecutionFace>(DEFAULT_EXECUTION_FACE);
-  const [tool, setTool] = useState('Overview'); const [directorOpen, setDirectorOpen] = useState(true);
-  const [scenes, setScenes] = useState<Scene[]>([]); const [scenePage, setScenePage] = useState(0); const [sceneLoading, setSceneLoading] = useState(true); const [sceneError, setSceneError] = useState<string | null>(null); const [sceneAttempt, setSceneAttempt] = useState(0);
-  const [surface, setSurface] = useState<DirectorStudio | null>(null); const [surfaceLoading, setSurfaceLoading] = useState(true); const [surfaceError, setSurfaceError] = useState<string | null>(null); const [surfaceAttempt, setSurfaceAttempt] = useState(0);
+  const [directorOpen, setDirectorOpen] = useState(true);
+  const [zoom, setZoom] = useState<TimelineZoom>('scene');
+  const [model, setModel] = useState<StudioReadModel | null>(null);
+  const [modelLoading, setModelLoading] = useState(true);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [surface, setSurface] = useState<DirectorStudio | null>(null);
+  const [surfaceError, setSurfaceError] = useState<string | null>(null);
+  const [surfaceAttempt, setSurfaceAttempt] = useState(0);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const persisted = useRef(initial);
-  const save = useAutosave(initial.title, async title => {
-    if (!title.trim() || title.trim().length > 160) throw new AppError('validation', 'Enter a production title between 1 and 160 characters.');
-    persisted.current = await productionService.saveTitle(persisted.current, title);
+
+  const requestedTool = (params.get('tool') as StudioTool) ?? 'Scenes';
+  // The face bar and the tool list must agree: a deep link to the AI face opens AI Creation,
+  // and an unknown tool name falls back rather than rendering a blank canvas.
+  const tool = FACE_TOOL_NAMES.includes(requestedTool) ? requestedTool : (TOOLS.some(item => item.name === requestedTool) ? requestedTool : 'Scenes');
+  const selectedSceneId = params.get('scene');
+  const selectedShotId = params.get('shot');
+  // React Router builds its params from the render that created the writer, so a handler
+  // can hold a query that is already out of date. Every Studio URL write therefore merges
+  // against this ref, which is always the live query: a deep-link repair and a selection
+  // made in the same tick compose instead of one silently replacing the other.
+  const liveSearch = useRef(params.toString());
+  liveSearch.current = params.toString();
+  const writeParams = useCallback((mutate: (search: URLSearchParams) => void) => {
+    const search = new URLSearchParams(liveSearch.current);
+    mutate(search);
+    liveSearch.current = search.toString();
+    setParams(search, { replace: true });
+  }, [setParams]);
+  // Selection writes merge against the live query rather than a snapshot captured when the
+  // handler was created: a deep-link repair resolving in the same tick must not clobber a
+  // selection the creator just made, and vice versa.
+  const setUrl = useCallback((next: { tool?: StudioTool; scene?: string | null; shot?: string | null; series?: string | null }) => {
+    writeParams(search => {
+      if (next.tool !== undefined) search.set('tool', next.tool);
+      if (next.scene !== undefined) next.scene ? search.set('scene', next.scene) : search.delete('scene');
+      if (next.shot !== undefined) next.shot ? search.set('shot', next.shot) : search.delete('shot');
+      if (next.series !== undefined) next.series ? search.set('series', next.series) : search.delete('series');
+    });
+  }, [writeParams]);
+
+  // A deep link carries the face implicitly through its tool, so the face bar follows the tool.
+  // The creator's own face choice is preserved for every other tool.
+  useEffect(() => {
+    if (tool === FACE_TOOL.ai) setFace('ai');
+    else if (tool === FACE_TOOL.real) setFace('real');
+  }, [tool]);
+
+  const scenes = model?.scenes ?? [];
+  const selectedScene = scenes.find(scene => scene.id === selectedSceneId) ?? null;
+  const selectedShot = useMemo(() => {
+    if (!selectedShotId) return null;
+    return scenes.flatMap(scene => scene.shots).find(shot => shot.id === selectedShotId)
+      ?? model?.orphan_shots.find(shot => shot.id === selectedShotId) ?? null;
+  }, [scenes, model, selectedShotId]);
+
+  const title = useAutosave(initial.title, async next => {
+    if (!next.trim() || next.trim().length > 160) throw new AppError('validation', 'Enter a production title between 1 and 160 characters.');
+    persisted.current = await productionService.saveTitle(persisted.current, next);
   });
-  useUnsavedNavigation(save.dirty);
+  useUnsavedNavigation(title.dirty);
+
+  const refresh = useCallback(() => setAttempt(value => value + 1), []);
   useEffect(() => {
-    let active = true; setSceneLoading(true); setSceneError(null);
-    productionService.scenes(initial.workspace_id, initial.id, scenePage * PAGE_SIZE).then(data => { if (active) setScenes(data); }).catch(e => { if (active) setSceneError(safeError(e).message); }).finally(() => { if (active) setSceneLoading(false); });
+    let active = true; setModelLoading(true); setModelError(null);
+    productionService.studioSurface(workspaceId, initial.id).then(data => {
+      if (!active) return;
+      // A read model must be a real projection; an empty or malformed response is an error,
+      // never something to render as an empty Studio.
+      if (!data || !Array.isArray(data.scenes) || !data.timing) {
+        throw new AppError('unavailable', 'The Studio could not read this Production. Nothing is shown rather than an invented structure.');
+      }
+      setModel(data); setConflict(false);
+      // A deep link must never silently open the wrong Production context, and the query is
+      // canonicalised in the same step so a hand-typed tool name cannot leave an unstable URL.
+      writeParams(search => {
+        if (!search.get('tool')) search.set('tool', 'Scenes');
+        if (!search.get('scene') && data.scenes.length > 0) search.set('scene', data.scenes[0].id);
+      });
+    }).catch(failure => {
+      if (!active) return;
+      const error = safeError(failure);
+      setModel(null);
+      setModelError(error.kind === 'conflict' ? `${error.message} Reload to see the newer Production state.` : error.message);
+    }).finally(() => { if (active) setModelLoading(false); });
     return () => { active = false; };
-  }, [initial.id, initial.workspace_id, scenePage, sceneAttempt]);
+    // Deliberately keyed on the Production only: the deep-link repair below reads the
+    // current params without re-fetching the Production on every selection change.
+  }, [workspaceId, initial.id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    let active = true; setSurfaceLoading(true); setSurfaceError(null);
-    productionService.directorStudioSurface(initial.workspace_id, initial.id).then(data => { if (active) setSurface(data); }).catch(e => { if (active) { setSurface(null); setSurfaceError(safeError(e).message); } }).finally(() => { if (active) setSurfaceLoading(false); });
+    let active = true; setSurfaceError(null);
+    productionService.directorStudioSurface(workspaceId, initial.id).then(data => { if (active) setSurface(data); })
+      .catch(failure => { if (active) { setSurface(null); setSurfaceError(safeError(failure).message); } });
     return () => { active = false; };
-  }, [initial.id, initial.workspace_id, surfaceAttempt]);
-  const refresh = () => setSurfaceAttempt(v => v + 1);
-  const saveLabels = { idle: 'No unsaved changes', dirty: 'Unsaved changes', saving: 'Saving…', saved: 'Saved', failed: 'Save failed', offline: 'Offline · not saved', conflict: 'Conflict · not saved' };
-  const providerLabel = surface ? (surface.provider.configured ? `Director · ${surface.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
-  return <div className="studio-shell">
-    <header className="production-header"><div><p className="eyebrow">MASTER PRODUCTION</p><label className="sr-only" htmlFor="production-title">Production title</label><input id="production-title" aria-label="Production title" value={save.value} onChange={e => save.setValue(e.target.value)} maxLength={160} disabled={!!initial.locked_at} /></div><div className="production-meta"><span>{formatRuntime(initial.planned_duration_ms)}</span><span className="pill">{PRODUCT.approvals[initial.approval]}</span><span role="status" title={save.lastSavedAt ? `Last saved ${save.lastSavedAt.toLocaleTimeString()}` : undefined}>{saveLabels[save.state]}</span><span className="pill" title="Export generation is introduced in a later prompt">Export · later</span></div></header>
-    {save.error && <div className="save-error" role="alert">{save.error}<button onClick={save.state === 'conflict' ? reload : save.retry}>{save.state === 'conflict' ? 'Reload latest' : 'Retry save'}</button></div>}
-    <div className="studio-face-bar"><div role="group" aria-label="Execution face"><button aria-pressed={face === 'real'} className={face === 'real' ? 'selected' : ''} onClick={() => setFace('real')}><Camera size={16} /> {PRODUCT.executionFaces.real.toUpperCase()}</button><button aria-pressed={face === 'ai'} className={face === 'ai' ? 'selected' : ''} onClick={() => setFace('ai')}><Sparkles size={16} /> {PRODUCT.executionFaces.ai.toUpperCase()}</button></div><button className="director-toggle" onClick={() => setDirectorOpen(!directorOpen)} aria-expanded={directorOpen}>{directorOpen ? 'Hide Director' : 'Show Director'}</button><span className="subtle">Shared story. Distinct execution.</span></div>
-    <div className={`studio-workspace ${directorOpen ? '' : 'director-hidden'}`}><aside className="production-tools" aria-label="Production tools"><p className="eyebrow">PRODUCTION</p>{STUDIO_TOOLS.map(([name, Icon]) => <button key={name} onClick={() => setTool(name)} aria-pressed={tool === name} className={tool === name ? 'selected' : ''}><Icon size={17} />{name}</button>)}<button onClick={refresh} disabled={surfaceLoading}><RefreshCw size={17} />{surfaceLoading ? 'Refreshing…' : 'Refresh intelligence'}</button></aside>
-      <section className="working-canvas" aria-label="Production working canvas"><div className="canvas-heading"><p className="eyebrow">{PRODUCT.executionFaces[face].toUpperCase()} / {tool.toUpperCase()}</p><span className="pill">{providerLabel}</span></div>
-        {tool === 'Overview' && <OverviewCanvas surface={surface} surfaceLoading={surfaceLoading} surfaceError={surfaceError} retry={refresh} scenes={scenes} sceneLoading={sceneLoading} sceneError={sceneError} retryScenes={() => setSceneAttempt(v => v + 1)} scenePage={scenePage} setScenePage={setScenePage} face={face} />}
-        {tool === 'Scenes & shots' && <SceneOverview scenes={scenes} sceneLoading={sceneLoading} sceneError={sceneError} retry={() => setSceneAttempt(v => v + 1)} scenePage={scenePage} setScenePage={setScenePage} />}
-        {(tool === 'Brief' || tool === 'References' || tool === 'Story' || tool === 'Script' || tool === 'Reality Check') && (surfaceLoading ? <LoadingState label="Loading Director intelligence…" /> : surfaceError || !surface ? <PartialState title="Director intelligence is unavailable" action={<button onClick={refresh}>Try again</button>}>{surfaceError ?? 'Connect the TONDE service to load the Brief, Story, Script, References and Reality Check for this Production. Nothing is simulated locally.'}</PartialState> : <>
-          {tool === 'Brief' && <BriefCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />}
-          {tool === 'References' && <ReferenceCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />}
-          {tool === 'Story' && <StoryCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />}
-          {tool === 'Script' && <ScriptCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />}
-          {tool === 'Reality Check' && <RealityCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />}
-        </>)}
-      </section>
-      <DirectorPanel open={directorOpen} workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={refresh} />
+  }, [workspaceId, initial.id, surfaceAttempt]);
+
+  const run = useCallback(async <T,>(action: () => Promise<T>, describe: (result: T) => string): Promise<T | null> => {
+    setBusy(true); setActionError(null); setActionNote(null);
+    try {
+      const result = await action();
+      setActionNote(describe(result));
+      refresh(); setSurfaceAttempt(value => value + 1);
+      return result;
+    } catch (failure) {
+      const error = safeError(failure);
+      setActionError(error.message);
+      if (error.kind === 'conflict') setConflict(true);
+      return null;
+    } finally { setBusy(false); }
+  }, [refresh]);
+
+  const describeTiming = (result: StudioWriteResult) => result.timing
+    ? `Saved. Runtime ${result.timing.status}${result.timing.delta_ms ? ` by ${formatMs(Math.abs(result.timing.delta_ms))}` : ''}.`
+    : 'Saved.';
+  // Edited approved content stops being approved; the creator is told immediately.
+  const describeWrite = (result: StudioWriteResult) => result.approval === 'changed_after_approval'
+    ? `${describeTiming(result)} This was approved content, so it is now Changed After Approval - review it again.`
+    : describeTiming(result);
+
+  const sceneActions = {
+    create: (input: Record<string, unknown>) => run(
+      () => productionService.createStudioScene(workspaceId, initial.id, input),
+      result => { if (result.scene_id) setUrl({ scene: result.scene_id, shot: null }); return describeTiming(result); }),
+    update: (scene: StudioScene, patch: Record<string, unknown>) => run(
+      () => productionService.updateStudioScene(workspaceId, initial.id, scene.id, patch), describeWrite),
+    duplicate: (scene: StudioScene) => run(
+      () => productionService.createStudioScene(workspaceId, initial.id, {
+        title: `${scene.title} copy`, purpose: scene.purpose, story_beat: scene.story_beat,
+        description: scene.description, opening_state: scene.opening_state, ending_state: scene.ending_state,
+        visual_intent: scene.visual_intent, dialogue_notes: scene.dialogue_notes,
+        expected_production_revision: model?.production.revision,
+      }), describeTiming),
+    archive: (scene: StudioScene, cascade: boolean) => run(
+      () => productionService.archiveStudioScene(workspaceId, initial.id, scene.id, scene.revision, cascade),
+      result => { if (selectedSceneId === scene.id) setUrl({ scene: null, shot: null }); return `Archived Scene${result.archived_shots ? ` and ${result.archived_shots} Shot(s)` : ''}. Content is archived, not deleted.`; }),
+    move: (scene: StudioScene, direction: -1 | 1) => {
+      const ordered = scenes.map(item => item.id);
+      const index = ordered.indexOf(scene.id);
+      const target = index + direction;
+      if (target < 0 || target >= ordered.length) return Promise.resolve(null);
+      [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+      return run(() => productionService.reorderStudioScenes(workspaceId, initial.id, ordered, model?.production.revision),
+        result => `Scene order saved (${result.scenes ?? ordered.length} Scenes).`);
+    },
+    drop: (draggedId: string, targetId: string) => {
+      const ordered = scenes.map(item => item.id);
+      const from = ordered.indexOf(draggedId);
+      const to = ordered.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return Promise.resolve(null);
+      ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+      return run(() => productionService.reorderStudioScenes(workspaceId, initial.id, ordered, model?.production.revision),
+        result => `Scene order saved (${result.scenes ?? ordered.length} Scenes).`);
+    },
+    toggleLock: (scene: StudioScene) => run(
+      () => productionService.setStudioLock(workspaceId, initial.id, 'scene', scene.id, !scene.locked_at, scene.revision),
+      result => `${result.locked ? 'Locked' : 'Unlocked'} the Scene.`),
+    approve: (scene: StudioScene, approval: StudioApproval) => run(
+      () => productionService.setStudioApproval(workspaceId, initial.id, 'scene', scene.id, approval, scene.revision),
+      result => `Scene is ${approvalLabel(result.approval)}.`),
+    reconcile: (scene: StudioScene) => run(
+      () => productionService.reconcileStudioRuntime(workspaceId, initial.id, scene.id, model?.production.revision),
+      result => result.adjusted_ms === 0 ? 'The runtime already matches its target.' : `Adjusted the last Shot of that Scene by ${result.adjusted_ms} ms.`),
+  };
+
+  const shotActions = {
+    create: (input: Record<string, unknown>) => run(
+      () => productionService.createStudioShot(workspaceId, initial.id, input),
+      result => { if (result.shot_id) setUrl({ shot: result.shot_id }); return describeTiming(result); }),
+    update: (shot: StudioShot, patch: Record<string, unknown>) => run(
+      () => productionService.updateStudioShot(workspaceId, initial.id, shot.id, patch), describeWrite),
+    duplicate: (shot: StudioShot) => run(
+      () => productionService.createStudioShot(workspaceId, initial.id, {
+        scene_id: shot.scene_id, title: `${shot.title} copy`, description: shot.description, action: shot.action,
+        purpose: shot.purpose, subject: shot.subject, framing: shot.framing, angle: shot.angle, movement: shot.movement,
+        composition: shot.composition, transition: shot.transition, story_relationship: shot.story_relationship,
+        creative_notes: shot.creative_notes, execution_method: shot.execution_method,
+        duration_ms: shot.planned_duration_ms, expected_production_revision: model?.production.revision,
+      }), describeTiming),
+    archive: (shot: StudioShot) => run(
+      () => productionService.archiveStudioShot(workspaceId, initial.id, shot.id, shot.revision),
+      () => { if (selectedShotId === shot.id) setUrl({ shot: null }); return 'Archived the Shot. It stays readable and out of the live order.'; }),
+    move: (shot: StudioShot, direction: -1 | 1) => {
+      const scene = scenes.find(item => item.id === shot.scene_id);
+      if (!scene) return Promise.resolve(null);
+      const ordered = scene.shots.map(item => item.id);
+      const index = ordered.indexOf(shot.id);
+      const target = index + direction;
+      if (target < 0 || target >= ordered.length) return Promise.resolve(null);
+      [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+      return run(() => productionService.reorderStudioShots(workspaceId, initial.id, scene.id, ordered, model?.production.revision),
+        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Scene).`);
+    },
+    drop: (draggedId: string, targetId: string, sceneId: string) => {
+      const scene = scenes.find(item => item.id === sceneId);
+      if (!scene) return Promise.resolve(null);
+      const ordered = scene.shots.map(item => item.id);
+      const from = ordered.indexOf(draggedId);
+      const to = ordered.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return Promise.resolve(null);
+      ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+      return run(() => productionService.reorderStudioShots(workspaceId, initial.id, sceneId, ordered, model?.production.revision),
+        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Scene).`);
+    },
+    moveToScene: (shot: StudioShot, sceneId: string) => run(
+      () => productionService.moveStudioShot(workspaceId, initial.id, shot.id, sceneId, shot.revision),
+      result => `Moved the Shot to Scene ${scenes.find(scene => scene.id === result.scene_id)?.order ?? ''}.`),
+    toggleLock: (shot: StudioShot) => run(
+      () => productionService.setStudioLock(workspaceId, initial.id, 'shot', shot.id, !shot.locked_at, shot.revision),
+      result => `${result.locked ? 'Locked' : 'Unlocked'} the Shot.`),
+    approve: (shot: StudioShot, approval: StudioApproval) => run(
+      () => productionService.setStudioApproval(workspaceId, initial.id, 'shot', shot.id, approval, shot.revision),
+      result => `Shot is ${approvalLabel(result.approval)}.`),
+    bulk: (shotIds: string[], patch: { execution_method?: StudioShot['execution_method']; approval?: StudioApproval }) => {
+      const targets = scenes.flatMap(scene => scene.shots).filter(shot => shotIds.includes(shot.id));
+      return run(async () => {
+        for (const shot of targets) {
+          if (patch.execution_method) await productionService.updateStudioShot(workspaceId, initial.id, shot.id, { expected_revision: shot.revision, execution_method: patch.execution_method });
+          if (patch.approval) await productionService.setStudioApproval(workspaceId, initial.id, 'shot', shot.id, patch.approval, shot.revision + (patch.execution_method ? 1 : 0));
+        }
+        return { count: targets.length };
+      }, result => `Updated ${result.count} Shot(s) with the same change.`);
+    },
+  };
+
+  const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
+
+  return <div className="studio-shell studio5-shell">
+    <header className="production-header">
+      <div>
+        <p className="eyebrow">MASTER PRODUCTION</p>
+        <label className="sr-only" htmlFor="production-title">Production title</label>
+        <input id="production-title" aria-label="Production title" value={title.value}
+          onChange={event => title.setValue(event.target.value)} maxLength={160} disabled={!!initial.locked_at} />
+      </div>
+      <div className="production-meta">
+        <span>{PRODUCT.productionTypes[initial.production_type as keyof typeof PRODUCT.productionTypes] ?? initial.production_type.replaceAll('_', ' ')}</span>
+        <span>{formatRuntime(initial.planned_duration_ms)}</span>
+        <span className="pill">{approvalLabel(model?.production.approval ?? initial.approval)}</span>
+        {model?.production.locked_at && <span className="pill">Locked</span>}
+        <span role="status" title={title.lastSavedAt ? `Last saved ${title.lastSavedAt.toLocaleTimeString()}` : undefined}>{SAVE_LABELS[title.state]}</span>
+        <button type="button" className="text-link" onClick={() => {
+          setActionNote('Export packages are generated with Prompt 10. Nothing is exported yet.');
+        }}>Export · later</button>
+      </div>
+    </header>
+
+    {title.error && <div className="save-error" role="alert">{title.error}
+      <button onClick={title.state === 'conflict' ? reload : title.retry}>{title.state === 'conflict' ? 'Reload latest' : 'Retry save'}</button></div>}
+    {conflict && <div className="save-error" role="alert">
+      This Production changed in another session. Reload before applying your change.
+      <button onClick={() => { setConflict(false); refresh(); }}>Reload Studio</button>
+    </div>}
+    {actionError && <div className="save-error" role="alert">{actionError}<button onClick={() => setActionError(null)}>Dismiss</button></div>}
+    {actionNote && <p className="studio5-note" role="status">{actionNote}</p>}
+
+    <div className="studio-face-bar">
+      <div role="group" aria-label="Execution face">
+        <button aria-pressed={face === 'real'} className={face === 'real' ? 'selected' : ''}
+          onClick={() => { setFace('real'); if (tool === FACE_TOOL.ai) setUrl({ tool: FACE_TOOL.real }); }}>
+          <Camera size={16} /> {PRODUCT.executionFaces.real.toUpperCase()}</button>
+        <button aria-pressed={face === 'ai'} className={face === 'ai' ? 'selected' : ''}
+          onClick={() => { setFace('ai'); if (tool === FACE_TOOL.real) setUrl({ tool: FACE_TOOL.ai }); }}>
+          <Sparkles size={16} /> {PRODUCT.executionFaces.ai.toUpperCase()}</button>
+      </div>
+      <span className="subtle">One Master Production, one set of Shots. {face === 'real'
+        ? 'Real execution planning shows how to capture each Shot with the Setup you own.'
+        : 'AI Creation shows what to generate, with which model, references and continuity. Hybrid Shots keep one Shot identity.'}
+        {' '}Switching faces never changes the Production, Scene or Shot.</span>
+      {face === 'real' && <Link className="text-link" to={`/on-set/${initial.id}`}>
+        <Smartphone size={14} /> On-Set Mode</Link>}
+      <button className="director-toggle" onClick={() => setDirectorOpen(!directorOpen)} aria-expanded={directorOpen}>
+        {directorOpen ? 'Hide Director' : 'Show Director'}</button>
     </div>
-    <section className="production-timeline" aria-label="Production timeline"><header><p className="eyebrow">PRODUCTION TIMELINE</p><span>{formatRuntime(initial.planned_duration_ms)}</span></header><div className="timeline-ruler"><span>00:00</span><span>Timeline editing is introduced with the full Studio.</span></div><div className="timeline-track"><span className="playhead" /><p>No timeline segments yet</p></div></section>
+
+    <div className={`studio-workspace ${directorOpen ? '' : 'director-hidden'}`}>
+      <aside className="production-tools" aria-label="Production tools">
+        <p className="eyebrow">CREATIVE</p>
+        {TOOLS.filter(item => item.group === 'creative').map(({ name, icon: Icon }) =>
+          <button key={name} onClick={() => setUrl({ tool: name })} aria-pressed={tool === name} className={tool === name ? 'selected' : ''}>
+            <Icon size={17} />{name}</button>)}
+        <p className="eyebrow">PRODUCTION ENTITIES</p>
+        {TOOLS.filter(item => item.group === 'execution').map(({ name, icon: Icon }) =>
+          <button key={name} onClick={() => setUrl({ tool: name })} aria-pressed={tool === name} className={tool === name ? 'selected' : ''}>
+            <Icon size={17} />{name}</button>)}
+      </aside>
+
+      <section className="working-canvas" aria-label="Production working canvas">
+        <div className="canvas-heading">
+          <p className="eyebrow">{PRODUCT.executionFaces[face].toUpperCase()} / {tool.toUpperCase()}</p>
+          {model && <span className="pill">{providerLabel}</span>}
+        </div>
+        {modelLoading && !model
+          ? <LoadingState label="Loading this Production's Studio…" />
+          : modelError && !model
+            ? <PartialState title="The Studio could not read this Production" action={<button onClick={() => { setModelError(null); refresh(); }}>Try again</button>}>
+              {modelError}
+            </PartialState>
+            : model && <>
+              {tool === 'Scenes' && <SceneCanvas model={model} scene={selectedScene} busy={busy}
+                onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+                onCreate={sceneActions.create} onUpdate={sceneActions.update} onDuplicate={sceneActions.duplicate}
+                onArchive={sceneActions.archive} onMove={sceneActions.move} onToggleLock={sceneActions.toggleLock}
+                onApprove={sceneActions.approve} onReconcile={sceneActions.reconcile} />}
+              {tool === 'Shots' && <ShotCanvas model={model} scene={selectedScene} shot={selectedShot} busy={busy}
+                onSelect={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
+                onCreate={shotActions.create} onUpdate={shotActions.update} onDuplicate={shotActions.duplicate}
+                onArchive={shotActions.archive} onMove={shotActions.move} onMoveToScene={shotActions.moveToScene}
+                onToggleLock={shotActions.toggleLock} onApprove={shotActions.approve} onBulk={shotActions.bulk} />}
+              {tool === 'Real Production' && <RealProductionCanvas workspaceId={workspaceId}
+                productionId={initial.id} model={model} timing={model.timing} surface={surface} busy={busy}
+                selectedShotId={selectedShotId}
+                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+              {tool === 'AI Creation' && <AiCreationCanvas workspaceId={workspaceId} productionId={initial.id}
+                busy={busy} selectedShotId={selectedShotId}
+                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+              {tool === 'Movie Mode' && <MovieModeCanvas workspaceId={workspaceId} productionId={initial.id}
+                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId} busy={busy}
+                onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+              {tool === 'Series' && <SeriesStudioCanvas workspaceId={workspaceId} projectId={initial.project_id}
+                seriesId={params.get('series')} onSelectSeries={seriesId => setUrl({ series: seriesId })} />}
+              {tool === 'Impact' && <ProductionIntelligenceCanvas workspaceId={workspaceId} productionId={initial.id}
+                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
+                sceneTitle={selectedScene?.title ?? null} shotTitle={selectedShot?.title ?? null}
+                productionTitle={initial.title} busy={busy} onChanged={refresh} />}
+              {tool === 'Continuity' && <ProductionContinuityCanvas workspaceId={workspaceId} productionId={initial.id}
+                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
+                sceneTitle={selectedScene?.title ?? null} shotTitle={selectedShot?.title ?? null}
+                busy={busy} onChanged={refresh} />}
+              {tool === 'Memory' && <ProductionMemoryCanvas workspaceId={workspaceId} productionId={initial.id}
+                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+                busy={busy} onChanged={refresh} />}
+              {tool === 'Versions' && <ProductionVersioningCanvas workspaceId={workspaceId} productionId={initial.id}
+                targets={[
+                  ...Object.entries(model?.documents ?? {}).flatMap(([key, document]) => document?.document_id
+                    ? [{ id: document.document_id, label: document.title ?? key, kind: 'creative_document',
+                        scope: (key === 'script' ? 'script' : 'story') as 'script' | 'story' }] : []),
+                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: scene.title, kind: 'scene', scope: 'scene' as const })),
+                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot', scope: 'shot' as const }))),
+                  ...(model?.assets ?? []).map(asset => ({ id: asset.id, label: asset.name, kind: 'asset', scope: 'asset' as const })),
+                ]}
+                busy={busy} onChanged={refresh} />}
+              {tool === 'Readiness' && <ProductionReadinessCanvas workspaceId={workspaceId}
+                productionId={initial.id}
+                targets={[
+                  { id: initial.id, label: `${initial.title} (Production)`, kind: 'production' },
+                  ...Object.entries(model?.documents ?? {}).flatMap(([key, document]) => document?.document_id
+                    ? [{ id: document.document_id, label: document.title ?? key, kind: 'creative_document' }] : []),
+                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: scene.title, kind: 'scene' })),
+                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot' }))),
+                ]}
+                busy={busy} onChanged={refresh}
+                onOpen={(objectId, kind) => {
+                  if (kind === 'scene') { setUrl({ scene: objectId, shot: null }); return; }
+                  if (kind === 'shot') {
+                    const owning = (model?.scenes ?? []).find(scene => scene.shots.some(shot => shot.id === objectId));
+                    setUrl(owning ? { scene: owning.id, shot: objectId } : { shot: objectId });
+                  }
+                }} />}
+              {tool === 'Publishing' && <PublishingCanvas workspaceId={workspaceId} productionId={initial.id} />}
+              {tool === 'Exports' && <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />}
+              {['Characters', 'World', 'Products', 'Wardrobe', 'Style'].includes(tool) &&
+                <AssetCanvas model={model} tool={tool} busy={busy} onSelectAsset={setSelectedAssetId} />}
+              {tool === 'Audio' && <AudioCanvas workspaceId={workspaceId} productionId={initial.id} model={model}
+                productionType={initial.production_type} durationMs={initial.planned_duration_ms}
+                references={(surface?.references ?? []).map(reference => ({ reference_id: reference.reference_id, source_identity: reference.source_identity, shaping_ready: reference.shaping_ready }))}
+                onChanged={() => { setAttempt(value => value + 1); setSurfaceAttempt(value => value + 1); }} busy={busy || !!model.production.locked_at} />}
+              {['Prompts', 'Edit'].includes(tool) &&
+                <FoundationCanvas model={model} tool={tool} busy={busy} onReconcile={sceneActions.reconcile} />}
+              {tool === 'Results' && <ProductionShotMatchCanvas workspaceId={workspaceId}
+                productionId={initial.id}
+                shots={(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({
+                  id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, method: shot.execution_method,
+                  resultCount: shot.result_count,
+                })))}
+                targets={[
+                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({
+                    id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, kind: 'shot' }))),
+                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: `Scene ${scene.order} ${scene.title}`, kind: 'scene' })),
+                ]}
+                busy={busy} onChanged={refresh}
+                onOpenShot={shotId => {
+                  const owning = (model?.scenes ?? []).find(scene => scene.shots.some(shot => shot.id === shotId));
+                  setUrl(owning ? { scene: owning.id, shot: shotId } : { shot: shotId });
+                }} />}
+              {['Brief', 'References', 'Story', 'Script', 'Reality Check'].includes(tool) && (surfaceError && !surface
+                ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>
+                  {surfaceError}
+                </PartialState>
+                : !surface
+                  ? <LoadingState label="Loading Director intelligence…" />
+                  : <>
+                    {tool === 'Brief' && <BriefCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
+                    {tool === 'References' && <ReferenceCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
+                    {tool === 'Story' && <StoryCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
+                    {tool === 'Script' && <ScriptCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })} />}
+                    {tool === 'Reality Check' && <RealityCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
+                  </>)}
+              <section className="studio5-detail">
+                <TimingInspector timing={model.timing} />
+                {selectedShot && <section aria-label="Selected Shot summary" className="studio5-selected">
+                  <h3>Selected Shot</h3>
+                  <p><strong>{selectedShot.title}</strong> · {formatMs(selectedShot.planned_duration_ms ?? 0)} · {approvalLabel(selectedShot.approval)}</p>
+                  <p className="subtle">{selectedShot.purpose || 'purpose unset'} · {selectedShot.framing || 'framing unset'} · {selectedShot.execution_method.toUpperCase()}</p>
+                </section>}
+                {selectedAssetId && <p className="subtle" role="status">Asset {model.assets.find(asset => asset.id === selectedAssetId)?.name ?? selectedAssetId} is selected. Scene and Shot usage is listed in its row.</p>}
+                {model.truncated && <p className="subtle" role="status">This Production is larger than the Studio page size, so the read model is truncated.</p>}
+                <section aria-label="Extracted techniques">
+                  <h3>Techniques carried into this Production</h3>
+                  <TechniqueTable techniques={surface?.techniques ?? []} />
+                </section>
+              </section>
+            </>}
+      </section>
+
+      <DirectorPanel open={directorOpen} workspaceId={workspaceId} productionId={initial.id} surface={surface}
+        refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} face={face}
+        scope={{ scene: selectedScene, shot: selectedShot }} />
+    </div>
+
+    {model && <StudioTimeline model={model} zoom={zoom} setZoom={setZoom}
+      selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
+      onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+      onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
+      onMoveScene={(sceneId, direction) => { const scene = scenes.find(item => item.id === sceneId); if (scene) void sceneActions.move(scene, direction); }}
+      onMoveShot={(shot, direction) => { const target = selectedShotList(scenes, shot.id); if (target) void shotActions.move(target, direction); }}
+      onDropScene={(dragged, target) => void sceneActions.drop(dragged, target)}
+      onDropShot={(dragged, target, sceneId) => void shotActions.drop(dragged, target, sceneId)}
+      busy={busy} />}
   </div>;
 }
-function SceneOverview({ scenes, sceneLoading, sceneError, retry, scenePage, setScenePage }: { scenes: Scene[]; sceneLoading: boolean; sceneError: string | null; retry: () => void; scenePage: number; setScenePage: (updater: (value: number) => number) => void }) {
-  return <div className="scene-overview"><h3>Production hierarchy</h3>{sceneLoading ? <LoadingState label="Loading scene overview…" /> : sceneError ? <ErrorState message={sceneError} retry={retry} /> : scenes.length ? <ol>{scenes.map(scene => <li key={scene.id}><span>{scene.title}</span><span>{formatRuntime(scene.planned_duration_ms)}</span></li>)}</ol> : <p className="subtle">No scenes yet. Acts and sequences are optional; photographs can use shots directly.</p>}<div className="pagination"><button disabled={scenePage === 0 || sceneLoading} onClick={() => setScenePage(v => v - 1)}>Previous</button><span>Scene page {scenePage + 1}</span><button disabled={scenes.length < PAGE_SIZE || sceneLoading} onClick={() => setScenePage(v => v + 1)}>Next</button></div></div>;
+
+function selectedShotList(scenes: StudioScene[], shotId: string): StudioShot | null {
+  return scenes.flatMap(scene => scene.shots).find(shot => shot.id === shotId) ?? null;
 }
-function OverviewCanvas({ surface, surfaceLoading, surfaceError, retry, scenes, sceneLoading, sceneError, retryScenes, scenePage, setScenePage, face }: { surface: DirectorStudio | null; surfaceLoading: boolean; surfaceError: string | null; retry: () => void; scenes: Scene[]; sceneLoading: boolean; sceneError: string | null; retryScenes: () => void; scenePage: number; setScenePage: (updater: (value: number) => number) => void; face: ExecutionFace }) {
-  if (surfaceLoading) return <><div className="canvas-stage"><ClapperboardMark /><h2>Loading the Production truth…</h2><p>Brief, Story, Script, References and Reality Check are loading from your workspace.</p></div><LoadingState label="Loading Director intelligence…" /></>;
-  if (!surface) return <><div className="canvas-stage"><span className="stage-corner top-left" /><span className="stage-corner bottom-right" /><ClapperboardMark /><h2>The production starts<br />with your creative truth.</h2><p>{face === 'real' ? 'Physical execution plans attach to the same shots.' : 'Model-specific execution plans attach to the same shots.'}<br />{surfaceError ?? 'Director intelligence is unavailable, so nothing is summarised here.'}</p><button onClick={retry}>Try again</button></div><SceneOverview scenes={scenes} sceneLoading={sceneLoading} sceneError={sceneError} retry={retryScenes} scenePage={scenePage} setScenePage={setScenePage} /></>;
-  const fit = surface.runtime_fit;
-  return <div className="overview-canvas">
-    <div className="canvas-stage overview-stage"><span className="stage-corner top-left" /><span className="stage-corner bottom-right" /><ClapperboardMark /><h2>{surface.story?.title ?? surface.production.title}</h2><p>{surface.story?.logline ?? 'No Story has been written for this Production yet.'}</p></div>
-    <ul className="overview-facts">
-      <li><strong>Brief</strong><span>{surface.brief ? (surface.brief.producer === 'model' ? 'Model-refined' : 'Deterministic') + ` · revision ${surface.brief_revision ?? 1}` : 'Not written yet'}</span></li>
-      <li><strong>Story</strong><span>{surface.story ? `${surface.story.beats.length} beat(s) · ${surface.story.variation.replaceAll('_', ' ')}` : 'Not written yet'}</span></li>
-      <li><strong>Script</strong><span>{surface.documents?.script?.content ? 'Persisted Script document' : 'No Script document'}</span></li>
-      <li><strong>References</strong><span>{surface.references.length} recorded · {surface.references.filter(reference => reference.status === 'complete').length} fully analysed</span></li>
-      <li><strong>Techniques</strong><span>{surface.techniques.length} extracted</span></li>
-      <li><strong>Runtime</strong><span>{fit.status.replaceAll('_', ' ')} · target {formatRuntime(fit.target_ms)} · assigned {formatRuntime(fit.assigned_ms)}</span></li>
-      <li><strong>Reality</strong><span>{surface.reality ? `${surface.reality.feasibility} · ${surface.reality.complexity} complexity` : 'Not checked yet'}</span></li>
-      <li><strong>Provider</strong><span>{surface.provider.configured ? `${surface.provider.provider} (${surface.provider.model_profile})` : 'No model provider configured — deterministic direction only'}{surface.provider.ffmpeg_available === false ? ' · frame extraction unavailable' : ''}</span></li>
-    </ul>
-    <section aria-label="Extracted techniques"><h3>Techniques carried into this Production</h3><TechniqueTable techniques={surface.techniques} /></section>
-    {surface.operations.length > 0 && <section aria-label="Director operations"><h3>Director operation history</h3><ul className="operation-log">{surface.operations.map(operation => <li key={operation.operation_id}><p><strong>{operation.operation_type.replaceAll('_', ' ')}</strong> · {operation.scope} · {operation.status} · {operation.producer}{operation.repaired ? ' · repaired' : ''}</p><p className="subtle">{operation.rationale ?? 'No rationale recorded.'}</p><p className="subtle">{operation.provider ? `${operation.provider} · ` : ''}{operation.model ?? 'no model'} · key {operation.idempotency_key ?? 'none'}</p>{operation.limitations.length > 0 && <p className="subtle">Limitations: {operation.limitations.join(', ')}</p>}</li>)}</ul></section>}
-    <SceneOverview scenes={scenes} sceneLoading={sceneLoading} sceneError={sceneError} retry={retryScenes} scenePage={scenePage} setScenePage={setScenePage} />
-  </div>;
-}
-function DirectorPanel({ open, workspaceId, productionId, surface, refresh }: { open: boolean; workspaceId: string; productionId: string; surface: DirectorStudio | null; refresh: () => void }) {
+
+function DirectorPanel({ open, workspaceId, productionId, surface, refresh, face, scope }: {
+  open: boolean; workspaceId: string; productionId: string; surface: DirectorStudio | null;
+  refresh: () => void; face: ExecutionFace; scope: { scene: StudioScene | null; shot: StudioShot | null };
+}) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<DirectorCommandPreview | null>(null);
   const [result, setResult] = useState<DirectorCommandResult | null>(null);
-  const examples = ['Make Scene 1 more intense.', 'Why does this feel premium?', 'Make it 15 seconds.', 'Remove the dialogue.', 'Make this shootable with my setup', 'Give me three alternative endings'];
+  const examples = ['Make this Shot more tense.', 'Make this Scene shorter.', 'Add a reaction Shot.',
+    'Make Scene 3 possible with one actor.', 'Move the Product reveal earlier.', 'Give me three alternative endings'];
   const run = async (apply: boolean, direction: string) => {
     if (!direction.trim()) return;
     setBusy(true); setError(null); setPreview(null);
     try {
-      const payload = await productionService.directorCommand(workspaceId, productionId, { text: direction.trim(), apply, expected_production_revision: surface?.production.revision });
+      const payload = await productionService.directorCommand(workspaceId, productionId, {
+        text: direction.trim(), apply, expected_production_revision: surface?.production.revision,
+      });
       setResult(payload);
       if (apply) setText('');
       refresh();
@@ -122,16 +571,42 @@ function DirectorPanel({ open, workspaceId, productionId, surface, refresh }: { 
     catch (failure) { setError(safeError(failure).message); }
     finally { setBusy(false); }
   };
-  return <aside className={`director-panel ${open ? 'director-open' : 'director-collapsed'}`} aria-label="TONDE Director"><div className="director-heading"><span className="director-symbol">T</span><div><h2>TONDE Director</h2><p>{surface ? (surface.provider.configured ? 'Model-assisted production intelligence' : 'Deterministic production intelligence · no provider configured') : 'Connecting to production intelligence'}</p></div></div>
+  return <aside className={`director-panel ${open ? 'director-open' : 'director-collapsed'}`} aria-label="TONDE Director">
+    <div className="director-heading"><span className="director-symbol">T</span>
+      <div><h2>TONDE Director</h2>
+        <p>{surface ? (surface.provider.configured ? 'Model-assisted production intelligence' : 'Deterministic production intelligence · no provider configured') : 'Connecting to production intelligence'}</p></div>
+    </div>
     {!open ? null : <>
-      <label>Message to the Director<textarea aria-label="Message to the Director" value={text} onChange={event => setText(event.target.value)} placeholder="“Make Scene 1 more intense.”" rows={4} /></label>
-      <div className="director-examples" role="group" aria-label="Example directions">{examples.map(example => <button type="button" key={example} disabled={busy} onClick={() => setText(example)}>{example}</button>)}</div>
-      <div className="director-actions"><button type="button" disabled={busy || !text.trim()} onClick={() => void showPreview()}>Preview</button><button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void run(false, text)}>Send direction <ArrowUpRight size={14} /></button></div>
-      {preview && <div className="command-preview" role="status"><p className="eyebrow">{preview.kind.replaceAll('_', ' ')} · {preview.scope} · confidence {preview.confidence}</p><p>{preview.rationale}</p><p className="subtle">Operations: {preview.operations.join(', ') || 'none'}{preview.scene_order ? ` · Scene ${preview.scene_order}` : ''}{preview.target_runtime_ms ? ` · ${formatRuntime(preview.target_runtime_ms)}` : ''}{preview.reference_role ? ` · reference role ${preview.reference_role}` : ''}</p></div>}
+      <p className="studio5-scope" role="status">
+        Scope: {scope.shot ? `Shot “${scope.shot.title}”` : scope.scene ? `Scene “${scope.scene.title}”` : 'whole Production'}
+        {scope.shot && scope.scene ? ` in Scene ${scope.scene.order}` : ''} · {PRODUCT.executionFaces[face].toUpperCase()} face.
+        Only this scope is sent with your direction.
+      </p>
+      <label htmlFor="director-message">Message to the Director</label>
+      <textarea id="director-message" value={text} onChange={event => setText(event.target.value)}
+        placeholder={scope.shot ? '“Make this Shot more tense.”' : '“Make Scene 1 more intense.”'} rows={4} />
+      <div className="director-examples" role="group" aria-label="Example directions">
+        {examples.map(example => <button type="button" key={example} disabled={busy} onClick={() => setText(example)}>{example}</button>)}
+      </div>
+      <div className="director-actions">
+        <button type="button" disabled={busy || !text.trim()} onClick={() => void showPreview()}>Preview change</button>
+        <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void run(false, text)}>
+          Ask the Director <ArrowUpRight size={14} /></button>
+      </div>
+      {preview && <div className="command-preview" role="status">
+        <p className="eyebrow">{preview.kind.replaceAll('_', ' ')} · {preview.scope} · confidence {preview.confidence}</p>
+        <p>{preview.rationale}</p>
+        <p className="subtle">Operations: {preview.operations.join(', ') || 'none'}
+          {preview.scene_order ? ` · Scene ${preview.scene_order}` : ''}
+          {preview.target_runtime_ms ? ` · ${formatMs(preview.target_runtime_ms)}` : ''}</p>
+      </div>}
       {error && <p role="alert" className="error-text">{error}</p>}
-      {result && <><DirectorCommandResultPanel result={result} />{!result.applied && result.plan && <button type="button" className="primary" disabled={busy} onClick={() => void run(true, text)}><Send size={14} />Apply to this Production</button>}</>}
+      {result && <><DirectorCommandResultPanel result={result} />
+        {!result.applied && result.plan && <button type="button" className="primary" disabled={busy} onClick={() => void run(true, text)}>
+          <Send size={14} />Apply to this Production</button>}
+        {result.changes.length > 0 && <p className="subtle">Affected: {result.changes.join('; ')}</p>}
+      </>}
       {result && <button type="button" className="text-link" onClick={() => { setResult(null); setPreview(null); setText(''); }}>Clear Director answer</button>}
     </>}
   </aside>;
 }
-function ClapperboardMark() { return <Film size={42} strokeWidth={1} aria-hidden="true" />; }

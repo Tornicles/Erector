@@ -39,8 +39,8 @@ class SupabaseMediaFetcher:
         if not rows:
             raise StorageMediaUnavailable('That media file is not available in this workspace.')
         row: dict[str, Any] = rows[0]
-        if row.get('upload_state') != 'uploaded':
-            raise StorageMediaUnavailable('That upload has not completed, so there is nothing to analyse yet.')
+        if row.get('upload_state') not in ('verified', 'uploaded'):
+            raise StorageMediaUnavailable('That upload has not been verified, so there is nothing to analyse yet.')
         declared = int(row.get('bytes') or 0)
         if declared > MAX_ANALYSIS_BYTES:
             raise StorageMediaUnavailable('That file is larger than this analysis path supports; no partial file is analysed.')

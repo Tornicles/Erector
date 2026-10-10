@@ -529,6 +529,21 @@ def test_collaboration_modes_change_question_pressure():
     assert guided.bundle.story is not None
 
 
+def test_reference_analysis_requires_current_identity_pin_and_story_evidence():
+    import pytest
+    from pydantic import ValidationError
+    from app.domain.analysis import Finding, FindingCategory
+    from app.services.studio import reference_shaping_is_ready
+    reference = {'source_identity': 'Confirmed source', 'identity_provenance': 'creator_supplied',
+                 'source_identity_verified_at': '2026-10-07T00:00:00Z', 'creator_purpose': 'Learn pacing', 'identity_revision': 3}
+    assert reference_shaping_is_ready(reference, {'identity_revision': 3, 'analyzed_at': '2026-10-07T00:00:00Z'})
+    assert not reference_shaping_is_ready(reference, {'identity_revision': 2, 'analyzed_at': '2026-10-07T00:00:00Z'})
+    assert not reference_shaping_is_ready(reference, {'identity_revision': 3, 'analyzed_at': None})
+    with pytest.raises(ValidationError, match='observed finding must cite evidence'):
+        Finding(id='invented-story', category=FindingCategory.story, statement='Unseen scene',
+                epistemic=EpistemicClass.observed, confidence=QualitativeConfidence.high)
+
+
 def test_answered_decisions_are_not_asked_again():
     goal = 'Create a 30-second premium coffee commercial'
     answered = {'product': 'Ridgeway coffee', 'platform': 'YouTube', 'runtime': '30 seconds'}

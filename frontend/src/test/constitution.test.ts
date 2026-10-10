@@ -18,12 +18,13 @@ describe('TONDE constitutional vocabulary', () => {
     expect(PRODUCT.productionTypes.trailer).toBe('Trailer');
     expect(PRODUCT.productionTypes.youtube).toBe('YouTube');
   });
-  it('Setup excludes environments while reusable Assets contain them; Settings is not inventory', () => {
+  it('Production Kit excludes environments while reusable Assets contain them; Settings is not inventory', () => {
     expect(DATABASE_VALUES.resource_type).not.toContain('environment');
     expect(DATABASE_VALUES.asset_type).toContain('environment');
     expect(DATABASE_VALUES.resource_type).toContain('ai_tool');
     expect(PRODUCT.areas.settings.responsibility).toBe('Application and account configuration');
-    expect(PRODUCT.areas.setup.responsibility).toBe('Production equipment, software and AI-tool capabilities');
+    expect(PRODUCT.areas.setup.title).toBe('Production Kit');
+    expect(PRODUCT.areas.setup.responsibility).toContain('creator can create with');
   });
   it('canonical navigation exactly implements the seven responsibility destinations', () => {
     expect(destinations.map(item => item.path)).toEqual(['/home', '/studio', '/projects', '/discover', '/assets', '/setup', '/settings']);

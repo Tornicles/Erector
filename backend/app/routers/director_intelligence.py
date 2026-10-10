@@ -26,7 +26,10 @@ from app.domain.commands import DirectorCommandKind, route_command
 from app.domain.creative import StoryPlan
 from app.domain.director import EvidenceItem, ProductionIntent
 from app.domain.requests import (
+    AudioPlanUpdateRequest,
+    ReferenceIdentityUpdateRequest,
     BriefUpdateRequest,
+    SceneAudioDirectionUpdateRequest,
     CommandPreviewRequest,
     CommitPlanRequest,
     DecisionRequest,
@@ -39,6 +42,7 @@ from app.domain.requests import (
 from app.domain.vocabulary import CollaborationMode, ProductionType
 from app.dependencies.ai import get_ai_provider, get_frame_extractor
 from app.services.ai.orchestration import OperationEnvelope, OperationScope, revision_guard
+from app.services.director import reference_is_shaping_ready
 from app.services.director_commands import execute_command, reference_role_assignments
 from app.services.intelligence import generate_story, interpret_goal, provider_status, reference_analyzer
 from app.services.media.storage import StorageMediaUnavailable, SupabaseMediaFetcher, decode_base64_payload
@@ -91,6 +95,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             return None
 
     async def load_plan(context: dict[str, Any], intent: ProductionIntent) -> ProductionPlan:
+        shaping_reference_ids = {str(reference['id']) for reference in context['shaping_references']}
+        shaping_analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
         return rebuild_plan_from_rows(
             intent=intent,
             brief_row=context['brief_row'],
@@ -98,7 +104,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             scene_rows=context['scene_rows'],
             dialogue_rows=context['dialogue_rows'],
             reality_row=context['reality_row'],
-            analyses=list(context['analyses'].values()),
+            analyses=shaping_analyses,
             setup=context['setup'],
         )
 
@@ -120,12 +126,15 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             scene_rows=context['scene_rows'], dialogue_rows=context['dialogue_rows'], reality_row=context['reality_row'],
             references=context['references'], analyses_by_reference=context['analyses_by_reference'],
             findings_by_analysis=context['findings_by_analysis'], analyses=context['analyses'],
+            shaping_analyses_by_reference=context['shaping_analyses_by_reference'],
             technique_rows=context['technique_rows'], decision_rows=context['decision_rows'],
             operation_rows=context['operation_rows'], setup=context['setup'],
             setup_used_for_reality=bool(context['reality_row']), document_rows=context['document_rows'],
         )
         surfaces['provider'] = provider_status(get_ai_provider(request))
-        surfaces['reference_roles'] = reference_role_assignments(list(context['analyses'].values()))
+        shaping_analyses = [context['analyses'][reference_id] for reference_id in context['shaping_analyses_by_reference']
+            if reference_id in context['analyses']]
+        surfaces['reference_roles'] = reference_role_assignments(shaping_analyses)
         return envelope(request, surfaces)
 
     @application.post('/api/v1/workspaces/{workspace_id}/productions/{production_id}/director/plan')
@@ -149,12 +158,12 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                 'answered_decisions': payload.answered_decisions or (intent.answered_decisions if intent else {}),
             }
             evidence: list[EvidenceItem] = []
-            for reference in context['references']:
+            for reference in context['shaping_references']:
                 source_type = str(reference.get('source_type') or 'upload')
                 evidence_kind: EvidenceKind = _EVIDENCE_KINDS.get(source_type, 'upload')
                 evidence.append(EvidenceItem(
                     kind=evidence_kind, access='available' if reference.get('media_id') else ('metadata_only' if source_type in {'url', 'social_url'} else 'available'),
-                    source_id=reference['id'], label=(reference.get('source_description') or reference.get('source_url') or 'Saved reference')[:500],
+                    source_id=reference['id'], label=(reference.get('source_identity') or reference.get('source_description') or reference.get('source_url') or 'Saved reference')[:500],
                 ))
             operation_envelope = OperationEnvelope(
                 workspace_id=workspace_id, production_id=production_id, scope_object_id=production_id,
@@ -162,7 +171,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                 source_revision=int(context['production']['revision']),
                 source_intake_revision=int(context['intake']['revision']) if context['intake'] else None,
                 collaboration_mode=payload.collaboration_mode.value,
-                model_profile=provider_info['model_profile'], reference_ids=[reference['id'] for reference in context['references'][:12]],
+                model_profile=provider_info['model_profile'], reference_ids=[reference['id'] for reference in context['shaping_references'][:12]],
             )
             interpreted, intent_outcome = await interpret_goal(
                 payload.goal, known_context=known_context, evidence=evidence, collaboration_mode=payload.collaboration_mode,
@@ -176,7 +185,9 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             )
         if intent is None:
             raise AppError('DIRECTOR_INTENT_MISSING', 'validation', 'Describe what you want to make before planning.', 409)
-        analyses = list(context['analyses'].values())
+        shaping_references = context['shaping_references']
+        shaping_reference_ids = {str(reference['id']) for reference in shaping_references}
+        analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
         plan = build_production_plan(
             intent, analyses=analyses, setup=context['setup'], answered=payload.answered_decisions,
             variation=payload.variation, include_optional_questions=payload.include_optional_questions,
@@ -187,7 +198,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                 workspace_id=workspace_id, production_id=production_id, scope_object_id=production_id,
                 operation_type='story_generation', scope=OperationScope.story,
                 source_revision=int(context['production']['revision']), collaboration_mode=intent.collaboration_mode.value,
-                model_profile=provider_info['model_profile'], reference_ids=[reference['id'] for reference in context['references'][:12]],
+                model_profile=provider_info['model_profile'], reference_ids=[reference['id'] for reference in context['shaping_references'][:12]],
             )
             story, story_outcome = await generate_story(
                 plan.brief, target_ms=plan.brief.runtime.planning_ms, analyses=analyses, provider=provider,
@@ -290,9 +301,11 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             context['production'], str(context['production'].get('title') or ''), CollaborationMode.stop_at_major_decisions,
         )
         plan = await load_plan(context, intent)
-        command = route_command(payload.text, reference_count=len(context['references']))
+        command = route_command(payload.text, reference_count=len(context['shaping_references']))
+        shaping_reference_ids = {str(reference['id']) for reference in context['shaping_references']}
+        shaping_analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
         outcome = execute_command(
-            command, plan=plan, analyses=list(context['analyses'].values()), setup=context['setup'],
+            command, plan=plan, analyses=shaping_analyses, setup=context['setup'],
             selected_story=plan.bundle.story,
         )
         applied: dict[str, Any] | None = None
@@ -343,7 +356,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         except ValidationError as exc:
             raise AppError('INVALID_DIRECTOR_INPUT', 'validation', 'Describe the direction you want.', 422) from exc
         context = await StudioRepository(gateway).intelligence_context(workspace_id, production_id, request.state.access_token)
-        command = route_command(payload.text, reference_count=len(context['references']))
+        command = route_command(payload.text, reference_count=len(context['shaping_references']))
         return envelope(request, {
             'kind': command.kind.value, 'scope': command.scope.value, 'confidence': command.confidence,
             'rationale': command.rationale, 'operations': command.operations, 'signals': command.signals,
@@ -368,13 +381,38 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                     'workspace_id': str(workspace_id), 'production_id': str(production_id),
                     'source_type': payload.source_type if payload.source_type else 'upload',
                     'media_id': str(payload.media_id) if payload.media_id else None,
-                    'rights_classification': 'user_owned' if payload.data_base64 else 'unknown',
+                    'rights_classification': 'unknown',
+                    'source_identity': payload.source_identity,
+                    'source_provider': payload.source_provider,
+                    'identity_provenance': 'unknown',
+                    'source_identity_verified_at': None,
+                    'creator_purpose': payload.creator_purpose,
+                    'learning_targets': payload.learning_targets,
                 }, prefer='return=representation')
             if not created:
                 raise AppError('REFERENCE_NOT_CREATED', 'validation', 'The reference could not be recorded.', 409)
             reference_id = UUID(str(created[0]['id']))
+            reference_record = created[0]
+            if payload.source_identity_verified and payload.source_identity and payload.creator_purpose:
+                reference_record = await gateway.rpc_detailed('reference_identity_save', token=request.state.access_token, json={
+                    'target_workspace': str(workspace_id), 'target_production': str(production_id),
+                    'target_reference': str(reference_id), 'expected_revision': int(created[0].get('revision', 1)),
+                    'values_json': {
+                        'source_identity': payload.source_identity, 'source_provider': payload.source_provider,
+                        'source_identity_verified': True, 'creator_purpose': payload.creator_purpose,
+                        'learning_targets': payload.learning_targets,
+                    },
+                }, layer='pre-Prompt 10 Reference identity')
         elif not any(str(reference.get('id')) == str(reference_id) for reference in context['references']):
             raise AppError('REFERENCE_NOT_FOUND', 'not_found', 'That reference does not belong to this Production.', 404)
+        else:
+            reference_record = next(reference for reference in context['references'] if str(reference.get('id')) == str(reference_id))
+        if not reference_is_shaping_ready(reference_record):
+            raise AppError('REFERENCE_IDENTITY_REQUIRED', 'validation', 'Complete and verify this Reference identity and creator purpose before TONDE analyses it.', 409)
+        await repository.begin_reference_analysis(
+            workspace_id, production_id, reference_id, request.state.access_token,
+            identity_revision=int(reference_record['identity_revision']),
+        )
         data: bytes | None = None
         if payload.data_base64:
             data = decode_base64_payload(payload.data_base64)
@@ -395,11 +433,6 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         preprocess_request = ReferencePreprocessRequest(
             source_type=payload.source_type, reference_id=reference_id, role=payload.role,
         )
-        await repository.claim_reference_analysis(
-            workspace_id, production_id, reference_id, request.state.access_token,
-            status='preprocessing', stages=['queued', 'preprocessing'], progress=10,
-            note='Preprocessing container metadata, frames and audio.',
-        )
         preprocess = await analyzer.preprocess(
             preprocess_request, data=data, mime=payload.mime, filename=payload.filename,
         )
@@ -408,8 +441,9 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             status='analyzing', stages=['queued', 'preprocessing', 'analyzing'], progress=45,
             note='Running measured analysis and provider analysis.',
         )
+        analysis_goal = payload.goal.strip() or f"Creator purpose: {reference_record.get('creator_purpose') or payload.creator_purpose or ''}. Learning targets: {', '.join(reference_record.get('learning_targets') or payload.learning_targets)}"
         analysis = await analyzer.analyze(
-            preprocess_request, data=data, mime=payload.mime, filename=payload.filename, goal=payload.goal,
+            preprocess_request, data=data, mime=payload.mime, filename=payload.filename, goal=analysis_goal[:2000],
             preprocessed=preprocess,
         )
         await repository.claim_reference_analysis(
@@ -420,6 +454,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         )
         saved = await repository.save_reference_analysis(
             workspace_id, production_id, reference_id, request.state.access_token, analysis,
+            identity_revision=int(reference_record['identity_revision']),
         )
         operation_outcome = await repository.rpc('record_director_operation', request.state.access_token, {
             'target_workspace': str(workspace_id), 'target_production': str(production_id),
@@ -435,8 +470,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             },
         })
         return envelope(request, {
-            'analysis_id': saved.get('analysis_id'), 'reference_id': str(reference_id), 'status': analysis.status.value,
-            'capability': analysis.capability.model_dump(mode='json'), 'summary': analysis.summary,
+            'analysis_id': saved.get('analysis_id'), 'reference_id': str(reference_id), 'status': analysis.status.value,                'capability': analysis.capability.model_dump(mode='json'), 'summary': analysis.summary,
             'producer': analysis.producer, 'techniques': [technique.model_dump(mode='json') for technique in analysis.techniques],
             'findings': [finding.model_dump(mode='json') for finding in analysis.findings],
             'style': analysis.style.model_dump(mode='json'), 'causal': [item.model_dump(mode='json') for item in analysis.causal],
@@ -444,6 +478,75 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             'stages': [stage.value for stage in analysis.stages], 'findings_saved': saved.get('findings'),
             'techniques_saved': saved.get('techniques'), 'operation': operation_outcome,
         })
+
+    @application.get('/api/v1/workspaces/{workspace_id}/productions/{production_id}/audio')
+    async def production_audio_surface(workspace_id: UUID, production_id: UUID, request: Request,
+        user: CurrentUser = Depends(require_workspace_access), gateway: SupabaseGateway = Depends(get_gateway)) -> Any:
+        repository = StudioRepository(gateway)
+        await repository.production(workspace_id, production_id, request.state.access_token)
+        audio_plan = await repository.rpc('audio_plan_get', request.state.access_token, {
+            'target_workspace': str(workspace_id), 'target_production': str(production_id),
+        })
+        scene_directions = await repository.rpc('scene_audio_directions_get', request.state.access_token, {
+            'target_workspace': str(workspace_id), 'target_production': str(production_id),
+        })
+        if isinstance(audio_plan, dict) and 'result' in audio_plan:
+            audio_plan = audio_plan['result']
+        if isinstance(scene_directions, dict) and 'result' in scene_directions:
+            scene_directions = scene_directions['result']
+        return envelope(request, {'audio_plan': audio_plan, 'scene_directions': scene_directions or []})
+
+    @application.post('/api/v1/workspaces/{workspace_id}/productions/{production_id}/references/{reference_id}')
+    async def save_reference_identity(workspace_id: UUID, production_id: UUID, reference_id: str, request: Request,
+        user: CurrentUser = Depends(require_workspace_editor), gateway: SupabaseGateway = Depends(get_gateway)) -> Any:
+        body = await request.json()
+        try:
+            reference_uuid = UUID(reference_id)
+            expected_revision = body.get('expected_revision')
+            values = {key: body[key] for key in (
+                'source_identity','source_provider','source_identity_verified','creator_purpose','learning_targets'
+            ) if key in body}
+            payload = ReferenceIdentityUpdateRequest.model_validate({'expected_revision': expected_revision, **values})
+        except (ValidationError, ValueError) as exc:
+            raise AppError('INVALID_REFERENCE_IDENTITY', 'validation', 'Check the Reference identity, purpose and revision.', 422) from exc
+        result = await gateway.rpc_detailed('reference_identity_save', token=request.state.access_token, json={
+            'target_workspace': str(workspace_id), 'target_production': str(production_id), 'target_reference': str(reference_uuid),
+            'expected_revision': payload.expected_revision,
+            'values_json': payload.model_dump(exclude={'expected_revision'}, exclude_unset=True),
+        }, layer='pre-Prompt 10 Reference identity')
+        return envelope(request, result)
+
+    @application.post('/api/v1/workspaces/{workspace_id}/productions/{production_id}/audio')
+    async def save_production_audio_plan(workspace_id: UUID, production_id: UUID, request: Request,
+        user: CurrentUser = Depends(require_workspace_editor), gateway: SupabaseGateway = Depends(get_gateway)) -> Any:
+        try:
+            payload = AudioPlanUpdateRequest.model_validate(await request.json())
+        except ValidationError as exc:
+            raise AppError('INVALID_AUDIO_PLAN', 'validation', 'Check the Audio Plan fields and revision.', 422) from exc
+        values = payload.model_dump(exclude={'expected_revision'}, exclude_unset=True)
+        result = await gateway.rpc_detailed('audio_plan_save', token=request.state.access_token, json={
+            'target_workspace': str(workspace_id), 'target_production': str(production_id),
+            'expected_revision': payload.expected_revision, 'values_json': values,
+        }, layer='pre-Prompt 10 Audio Plan')
+        return envelope(request, result)
+
+    @application.post('/api/v1/workspaces/{workspace_id}/productions/{production_id}/audio/scenes/{scene_id}')
+    async def save_scene_audio_direction(workspace_id: UUID, production_id: UUID, scene_id: str, request: Request,
+        user: CurrentUser = Depends(require_workspace_editor), gateway: SupabaseGateway = Depends(get_gateway)) -> Any:
+        try:
+            payload = SceneAudioDirectionUpdateRequest.model_validate(await request.json())
+        except ValidationError as exc:
+            raise AppError('INVALID_SCENE_AUDIO_DIRECTION', 'validation', 'Check the Scene Music and Sound Direction fields and revision.', 422) from exc
+        try:
+            target_scene = UUID(scene_id)
+        except ValueError as exc:
+            raise AppError('INVALID_SCENE_AUDIO_DIRECTION', 'validation', 'That Scene identifier is invalid.', 422) from exc
+        values = payload.model_dump(exclude={'expected_revision'}, exclude_unset=True)
+        result = await gateway.rpc_detailed('scene_audio_direction_save', token=request.state.access_token, json={
+            'target_workspace': str(workspace_id), 'target_production': str(production_id), 'target_scene': str(target_scene),
+            'expected_revision': payload.expected_revision, 'values_json': values,
+        }, layer='pre-Prompt 10 Audio Plan')
+        return envelope(request, result)
 
     @application.post('/api/v1/workspaces/{workspace_id}/productions/{production_id}/director/brief')
     async def save_brief(workspace_id: UUID, production_id: UUID, request: Request,
@@ -499,7 +602,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             context['production'], str(context['production'].get('title') or ''), CollaborationMode.stop_at_major_decisions,
         )
         plan = await load_plan(context, intent)
-        analyses = list(context['analyses'].values())
+        shaping_reference_ids = {str(reference['id']) for reference in context['shaping_references']}
+        analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
         alternatives: list[StoryPlan] = deterministic_story_alternatives(
             plan.brief, target_ms=plan.brief.runtime.planning_ms, analyses=analyses, count=payload.count,
         )
@@ -529,7 +633,9 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         plan = await load_plan(context, intent)
         command = route_command(f'Reword these lines: {payload.operation} dialogue lines shorter', reference_count=0)
         command = command.model_copy(update={'kind': DirectorCommandKind.dialogue_line_operation, 'line_operation': payload.operation})
-        outcome = execute_command(command, plan=plan, analyses=list(context['analyses'].values()), setup=context['setup'])
+        shaping_reference_ids = {str(reference['id']) for reference in context['shaping_references']}
+        shaping_analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
+        outcome = execute_command(command, plan=plan, analyses=shaping_analyses, setup=context['setup'])
         return envelope(request, {
             'operation': payload.operation, 'answer': outcome.answer, 'limitations': outcome.limitations,
             'line_alternatives': outcome.line_alternatives,

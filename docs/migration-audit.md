@@ -1,5 +1,14 @@
 # Prompt 1 migration audit
 
+> **Superseded hosted state (dated correction, 2026-10-08).** Every hosted migration
+> statement below is the record of the day it was written. As of 2026-10-08 the linked
+> project's ledger records **001–030** with matching `tonde` effects, the untruncated
+> catalog comparison reports **0 differences over 4087 identities**
+> (`test-results/pre-prompt10/hosted-final-diff.json`), and the expanded two-user runner
+> reports **538 pass / 1 blocked / 0 fail**. The only remaining blockers are external
+> (mail capacity, Google sign-in, plan-gated leaked-password protection). See the
+> [Pre-Prompt-10 certification](pre-prompt10-final-certification.md).
+
 ## Verified starting point
 
 - Checkout remote: `https://github.com/Tornicles/Erector.git`, branch `main`, starting commit `26db26c`. The prompt's `Tornicles/theerector` is not this checkout's remote; no remote is changed.
@@ -15,7 +24,7 @@
 
 ## Hosted Supabase verification: later correction supersedes initial uncertainty
 
-This is a historical Prompt 1 starting audit. The linked Supabase project has since been inspected directly; current evidence, including the limited hosted acceptance and still-blocked gates, is in the [Prompt 2 correction handoff](prompt-2-correction-handoff.md). Do not read the original unknown-state list or its Data API setup note as current status. Current hosted history is 001–008; local 009–010 repairs are pending, semantic diff is blocked by missing Docker/Podman, `tonde` Data API negotiation works, and broader hosted acceptance remains BLOCKED.
+This is a historical Prompt 1 starting audit. The linked Supabase project has since been inspected directly; current evidence, including the limited hosted acceptance and still-blocked gates, is in the [Prompt 2 correction handoff](prompt-2-correction-handoff.md). Do not read the original unknown-state list or its Data API setup note as current status. The hosted ledger reads 001–010 — 009–010 were applied by hand and the ledger repaired — and a read-only recheck on 2026-10-07 confirms the ledger at 001–010 with the hosted effect state at 001–014, so 011–014 were applied without ledger rows and 015–025 are the genuinely unapplied range (see the [Prompts 1–9 audit](system-gap-audit-prompt1-9-final.md)). Semantic diff is blocked by missing Docker/Podman, `tonde` Data API negotiation works, and broader hosted acceptance remains BLOCKED.
 
 The forward rollout still requires a reviewed project/environment, data/dependency inspection, backup/recovery plan and explicit authorization. Never reset unknown hosted data or blindly apply migrations. New tables use the explicit `tonde` schema, and `tonde_private` remains outside Data API exposure.
 

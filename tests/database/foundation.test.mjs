@@ -77,11 +77,13 @@ test('policy helpers leave tonde RPCs and grant only scoped authenticated policy
     assert.equal(await scalar(`select has_function_privilege('anon', to_regprocedure('${signature}'), 'EXECUTE')`), false, `${name} anon denial`);
     assert.equal(await scalar(`select has_function_privilege('service_role', to_regprocedure('${signature}'), 'EXECUTE')`), false, `${name} service-role denial`);
   }
-  for (const [name, args] of [['can_read_storage_object', 'text,text'], ['can_upload_storage_object', 'text,text']]) {
+  // Storage policy helpers are invoked as authenticated clients by RLS. Signed uploads are
+  // authorized through the separate creator-scoped RPC, not by granting helper access to servers.
+  for (const [name, args, serviceRole] of [['can_read_storage_object', 'text,text', false], ['can_upload_storage_object', 'text,text', false]]) {
     assert.equal(await scalar(`select to_regprocedure('tonde.${name}(${args})') is null`), true);
     assert.equal(await scalar(`select has_function_privilege('authenticated', 'tonde_private.${name}(${args})', 'EXECUTE')`), true);
     assert.equal(await scalar(`select has_function_privilege('anon', 'tonde_private.${name}(${args})', 'EXECUTE')`), false);
-    assert.equal(await scalar(`select has_function_privilege('service_role', 'tonde_private.${name}(${args})', 'EXECUTE')`), false);
+    assert.equal(await scalar(`select has_function_privilege('service_role', 'tonde_private.${name}(${args})', 'EXECUTE')`), serviceRole, `${name} service-role`);
   }
 });
 test('automatic personal workspace/profile/preferences bootstrap is idempotent', async () => {
@@ -144,13 +146,40 @@ test('assets, media and scoped bindings stay independent and within tenant/produ
   await assert.rejects(asUser(B, () => db.query('insert into tonde.asset_media(workspace_id,asset_id,media_id) values($1,$2,$3)',[wb,assetB,mid])), /foreign key/i);
   assert.equal(await asUser(B, () => scalar('select count(*) from tonde.assets where id=$1',[asset])),0);
 });
-test('authenticated upload policies authorize exact metadata paths and deny anonymous/other workspace reads', async () => {
-  const media = (await db.query('select * from tonde.media_files limit 1')).rows[0];
+test('Storage upload requires a creator-owned open intent, not client-created media metadata', async () => {
+  const legacyMediaId = '00000000-0000-4000-8000-000000000011';
+  const legacyKey = `${wa}/${legacyMediaId}/original.mp4`;
+  await asUser(A, () => db.query(`insert into tonde.media_files
+    (id,workspace_id,bucket,object_key,original_filename,mime_type,file_category,bytes,created_by)
+    values($1,$2,'tonde-results',$3,'legacy.mp4','video/mp4','video',2048,$4)`,
+    [legacyMediaId, wa, legacyKey, A]));
+  assert.equal(await asUser(A, () => scalar(
+    'select tonde_private.can_upload_storage_object($1,$2)', ['tonde-results', legacyKey])), false,
+    'a pending media row without an intent is not an upload authorization');
+  await assert.rejects(asUser(A, () => db.query(
+    'insert into storage.objects(bucket_id,name) values($1,$2)', ['tonde-results', legacyKey])), /row-level security/i);
+
+  const created = (await asUser(A, () => db.query(
+    'select tonde.media_upload_intent_create($1,$2,$3,$4,$5,$6,$7,$8) as result',
+    [wa, 'result', 'foundation-take.mp4', 'video/mp4', 2048, null, false, null]))).rows[0].result;
+  const media = (await db.query('select * from tonde.media_files where id=$1', [created.media_id])).rows[0];
+  const signedRequest = await asUser(A, () => scalar(
+    'select tonde.media_upload_signed_request($1,$2)', [wa, created.intent_id]));
+  assert.equal(signedRequest.intent_id, created.intent_id);
+  assert.equal(signedRequest.media_id, created.media_id);
+  assert.equal(signedRequest.bucket, media.bucket);
+  assert.equal(signedRequest.object_key, media.object_key);
+  assert.equal(await asUser(B, () => scalar(
+    'select tonde_private.can_upload_storage_object($1,$2)', [media.bucket, media.object_key])), false);
   await asUser(A, () => db.query('insert into storage.objects(bucket_id,name) values($1,$2)',[media.bucket,media.object_key]));
   assert.equal(await asUser(A, () => scalar('select count(*) from storage.objects')),1);
   assert.equal(await asUser(B, () => scalar('select count(*) from storage.objects')),0);
   await assert.rejects(asUser(B, () => db.query('insert into storage.objects(bucket_id,name) values($1,$2)',[media.bucket,media.object_key])), /row-level security/i);
   await assert.rejects(asUser(A, () => db.query("insert into storage.objects(bucket_id,name) values('tonde-uploads',$1)",[wa+'/guess.mp4'])), /row-level security/i);
+  assert.equal(await scalar("select has_function_privilege('service_role', 'tonde.media_upload_signed_request(uuid,uuid)', 'EXECUTE')"), false);
+  await asUser(A, () => db.query('select tonde.media_upload_abort($1,$2,$3)', [wa, created.intent_id, 'close test']));
+  await assert.rejects(asUser(A, () => db.query(
+    'select tonde.media_upload_signed_request($1,$2)', [wa, created.intent_id])), /UPLOAD_INTENT_CLOSED/i);
   await db.exec('begin; set local role anon;');
   assert.equal(await scalar('select count(*) from storage.objects'),0);
   await db.exec('rollback');

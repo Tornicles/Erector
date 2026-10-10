@@ -33,9 +33,9 @@ async function platform(page: Page, signedIn = true) {
 test('all seven destinations render and browser back/forward retain canonical routes', async ({page}) => {
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await platform(page); await page.goto('/home');
-  for(const label of ['Home','Studio','Projects','Discover','Assets','Setup','Settings']) {
+  for(const [label, route] of [['Home','home'],['Studio','studio'],['Projects','projects'],['Discover','discover'],['Assets','assets'],['Production Kit','setup'],['Settings','settings']]) {
     await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link',{name:label,exact:true}).click();
-    await expect(page).toHaveURL(new RegExp('/'+label.toLowerCase()+'$'));
+    await expect(page).toHaveURL(new RegExp('/'+route+'$'));
     await expect(page.getByRole('heading',{level:1})).toBeVisible();
   }
   await page.goBack();await expect(page).toHaveURL(/\/setup$/);
@@ -98,6 +98,14 @@ test('Home plans one Production, applies the answered decisions and opens that s
     if(path.endsWith('/director/commit')) return route.fulfill({json:apiEnvelope({production_id:productionId,operation_id:'00000000-0000-4000-8000-0000000000aa',idempotent:false,production_revision:2,scenes:1,dialogue_lines:1})});
     if(path.endsWith('/director/studio')) return route.fulfill({json:apiEnvelope(studioSurfaceFixture)});
     if(path.endsWith('/director/provider')) return route.fulfill({json:apiEnvelope(studioSurfaceFixture.provider)});
+    if(path.endsWith(`/productions/${productionId}/studio`)) return route.fulfill({json:apiEnvelope({
+      production:{id:productionId,workspace_id:workspace,title:initialProduction.title,production_type:'short_film',custom_type:null,execution_method:'real',planned_duration_ms:30000,calculated_duration_ms:0,approval:'draft',locked_at:null,revision:2,lifecycle:'active',updated_at:'2026-10-05T00:00:00Z'},
+      scenes:[],orphan_shots:[],assets:[],documents:{},
+      timing:{total_ms:0,target_ms:30000,delta_ms:-30000,status:'under',scene_states:[]},runtime_conflict:true,timeline:[],
+      status_summary:{production_approval:'draft',production_locked:false,scenes:0,shots:0,scenes_locked:0,shots_locked:0,approval_counts:{},needs_attention:0},truncated:false,
+      provider:studioSurfaceFixture.provider,
+      capabilities:{frame_extraction:false,frame_extraction_note:'ffmpeg is not installed.',timeline_editing:true,shot_execution:false,ai_prompt_compilation:false,note:'Real execution planning arrives with Prompt 6.'},
+    })});
     return route.fulfill({json:apiEnvelope(null)});
   });
   await page.goto('/home');
@@ -113,7 +121,9 @@ test('Home plans one Production, applies the answered decisions and opens that s
   await expect(build).toBeEnabled();
   expect(plans).toEqual([false,true]);
   await build.click();
-  await expect(page).toHaveURL(new RegExp(`/studio/${productionId}$`));
+  // Studio canonicalises its own query (tool/scene) after the read model loads, so the Production id
+  // is the stable assertion and the canonical query is allowed to be present or still pending.
+  await expect(page).toHaveURL(new RegExp(`/studio/${productionId}(\\?[^/]*)?$`));
   await expect(page.getByLabel('Production title')).toHaveValue(initialProduction.title);
   await expect(page.getByText(/Director · deterministic only/)).toBeVisible();
   await page.getByRole('button',{name:'Reality Check'}).click();
@@ -129,7 +139,9 @@ test('global command search finds and opens an exact Production result',async({p
   const result=dialog.getByRole('option',{name:/Browser test production/});
   await expect(result).toBeVisible();
   await result.click();
-  await expect(page).toHaveURL(new RegExp(`/studio/${productionId}$`));
+  // Studio canonicalises its own query (tool/scene) after the read model loads, so the Production id
+  // is the stable assertion and the canonical query is allowed to be present or still pending.
+  await expect(page).toHaveURL(new RegExp(`/studio/${productionId}(\\?[^/]*)?$`));
   await expect(page.getByLabel('Production title')).toHaveValue(initialProduction.title);
 });
 test('global search dialog traps focus and restores it on close',async({page})=>{
