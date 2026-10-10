@@ -31,8 +31,12 @@ export function executionMethodLabel(method: string | null | undefined): string 
   return EXECUTION_METHOD_LABEL[method as ExecutionMethod] ?? method.replaceAll('_', ' ').toUpperCase();
 }
 
-export function formatRuntime(ms: number | null): string {
-  if (ms === null) return 'Runtime not set';
-  durationMs(ms);
-  return `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`;
+export function formatRuntime(ms: number | null | undefined): string {
+  // Display-only and total: backend/AI plans may omit a duration or send a float,
+  // and that must render as unset rather than crash the page. Strict validation
+  // for writes still lives in durationMs.
+  if (ms === null || ms === undefined) return 'Runtime not set';
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return 'Runtime not set';
+  const safe = Math.max(0, Math.floor(ms));
+  return `${Math.floor(safe / 60000)}:${String(Math.floor(safe / 1000) % 60).padStart(2, '0')}.${String(safe % 1000).padStart(3, '0')}`;
 }

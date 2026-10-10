@@ -427,6 +427,12 @@ it('rejects browser secrets, unsafe durations and executable/oversize uploads', 
   expect(validatePublicConfiguration('https://example.supabase.co','sb_publishable_test')).toBeNull();
   expect(formatRuntime(3333)).toBe('0:03.333');
   expect(()=>durationMs(3.2)).toThrow();expect(()=>durationMs(-1)).toThrow();
+  // Display never crashes the page: missing or rough plan durations render as unset.
+  expect(formatRuntime(null)).toBe('Runtime not set');
+  expect(formatRuntime(undefined)).toBe('Runtime not set');
+  expect(formatRuntime(NaN)).toBe('Runtime not set');
+  expect(formatRuntime(-5)).toBe('0:00.000');
+  expect(formatRuntime(3333.9)).toBe('0:03.333');
   expect(()=>validateFile({size:100,type:'application/x-msdownload',name:'run.exe'})).toThrow();
   expect(()=>validateFile({size:60*1024*1024,type:'video/mp4',name:'large.mp4'})).toThrow();
   expect(validateFile({size:100,type:'image/png',name:'reference.png'},{purposes:[{purpose:'reference',max_bytes:10_000_000,supported_mime_types:['image/png']}]},'reference')).toBe('image');
