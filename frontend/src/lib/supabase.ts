@@ -22,8 +22,8 @@ export function validatePublicConfiguration(url?: string, key?: string): string 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const configurationError = validatePublicConfiguration(url, key);
-const localPreview = import.meta.env.VITE_TONDE_LOCAL_PREVIEW === '1' && configurationError;
-export const supabase = configurationError && !localPreview ? null : configurationError ? null : createClient<Database, 'tonde'>(url!, key!, {
+const localPreview = import.meta.env.VITE_TONDE_LOCAL_PREVIEW === '1' && configurationError !== null;
+export const supabase = configurationError ? null : createClient<Database, 'tonde'>(url!, key!, {
   db: { schema: 'tonde' },
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
 });

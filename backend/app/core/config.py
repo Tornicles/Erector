@@ -2,14 +2,14 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.jobs import WORKER_CLASSES
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore', enable_decoding=False)
     app_env: Literal['development', 'test', 'production'] = 'development'
     app_version: str = '0.1.0'
     supabase_url: str | None = None
@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     # ingestion and the durable commercial paths). Unset means those routes answer that this
     # deployment has not enabled server-to-server calls.
     tonde_server_token: SecretStr | None = None
-    # Prompt 11 worker runtime. The worker is off unless a deployment enables it, because a worker
-    # claims durable work and executes it - an accidental second worker is a real operational act.
+    # Prompt 11 worker runtime. Continuous workers are supported only in a persistent local/service
+    # environment, never in the Vercel Function entrypoint.
     worker_enabled: bool = False
     worker_id: str = ''
     worker_class: str = 'media'
@@ -65,6 +65,25 @@ class Settings(BaseSettings):
     outbox_batch_limit: int = 10
     outbox_lease_seconds: int = 120
 
+    @field_validator('ai_callback_secrets', 'billing_webhook_secrets', mode='before')
+    @classmethod
+    def parse_secret_maps(cls, value: object) -> object:
+        """Parse JSON provider-secret maps from Vercel's environment variables explicitly."""
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if not value.strip():
+                return {}
+            import json
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError('Provider secret maps must be valid JSON objects.') from exc
+            if not isinstance(parsed, dict):
+                raise ValueError('Provider secret maps must be valid JSON objects.')
+            return parsed
+        return value
+
     @property
     def configured(self) -> bool:
         return bool(self.supabase_url and self.supabase_publishable_key)
@@ -77,10 +96,11 @@ class Settings(BaseSettings):
     def validate_platform_configuration(self) -> 'Settings':
         for origin in self.cors_origins_list:
             parsed = urlparse(origin)
+            local = parsed.hostname in ('localhost', '127.0.0.1')
             if origin == '*' or parsed.scheme not in ('http', 'https') or not parsed.netloc or parsed.path not in ('', '/'):
                 raise ValueError('CORS must contain explicit application origins.')
-            if self.app_env == 'production' and parsed.scheme != 'https':
-                raise ValueError('Production browser origins must use HTTPS.')
+            if parsed.scheme != 'https' and not (self.app_env != 'production' and local and parsed.scheme == 'http'):
+                raise ValueError('CORS origins require HTTPS outside local development.')
         if self.supabase_url:
             parsed = urlparse(self.supabase_url)
             local = parsed.hostname in ('localhost', '127.0.0.1')
@@ -115,6 +135,8 @@ class Settings(BaseSettings):
             raise ValueError('The shutdown grace period cannot be negative.')
         if not 1 <= self.outbox_batch_limit <= 100:
             raise ValueError('An outbox claim takes between 1 and 100 events.')
+        if not 30 <= self.outbox_lease_seconds <= 3600:
+            raise ValueError('An outbox lease is between 30 seconds and one hour.')
         if self.integration_redirect_uri_base:
             callback = urlparse(self.integration_redirect_uri_base)
             local = callback.hostname in ('localhost', '127.0.0.1')

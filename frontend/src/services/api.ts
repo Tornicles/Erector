@@ -13,7 +13,8 @@ export async function authenticatedRequest<T>(path: string, options: RequestInit
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${session.access_token}`);
   headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${import.meta.env.VITE_API_URL ?? ''}${path}`, { ...options, headers });
+  const baseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+  const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
   let body: ApiEnvelope<T>;
   try { body = await response.json(); } catch { throw new AppError('unavailable', 'The TONDE service is unavailable.'); }
   if (!response.ok || !body.success || body.data === null) {

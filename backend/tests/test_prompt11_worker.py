@@ -348,6 +348,19 @@ def test_configuration_rejects_a_worker_that_could_not_be_trusted() -> None:
             Settings(**base, **broken)
 
 
+def test_empty_provider_secret_values_mean_unconfigured() -> None:
+    # Vercel may deliver an unset secret map as an empty string; that must boot as
+    # unconfigured rather than crash the whole API. Non-object JSON stays rejected.
+    settings = Settings(_env_file=None, ai_callback_secrets='', billing_webhook_secrets='   ')
+    assert settings.ai_callback_secrets == {}
+    assert settings.billing_webhook_secrets == {}
+    configured = Settings(_env_file=None, ai_callback_secrets='{"runway":"s1"}')
+    assert configured.ai_callback_secrets['runway'].get_secret_value() == 's1'
+    for broken in ('[1,2]', 'not-json', '123'):
+        with pytest.raises(ValueError):
+            Settings(_env_file=None, ai_callback_secrets=broken)
+
+
 def _recording_handler(outcome: JobOutcome) -> Any:
     async def handler(_: dict[str, Any]) -> JobOutcome:
         return outcome

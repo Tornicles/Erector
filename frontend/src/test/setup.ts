@@ -8,5 +8,7 @@ import { afterEach, vi } from 'vitest';
 // raised here rather than per-test; no assertion changes, only how long we wait for it.
 configure({ asyncUtilTimeout: 5000 });
 vi.stubGlobal('confirm', vi.fn(() => true));
+// jsdom does not implement scrolling; the native-marketing source scripts call it during render.
+Object.defineProperty(window, 'scrollTo', { configurable: true, writable: true, value: vi.fn() });
 
 afterEach(() => { cleanup(); localStorage.clear(); });
