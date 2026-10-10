@@ -45,7 +45,7 @@ test('Studio defaults to Real, switches to AI, saves persistently and restores s
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await platform(page);await page.goto(`/studio/${productionId}`);
   await expect(page.getByLabel('Production title')).toHaveValue(initialProduction.title);
-  await expect(page.getByText('Draft', {exact:true})).toBeVisible();
+  await expect(page.locator('main').getByText('Draft', {exact:true})).toBeVisible();
   const executionWrites: string[] = [];
   page.on('request', request => { if (request.method() === 'PATCH') executionWrites.push(request.postData() ?? ''); });
   await expect(page.getByRole('button',{name:'REAL PRODUCTION',exact:true})).toHaveAttribute('aria-pressed','true');

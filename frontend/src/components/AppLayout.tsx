@@ -7,6 +7,8 @@ import { authService } from '../services/auth';
 import { safeError } from '../services/errors';
 import { productionService } from '../services/productions';
 import type { Production } from '../types/domain';
+import { PRODUCT } from '../types/product';
+import { continueHref } from '../home/commandCenter';
 
 // Canonical v5 navigation: Home, Studio, Projects, Discover, Assets, Production Kit, Settings.
 // Studio opens the workspace selector (/studio); Production Kit keeps the legacy /setup route.
@@ -43,11 +45,22 @@ export function AppLayout() {
   const notificationTrigger = useRef<HTMLButtonElement>(null);
   const notificationDialogRef = useRef<HTMLElement>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [current, setCurrent] = useState<Production | null>(null);
   const [searchRestoreTarget, setSearchRestoreTarget] = useState<HTMLElement | null>(null);
   const [notificationRestoreTarget, setNotificationRestoreTarget] = useState<HTMLElement | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   useEffect(() => { setOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!workspaceId) { setCurrent(null); return; }
+    let active = true;
+    Promise.resolve().then(() => productionService.list(workspaceId, 0)).then(items => {
+      if (!active) return;
+      const rank: Record<Production['approval'], number> = { needs_review: 0, changed_after_approval: 1, draft: 2, approved: 3 };
+      setCurrent([...items].sort((a, b) => rank[a.approval] - rank[b.approval])[0] ?? null);
+    }).catch(() => { if (active) setCurrent(null); });
+    return () => { active = false; };
+  }, [workspaceId, location.pathname]);
   useEffect(() => {
     document.documentElement.dataset.appearance = appearance;
     document.documentElement.dataset.reducedMotion = String(reducedMotion);
@@ -125,10 +138,14 @@ export function AppLayout() {
           ))}
         </nav>
         <div className="sidebar-spacer" />
-        <div className="side-card">
+        {current && workspaceId ? <NavLink className="side-card" to={continueHref(workspaceId, current.id)} title={`Open ${current.title} in Studio`} aria-label={`Current production ${current.title}`}>
+          <strong><span className="side-dot" aria-hidden="true" />Current Production</strong>
+          <p className="side-title">{current.title}</p>
+          <p>{PRODUCT.approvals[current.approval]}</p>
+        </NavLink> : <div className="side-card">
           <strong><span className="side-dot" aria-hidden="true" />Director online</strong>
           <p>One Master Production. Real, AI and hybrid execution stay connected.</p>
-        </div>
+        </div>}
         <div className="sidebar-bottom">
           <div className="workspace-mark">
             <span className="status-dot" />
