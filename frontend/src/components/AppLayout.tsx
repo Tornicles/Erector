@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Clapperboard, Folder, Compass, Layers, Camera, Settings, Menu, X, LogOut, User, HelpCircle, Search, Bell, ArrowUpRight, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Clapperboard, Folder, Compass, Layers, Camera, Settings, Menu, X, LogOut, User, Users, HelpCircle, Search, Bell, ArrowUpRight, Settings as SettingsIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useModalFocus } from '../hooks/useModalFocus';
 import { authService } from '../services/auth';
@@ -84,6 +84,7 @@ export function AppLayout() {
     { label: 'Open Production Kit', detail: 'Cameras, software and tools', path: '/setup' },
     { label: 'Open Production Kit to add a camera', detail: 'Add a production tool to your capabilities', path: '/setup' },
     { label: 'Open Discover', detail: 'Production knowledge and references', path: '/discover' },
+    { label: 'Open Team', detail: 'Members and invite links', path: '/team' },
     { label: 'Open Jobs', detail: 'Durable processing status and reprocessing', path: '/jobs' },
     { label: 'Open Production Knowledge', detail: 'Sourced guidance and Tutorial Intelligence', path: '/knowledge' },
     { label: 'Open Devices and Scenes', detail: 'Camera capabilities and Scene requirements', path: '/devices-scenes' },
@@ -100,7 +101,7 @@ export function AppLayout() {
       <button className="collapse-nav" type="button" aria-label={collapsed?'Expand navigation':'Collapse navigation'} aria-expanded={!collapsed} onClick={toggleCollapsed}>{collapsed?'Expand':'Collapse'}</button><NavLink className="wordmark" to="/home">TONDE<span>®</span></NavLink>
       {localPreview ? <p className="sidebar-label">TONDE — LOCAL DEVELOPMENT PREVIEW</p> : <p className="sidebar-label">PRODUCTION WORKSPACE</p>}
       <nav id="app-navigation" aria-label="Main navigation">{destinations.map(({ path, title: label, icon: Icon }) => <NavLink key={path} to={path} title={label} aria-label={label} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Icon size={18} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
-      <div className="sidebar-bottom"><div className="workspace-mark"><span className="status-dot" /> {localPreview ? 'Local preview — no live project' : 'Personal workspace'}</div>
+      <div className="sidebar-bottom"><div className="workspace-mark"><span className="status-dot" /> {localPreview ? 'Local preview — no live project' : 'Personal workspace'}<NavLink to="/team" title="Team" aria-label="Team"><Users size={15} aria-hidden="true" /><span>Team</span></NavLink></div>
         {localPreview ? <div className="profile-menu"><span className="avatar">{session?.user.email?.slice(0, 1).toUpperCase() ?? 'L'}</span><span>Local preview</span><NavLink to="/settings/connections"><SettingsIcon size={15} /> Connection settings</NavLink></div> : <details className="profile-menu"><summary><span className="avatar">{session?.user.email?.slice(0, 1).toUpperCase() ?? 'T'}</span><span>My account</span></summary>
           <NavLink to="/account"><User size={15} /> Account / profile</NavLink><NavLink to="/help"><HelpCircle size={15} /> Help / support</NavLink>
           <button onClick={() => { void authService.signOut().catch(e => setError(safeError(e).message)); }}><LogOut size={15} /> Log out</button>

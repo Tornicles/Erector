@@ -52,6 +52,16 @@ async def require_workspace_editor(workspace_id: UUID, request: Request, user: C
     return user
 
 
+async def require_team_admin(workspace_id: UUID, request: Request, user: CurrentUser = Depends(get_current_user), gateway: SupabaseGateway = Depends(get_gateway)) -> CurrentUser:
+    """Team membership is an authority like billing: owner/admin only, invitees never self-promote."""
+    rows = await gateway.request('GET', '/rest/v1/workspace_members', token=request.state.access_token, schema=True,
+        params={'workspace_id': f'eq.{workspace_id}', 'user_id': f'eq.{user.id}', 'role': 'in.(owner,admin)', 'select': 'role', 'limit': '1'})
+    if not rows:
+        raise AppError('WORKSPACE_TEAM_ACCESS_DENIED', 'authorization',
+            'Only a workspace owner or administrator can invite.', 403)
+    return user
+
+
 async def require_workspace_admin(workspace_id: UUID, request: Request, user: CurrentUser = Depends(get_current_user), gateway: SupabaseGateway = Depends(get_gateway)) -> CurrentUser:
     """Commercial administration is an authority, not a membership; the database guards agree."""
 

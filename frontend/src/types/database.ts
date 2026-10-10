@@ -7887,6 +7887,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      workspace_invites: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          role: Database['tonde']['Enums']['member_role'];
+          token_hash: string;
+          created_by: string;
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_user_id: string | null;
+          revoked_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          role: Database['tonde']['Enums']['member_role'];
+          token_hash: string;
+          created_by: string;
+          expires_at: string;
+          accepted_at?: string | null;
+          accepted_user_id?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          role?: Database['tonde']['Enums']['member_role'];
+          token_hash?: string;
+          created_by?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          accepted_user_id?: string | null;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       workspace_members: {
         Row: {
           workspace_id: string;

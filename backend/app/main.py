@@ -45,6 +45,7 @@ from app.routers.integrations import register_integration_routes
 from app.routers.publishing import register_publishing_routes
 from app.routers.real_production import register_real_production_routes
 from app.routers.studio import register_studio_routes
+from app.routers.team import register_team_routes
 from app.worker.handlers import HandlerContext, build_handlers
 from app.worker.runtime import build_worker
 
@@ -270,6 +271,7 @@ def create_app(
     register_publishing_routes(application, config, logger, envelope)
     register_billing_routes(application, config, logger, envelope)
     register_job_routes(application, config, logger, envelope)
+    register_team_routes(application, config, logger, envelope)
     register_ai_director_routes(application, config, logger, envelope)
     register_media_routes(application, config, logger, envelope)
     register_knowledge_routes(application, config, logger, envelope)
