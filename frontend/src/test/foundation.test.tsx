@@ -172,7 +172,7 @@ beforeEach(() => {
   for (const action of ['signInWithPassword','signUp','signInWithOAuth','resetPasswordForEmail','updateUser','signOut'] as const) mocks.auth[action].mockResolvedValue({ data: { session }, error: null });
 });
 describe('canonical application routes', () => {
-  it.each([['/home','What do you want to make'],['/studio','Studio'],['/projects','Projects'],['/discover','Discover'],['/assets','Assets'],['/setup','Production Kit'],['/settings','Settings']])('%s renders inside the authenticated seven-area shell', async (path, title) => {
+  it.each([['/home','Bring the idea'],['/studio','Open a production'],['/projects','Your productions'],['/discover','Discover'],['/assets','Your creative memory'],['/setup','Everything you create with'],['/settings','Control center']])('%s renders inside the authenticated seven-area shell', async (path, title) => {
     route(path);
     expect(await screen.findByRole('heading', { level: 1, name: new RegExp(title) })).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'Main navigation' }).querySelectorAll('a')).toHaveLength(7);
@@ -266,12 +266,12 @@ describe('canonical application routes', () => {
   });
   it('Home upload/URL mode truthfully gates unsupported import and recording actions', async () => {
     route('/home');
-    await screen.findByRole('heading',{name:'What do you want to make?'});
-    fireEvent.click(screen.getByRole('tab',{name:'Import'}));
+    await screen.findByRole('heading',{name:/Bring the idea/});
+    fireEvent.click(screen.getByRole('tab',{name:/Script \/ Doc/}));
     expect(screen.getByRole('status')).toHaveTextContent('No external import source is connected yet');
-    fireEvent.click(screen.getByRole('tab',{name:'Record'}));
+    fireEvent.click(screen.getByRole('tab',{name:/Record/}));
     expect(screen.getByRole('status')).toHaveTextContent('Recording is not configured');
-    fireEvent.click(screen.getByRole('tab',{name:'Paste URL'}));
+    fireEvent.click(screen.getByRole('tab',{name:/Paste link/}));
     expect(screen.getByLabelText('Reference URL')).toBeVisible();
   });
   it('Settings exposes its real application sections and asset/setup terminology is separate', async () => {
@@ -279,7 +279,7 @@ describe('canonical application routes', () => {
     expect(await screen.findByRole('navigation',{name:'Settings sections'})).toHaveTextContent('AccountAppearanceNotificationsConnectionsStorage & DataPrivacy & SecurityBillingHelp');
     cleanup();
     route('/assets');
-    expect(await screen.findByRole('heading',{name:'Assets'})).toBeVisible();
+    expect(await screen.findByRole('heading',{name:/Your creative memory/})).toBeVisible();
     expect(screen.getByRole('combobox',{name:'Filter assets'})).toHaveTextContent('Environments / Worlds');
   });
 });
