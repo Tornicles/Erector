@@ -1,0 +1,297 @@
+/*
+ * TONDE marketing styles — namespaced under `.tmk`.
+ * Ported from tonde_unified_site `assets/site.css` (branch Tornicles-patch-1).
+ * Every rule is scoped to `.tmk` so Studio / Projects / Assets / Setup /
+ * Settings screens are never affected. Do not add unscoped selectors here.
+ */
+.tmk {
+  --tmk-ink: #07100b;
+  --tmk-green: #92ffb5;
+  --tmk-line: rgba(226, 255, 234, 0.14);
+  --tmk-fg: #f7faf7;
+  --tmk-muted: #aabbb0;
+  margin: 0;
+  background: var(--tmk-ink);
+  color: var(--tmk-fg);
+  font: 16px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  scroll-behavior: smooth;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.tmk,
+.tmk * {
+  box-sizing: border-box;
+}
+.tmk a {
+  color: inherit;
+  text-decoration: none;
+}
+.tmk .shell {
+  width: min(1380px, calc(100% - 44px));
+  margin: auto;
+}
+.tmk .skip {
+  position: absolute;
+  left: -10000px;
+}
+.tmk .skip:focus {
+  left: 10px;
+  top: 10px;
+  z-index: 1000;
+  background: white;
+  color: black;
+  padding: 10px;
+}
+.tmk .site-header {
+  background: rgba(7, 16, 11, 0.97);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--tmk-line);
+  backdrop-filter: blur(16px);
+}
+.tmk .header-row {
+  min-height: 76px;
+  display: flex;
+  gap: 27px;
+  align-items: center;
+}
+.tmk .logo {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  white-space: nowrap;
+}
+.tmk .logo span {
+  color: var(--tmk-green);
+}
+.tmk .site-nav {
+  display: flex;
+  gap: 19px;
+  margin-left: auto;
+}
+.tmk .site-nav a,
+.tmk .header-actions a {
+  font-size: 13px;
+  color: #ccd9d0;
+}
+.tmk .site-nav a:hover,
+.tmk .header-actions a:hover,
+.tmk .mobile-nav a:hover {
+  color: var(--tmk-green);
+}
+.tmk .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.tmk .cta {
+  display: inline-block;
+  background: var(--tmk-green);
+  color: #07100b !important;
+  border-radius: 999px;
+  padding: 13px 18px;
+  font-size: 13px;
+  font-weight: 850;
+}
+.tmk .outline {
+  border: 1px solid var(--tmk-line);
+  border-radius: 999px;
+  padding: 13px 18px;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+}
+.tmk .menu-btn {
+  display: none;
+  background: transparent;
+  color: white;
+  border: 1px solid var(--tmk-line);
+  border-radius: 12px;
+  padding: 10px;
+}
+.tmk .mobile-nav {
+  display: none;
+}
+.tmk main {
+  flex: 1;
+}
+.tmk .embedded-page {
+  min-height: 70vh;
+  overflow: hidden;
+}
+.tmk .embedded-page iframe {
+  width: 100%;
+  display: block;
+  min-height: 980px;
+  border: 0;
+  overflow: hidden;
+}
+.tmk .site-footer {
+  border-top: 1px solid var(--tmk-line);
+  padding: 55px 0 26px;
+}
+.tmk .footer-cols {
+  display: grid;
+  grid-template-columns: 1.8fr repeat(4, 1fr);
+  gap: 24px;
+}
+.tmk .footer-cols h2 {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #809187;
+}
+.tmk .footer-cols a:not(.logo) {
+  display: block;
+  padding: 5px 0;
+  color: #a8b8ae;
+  font-size: 13px;
+}
+.tmk .footer-cols p {
+  color: #8ea095;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 270px;
+}
+.tmk .fineprint {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #718477;
+  margin-top: 35px;
+  padding-top: 20px;
+  border-top: 1px solid var(--tmk-line);
+}
+.tmk .site-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  background: #f5f1e8;
+  color: #07100b;
+  border-radius: 14px;
+  padding: 14px;
+  max-width: 330px;
+  z-index: 500;
+}
+.tmk .content-hero {
+  padding: 105px 0 100px;
+  min-height: 65vh;
+}
+.tmk .eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--tmk-green);
+  font-weight: 800;
+}
+.tmk .content-hero h1 {
+  font-size: clamp(52px, 8vw, 108px);
+  letter-spacing: -0.075em;
+  line-height: 0.93;
+  max-width: 1080px;
+  margin: 26px 0;
+}
+.tmk .content-hero p {
+  font-size: clamp(18px, 2vw, 23px);
+  line-height: 1.55;
+  color: var(--tmk-muted);
+  max-width: 800px;
+}
+.tmk .hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+.tmk .section-heading {
+  font-size: clamp(28px, 4vw, 47px);
+  letter-spacing: -0.05em;
+}
+.tmk .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+.tmk .feature {
+  background: #0d1912;
+  border: 1px solid var(--tmk-line);
+  border-radius: 26px;
+  padding: 29px;
+  min-height: 240px;
+}
+.tmk .feature span {
+  color: var(--tmk-green);
+  font-size: 12px;
+}
+.tmk .feature h3 {
+  font-size: 25px;
+  margin: 23px 0 10px;
+}
+.tmk .feature p {
+  color: var(--tmk-muted);
+  line-height: 1.65;
+}
+.tmk .end-cta {
+  padding: 95px 0 130px;
+}
+.tmk .end-cta h2 {
+  font-size: clamp(40px, 5vw, 65px);
+  letter-spacing: -0.05em;
+}
+.tmk .end-cta p {
+  color: var(--tmk-muted);
+  line-height: 1.65;
+  max-width: 750px;
+  margin-bottom: 30px;
+}
+@media (max-width: 1040px) {
+  .tmk .site-nav,
+  .tmk .header-actions {
+    display: none;
+  }
+  .tmk .menu-btn {
+    display: block;
+    margin-left: auto;
+  }
+  .tmk .mobile-nav.open {
+    display: grid;
+    gap: 0;
+    padding: 13px 22px;
+    border-top: 1px solid var(--tmk-line);
+  }
+  .tmk .mobile-nav a {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--tmk-line);
+  }
+  .tmk .footer-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .tmk .footer-cols > div:first-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 600px) {
+  .tmk .feature-grid,
+  .tmk .footer-cols {
+    grid-template-columns: 1fr;
+  }
+  .tmk .shell {
+    width: calc(100% - 32px);
+  }
+  .tmk .content-hero {
+    padding: 75px 0;
+  }
+  .tmk .end-cta {
+    padding: 60px 0 90px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tmk {
+    scroll-behavior: auto;
+  }
+  .tmk *,
+  .tmk *::before,
+  .tmk *::after {
+    transition: none !important;
+  }
+}
