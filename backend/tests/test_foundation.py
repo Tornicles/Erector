@@ -99,6 +99,15 @@ def test_platform_read_failures_name_their_cause():
         assert response.json()['errors'][0]['type'] == 'authorization'
 
 
+def test_openai_api_key_falls_back_to_director_credential(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-fallback-credential')
+    monkeypatch.delenv('DIRECTOR_API_KEY', raising=False)
+    assert Settings(_env_file=None).director_api_key is not None
+    assert Settings(_env_file=None).director_api_key.get_secret_value() == 'sk-fallback-credential'
+    monkeypatch.setenv('DIRECTOR_API_KEY', 'sk-direct-credential')
+    assert Settings(_env_file=None).director_api_key.get_secret_value() == 'sk-direct-credential'
+
+
 def test_provider_network_failure_is_safe():
     def unavailable(request):
         raise httpx.ConnectError('sensitive-provider-url-and-key', request=request)

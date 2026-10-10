@@ -64,6 +64,14 @@ def create_app(
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         provider = ai_provider or build_provider(config)
+        # Startup configuration report: presence only, never values. An operator
+        # reading logs sees exactly which Director dependency is missing.
+        logger.info('director_configuration', extra={'context': {'event': 'director_configuration',
+            'provider': config.director_provider,
+            'base_url_configured': bool(config.director_base_url),
+            'model_configured': bool(config.director_model),
+            'api_credential_present': config.director_api_key is not None,
+            'supabase_configured': config.configured}})
         application.state.ai_provider = provider
         application.state.frame_extractor = frame_extractor or build_frame_extractor(config.ffmpeg_path)
         async with httpx.AsyncClient(timeout=10, transport=transport, follow_redirects=False) as client:

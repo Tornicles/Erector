@@ -17,6 +17,7 @@ import zlib
 import httpx
 import pytest
 from pydantic import BaseModel, Field, SecretStr
+from typing import Any
 
 from app.core.errors import AppError
 from app.services.ai.openai_compatible import OpenAICompatibleProvider
@@ -158,6 +159,62 @@ def test_provider_failures_are_classified_retryable_or_permanent():
     with pytest.raises(ProviderFailed) as unauthorized:
         asyncio.run(permanent.generate(GenerationRequest(operation='op', prompt='p')))
     assert unauthorized.value.retryable is False
+
+
+def test_real_director_schemas_satisfy_strict_structured_outputs():
+    """Every object requires all its properties and forbids extras at every level.
+
+    OpenAI strict mode rejects schemas that leave defaulted fields out of
+    required; that rejection was the live director 400. This test walks the
+    exact schemas sent for intent, story, and reference analysis.
+    """
+    from app.domain.creative import StoryPlan
+    from app.services.intelligence import ModelIntentPayload
+    from app.services.reference import ModelAnalysisPayload
+
+    def problems(schema: Any, path: str = 'root') -> list[str]:
+        found: list[str] = []
+        if isinstance(schema, dict):
+            if schema.get('type') == 'object' or 'properties' in schema:
+                if schema.get('additionalProperties') is not False:
+                    found.append(f'{path}: object without additionalProperties:false')
+                properties = schema.get('properties', {})
+                required = set(schema.get('required', []))
+                for name in properties:
+                    if name not in required:
+                        found.append(f'{path}: {name!r} missing from required')
+                    found.extend(problems(properties[name], f'{path}.{name}'))
+            items = schema.get('items')
+            if isinstance(items, dict):
+                found.extend(problems(items, path))
+            for key in ('anyOf', 'oneOf', 'allOf'):
+                for index, branch in enumerate(schema.get(key, []) or []):
+                    found.extend(problems(branch, f'{path}[{key}{index}]'))
+        return found
+
+    schemas = {
+        'director_intent': json_schema(ModelIntentPayload),
+        'story_plan': json_schema(StoryPlan),
+        'reference_analysis': json_schema(ModelAnalysisPayload),
+    }
+    for name, schema in schemas.items():
+        assert problems(schema) == [], f'{name}: {problems(schema)[:5]}'
+
+
+def test_provider_400_reason_reaches_the_creator():
+    """A rejected provider request names its cause instead of one opaque message."""
+    requests: list[httpx.Request] = []
+    provider = provider_with(requests,
+        lambda request: httpx.Response(400, json={'error': {'type': 'invalid_request_error',
+            'code': 'invalid_json_schema', 'message': 'Schema failed strict validation.'}}))
+    with pytest.raises(AppError) as failed:
+        asyncio.run(run_operation(provider, envelope(), GenerationRequest(
+            operation='intent_interpretation', prompt='p', response_schema=json_schema(ToyPayload),
+            schema_name='toy',
+        ), ToyPayload, require_model=True))
+    assert failed.value.code == 'DIRECTOR_PROVIDER_FAILED'
+    assert failed.value.status_code == 503
+    assert '400' in failed.value.user_message
 
 
 def test_provider_timeout_is_a_retryable_failure():

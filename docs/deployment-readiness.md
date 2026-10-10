@@ -32,7 +32,8 @@ Set the values through Vercel's environment-variable UI or integration. Never pl
 | `LOG_LEVEL` | Backend; all environments | No | No | Defaults to `INFO`. Structured logs exclude credential/prompt fields. |
 | `DIRECTOR_PROVIDER` | Backend; all environments | No | No | Defaults `unconfigured`. `openai_compatible` selects the implemented structured-text adapter, not a media renderer. |
 | `DIRECTOR_BASE_URL` | Backend; provider-enabled environments | Conditional | No | HTTPS endpoint for the configured OpenAI-compatible inference provider. |
-| `DIRECTOR_API_KEY` | Backend only; provider-enabled environments | Conditional | **Yes** | Provider credential. Never browser-visible. |
+| `DIRECTOR_API_KEY` | Backend only; provider-enabled environments | Conditional | **Yes** | Provider credential. Never browser-visible. Preferred over `OPENAI_API_KEY` when both are set. |
+| `OPENAI_API_KEY` | Backend only; provider-enabled environments | No | **Yes** | Standard OpenAI credential name, accepted as a fallback when `DIRECTOR_API_KEY` is unset. Never browser-visible. Setting the same key in both is acceptable. |
 | `DIRECTOR_MODEL` | Backend; provider-enabled environments | Conditional | No | Required when `DIRECTOR_PROVIDER=openai_compatible`. |
 | `DIRECTOR_LONG_CONTEXT_MODEL` | Backend; optional provider tuning | No | No | Current setting is available for provider configuration but `build_provider` does not pass this value into the adapter; do not rely on it until wired and tested. |
 | `DIRECTOR_TRANSCRIPTION_MODEL` | Backend; optional provider capability | No | No | Enables provider transcription only if supported by the chosen adapter/configuration. |

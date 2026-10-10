@@ -235,9 +235,47 @@ async def run_operation(
     )
 
 
+def _strict_node(node: Any) -> None:
+    """Enforce OpenAI Structured Outputs strict-mode invariants in place.
+
+    Strict mode rejects a schema unless every object sets additionalProperties
+    to false and lists every property as required. Pydantic omits defaulted
+    fields from required and nested models from the additionalProperties rule,
+    so an unnormalised schema fails with a provider 400 before any reasoning.
+    Nullable anyOf branches are preserved: the property stays required while
+    the null branch permits absence of a value.
+    """
+    if isinstance(node, list):
+        for item in node:
+            _strict_node(item)
+        return
+    if not isinstance(node, dict):
+        return
+    if node.get('type') == 'object' or 'properties' in node:
+        node['additionalProperties'] = False
+        properties = node.get('properties')
+        if isinstance(properties, dict):
+            node['required'] = sorted(properties.keys())
+            for sub in properties.values():
+                _strict_node(sub)
+    for key in ('items', 'additionalProperties', '$defs', 'defs', 'definitions'):
+        sub = node.get(key)
+        if isinstance(sub, (dict, list)):
+            _strict_node(sub)
+    for key in ('anyOf', 'oneOf', 'allOf', 'prefixItems'):
+        branches = node.get(key)
+        if isinstance(branches, list):
+            for branch in branches:
+                _strict_node(branch)
+
+
 def json_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
-    """Provider-facing JSON schema. Additional properties stay forbidden so malformed output is repaired, not merged."""
+    """Provider-facing JSON schema, normalised for strict structured output.
+
+    Additional properties stay forbidden so malformed output is repaired, not
+    merged; every property is required so the provider accepts the schema.
+    """
 
     schema = model_cls.model_json_schema()
-    schema['additionalProperties'] = False
+    _strict_node(schema)
     return schema

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     director_provider: str = 'unconfigured'
     director_base_url: str | None = None
     director_api_key: SecretStr | None = None
+    # Standard OpenAI credential name. Only a fallback: an explicit
+    # DIRECTOR_API_KEY always wins. Never browser-visible.
+    openai_api_key: SecretStr | None = None
     director_model: str | None = None
     director_long_context_model: str | None = None
     director_transcription_model: str | None = None
@@ -64,6 +67,17 @@ class Settings(BaseSettings):
     outbox_enabled: bool = True
     outbox_batch_limit: int = 10
     outbox_lease_seconds: int = 120
+
+    @model_validator(mode='after')
+    def _prefer_director_api_key(self) -> 'Settings':
+        # Operators commonly set OPENAI_API_KEY alongside DIRECTOR_API_KEY. The
+        # Director reads DIRECTOR_API_KEY; fall back to the standard OpenAI name
+        # so a deployment with only OPENAI_API_KEY still configures the provider
+        # instead of silently running unconfigured. Never the reverse: an
+        # explicit DIRECTOR_API_KEY always wins and nothing is printed.
+        if self.director_api_key is None and self.openai_api_key is not None:
+            self.director_api_key = self.openai_api_key
+        return self
 
     @field_validator('ai_callback_secrets', 'billing_webhook_secrets', mode='before')
     @classmethod
