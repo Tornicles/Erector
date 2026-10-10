@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppLayout } from './components/AppLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthPage } from './pages/AuthPage';
+import { marketingRouteObjects } from './marketing/routes';
 import { FoundationPage, HomePage, ProjectsPage } from './pages/FoundationPages';
 import { StudioPage } from './pages/StudioPage';
 import { OnSetPage } from './pages/OnSetPage';
@@ -17,10 +18,14 @@ function AuthCallback() {
 }
 export const appRoutes = [
   { path: '/login', element: <AuthPage /> },
+  { path: '/signup', element: <AuthPage initialMode="signup" /> },
+  { path: '/forgot-password', element: <AuthPage initialMode="forgot" /> },
   { path: '/auth/callback', element: <AuthCallback /> },
   { path: '/auth/reset', element: <AuthPage reset /> },
+  // Public marketing site (tonde.io). Mounted before the protected subtree so
+  // `/` serves the marketing home; the authenticated app home stays `/home`.
+  ...marketingRouteObjects,
   { element: <ProtectedRoute />, children: [{ element: <AppLayout />, children: [
-    { path: '/', element: <Navigate to="/home" replace /> },
     { path: '/home', element: <HomePage /> },
     { path: '/studio', element: <ProjectsPage studio /> },
     { path: '/studio/:productionId', element: <StudioPage /> },

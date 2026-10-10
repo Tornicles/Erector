@@ -5,10 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
 import { safeError } from '../services/errors';
 import { configurationError, localPreview } from '../lib/supabase';
-export function AuthPage({ reset = false }: { reset?: boolean }) {
+export function AuthPage({ reset = false, initialMode = 'login' }: { reset?: boolean; initialMode?: 'login' | 'signup' | 'forgot' }) {
   const { session, loading, configured } = useAuth();
   const location = useLocation();
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(initialMode);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const [reload, setReload] = useState(false);
   const from = (location.state as { from?: string } | null)?.from;
