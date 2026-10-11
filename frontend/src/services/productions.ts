@@ -9,6 +9,41 @@ export type Epistemic = 'observed' | 'estimated' | 'recommended' | 'unknown';
 export type DirectorCollaborationMode = 'guide_step_by_step' | 'stop_at_major_decisions' | 'complete_first_draft';
 export type DirectorIntent = { goal: string; collaboration_mode: DirectorCollaborationMode; secondary_types: Array<Database['tonde']['Enums']['production_type']>; primary_type: Database['tonde']['Enums']['production_type']; subject: string|null; audience?:string|null; platform: string|null; runtime_ms: number|null; aspect_ratio: string|null; execution: Database['tonde']['Enums']['execution_method']; execution_authority:'creator'|'tonde_decides'; tonde_decided:string[]; answered_decisions:Record<string,string>; dialogue_mode: string|null; constraints: Record<string, unknown>; tone:string[]; deliverables:string[]; provenance:string[]; confidence: Confidence; product_named?: boolean };
 export type DirectorQuestion = { id: string; question: string; why: string; priority: string; impact: 'critical'|'high'|'medium'|'low'; confidence: Confidence; depends_on: string[]; options: string[]; allow_tonde_decides: boolean; blocking: boolean; answered: boolean; answer: string|null; would_change: string[] };
+export type IntakeDecisionOption = { id: string; label: string; description: string };
+export type IntakeDecision = {
+  id: string; topic: string; question: string; why: string; answer_mode: 'single_select'|'multi_select'|'freeform'|'yes_no'|'duration';
+  options: IntakeDecisionOption[]; recommendation: { option_ids: string[]; reason: string };
+  state: 'open'|'answered'|'tonde_decided'; impact: 'critical'|'high'|'medium';
+  answer: string|null; answered_by: string|null; allow_tonde_decides: boolean;
+  blocking: boolean; answered: boolean;
+};
+export type IntakeFact = { key: string; label: string; value: string; confidence: Confidence; source: string; evidence: string[]; confirmed: boolean };
+export type IntakeRawDecision = {
+  decision_id: string; topic: string; question: string; why: string; answer_mode: IntakeDecision['answer_mode'];
+  options: IntakeDecisionOption[]; recommendation: { option_ids: string[]; reason: string };
+  rank?: number; state: IntakeDecision['state']; impact: IntakeDecision['impact'];
+  answer: string|null; answered_by: string|null;
+};
+export function normalizeIntakeDecision(raw: IntakeDecision | IntakeRawDecision): IntakeDecision {
+  if ('id' in raw) return raw as IntakeDecision;
+  const item = raw as IntakeRawDecision;
+  return {
+    id: item.decision_id, topic: item.topic, question: item.question, why: item.why,
+    answer_mode: item.answer_mode, options: item.options ?? [],
+    recommendation: item.recommendation ?? { option_ids: [], reason: '' },
+    state: item.state, impact: item.impact, answer: item.answer ?? null,
+    answered_by: item.answered_by ?? null, allow_tonde_decides: true,
+    blocking: item.impact === 'critical', answered: item.state !== 'open',
+  };
+}
+export function normalizeIntakeDecisions(raw: Array<IntakeDecision | IntakeRawDecision>): IntakeDecision[] {
+  return (raw ?? []).map(normalizeIntakeDecision);
+}
+export type IntakeAnalysisState = {
+  production_family: string; known: IntakeFact[]; inferred: IntakeFact[]; deferred: string[];
+  material_unknowns: Array<IntakeDecision | IntakeRawDecision>; decisions: Array<IntakeDecision | IntakeRawDecision>; enough_to_direct: boolean;
+  blocking_open: number; creative_direction_summary: string; creative_facts: string[]; producer: string;
+};
 export type DirectorEvidenceRef = { kind: string; start_ms: number|null; end_ms: number|null; frame_id: string|null; detail: string };
 export type DirectorFinding = { finding_id: string; category: string; statement: string; epistemic: Epistemic; confidence: Confidence; evidence: DirectorEvidenceRef[]; technique_id: string|null; limitations: string[] };
 export type DirectorTechnique = { canonical_id: string; name: string; category: string; description: string; purpose: string; effect: string; importance: string; confidence: Confidence; practical_concept: string; ai_concept: string; conditions: string[]; limitations: string[] };
@@ -68,6 +103,7 @@ export type DirectorBundle = {
 export type DirectorPlanResponse = {
   operation: { operation_id: string; status: string|null; producer: string };
   provider: DirectorProviderStatus; intent: DirectorIntent; questions: DirectorQuestion[];
+  intake_analysis: IntakeAnalysisState; decisions: IntakeDecision[];
   brief: DirectorBrief; story: DirectorStory|null; script: DirectorScript|null;
   scenes: DirectorBundle['scenes']; characters: DirectorCharacter[]; environments: DirectorEnvironment[]; products: DirectorProduct[];
   style_bible: DirectorBundle['style_bible']; reality: DirectorRealityReport; runtime_fit: DirectorRuntimeFit;

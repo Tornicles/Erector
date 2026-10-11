@@ -103,8 +103,38 @@ test('unauthenticated users cannot open productions and login actions stay in Su
 });
 const apiEnvelope = (data: unknown) => ({ success: true, data, errors: null, metadata: { request_id: 'e2e', timestamp: '2026-10-05T00:00:00Z', version: '1' } });
 const studioSurfaceFixture = { production: { id: productionId, title: 'Browser test production', production_type: 'short_film', execution_method: 'real', planned_duration_ms: 30000, approval: 'draft', locked_at: null, revision: 2 }, brief: null, brief_revision: null, brief_producer: null, story: null, story_variation: null, story_producer: null, scenes: [], runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, documents: {}, reality: null, reality_source_revision: null, setup_listed: [], reality_used_setup: false, references: [], techniques: [], decisions: [], operations: [], provider: { provider: 'openai_compatible', configured: false, model_profile: 'default', capabilities: [], notes: [], ffmpeg_available: false, ffmpeg_note: 'ffmpeg is not installed.' }, reference_roles: {} };
+function intakeDecisionFixture(answered: boolean) {
+  return { id: 'product', topic: 'Offer', question: 'Which premium coffee brand is this for?',
+    why: 'The hero product determines the label, packaging and proof shots.', answer_mode: 'single_select',
+    options: [
+      { id: 'north_bean', label: 'North Bean', description: 'House specialty roast' },
+      { id: 'guest_roast', label: 'Guest roast', description: 'Seasonal partner bean' },
+    ],
+    recommendation: { option_ids: ['north_bean'], reason: 'The brief already names North Bean as the hero product.' },
+    state: answered ? 'answered' : 'open', impact: 'critical', answer: answered ? 'North Bean' : null,
+    answered_by: answered ? 'creator' : null, allow_tonde_decides: true, blocking: true, answered };
+}
+function intakeAnalysisFixture(answered: boolean) {
+  const raw = (state: string) => ({ decision_id: 'product', topic: 'Offer',
+    question: 'Which premium coffee brand is this for?',
+    why: 'The hero product determines the label, packaging and proof shots.', answer_mode: 'single_select',
+    options: [
+      { id: 'north_bean', label: 'North Bean', description: 'House specialty roast' },
+      { id: 'guest_roast', label: 'Guest roast', description: 'Seasonal partner bean' },
+    ],
+    recommendation: { option_ids: ['north_bean'], reason: 'The brief already names North Bean as the hero product.' },
+    rank: 100, state, impact: 'critical', answer: state === 'open' ? null : 'North Bean',
+    answered_by: state === 'open' ? null : 'creator' });
+  return { production_family: 'commercial',
+    known: [{ key: 'runtime', label: 'Runtime', value: '30 seconds', confidence: 'high', source: 'user_said', evidence: ['user said 30-second'], confirmed: false }],
+    inferred: [], deferred: ['Exact wardrobe'],
+    material_unknowns: answered ? [] : [raw('open')], decisions: [raw(answered ? 'answered' : 'open')],
+    enough_to_direct: answered, blocking_open: answered ? 0 : 1,
+    creative_direction_summary: answered ? 'A commercial designed to sell product for North Bean. Runs 30 seconds.' : '',
+    creative_facts: answered ? ['North Bean', '30 seconds'] : [], producer: 'deterministic' };
+}
 function directorPlanFixture(answered: boolean) {
-  return { operation: { operation_id: '00000000-0000-4000-8000-0000000000aa', status: 'succeeded', producer: 'deterministic' }, provider: studioSurfaceFixture.provider, intent: { goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions', primary_type: 'commercial', secondary_types: [], subject: 'premium coffee', audience: null, platform: null, runtime_ms: 30000, aspect_ratio: null, execution: 'real', execution_authority: 'creator', tonde_decided: [], answered_decisions: answered ? { product: 'North Bean' } : {}, dialogue_mode: 'minimal', constraints: {}, tone: [], deliverables: [], provenance: [], confidence: 'medium' }, questions: answered ? [] : [{ id: 'product', question: 'Which premium coffee brand is this for?', why: 'The product shapes direction.', priority: 'blocking', impact: 'critical', confidence: 'medium', depends_on: [], options: [], allow_tonde_decides: true, blocking: true, answered: false, answer: null, would_change: [] }], brief: { production_goal: 'A 30-second premium coffee commercial', production_type: 'commercial', producer: 'deterministic', revision: answered ? 2 : 1, tone: [], style_direction: [], resources: [], cast: [], environments: [], deliverables: [], hard_constraints: [], soft_preferences: [], assumptions: [], open_decisions: [], conflicts: [], runtime: { kind: 'exact', exact_ms: 30000, min_ms: null, max_ms: null, note: '' } }, story: null, script: null, scenes: [], characters: [], environments: [], products: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready with what you have, using one camera and available light.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, producer: 'deterministic', rationale: [], limitations: [], reference_influence: [], bundle: { production: { title: 'Browser test production', production_type: 'commercial', execution_method: 'real', planned_duration_ms: 30000 }, brief: {}, story: null, scenes: [], script: null, characters: [], environments: [], products: [], wardrobe_props: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, techniques: [], decisions: [], producer: 'deterministic', operation: {} } };
+  return { operation: { operation_id: '00000000-0000-4000-8000-0000000000aa', status: 'succeeded', producer: 'deterministic' }, provider: studioSurfaceFixture.provider, intent: { goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions', primary_type: 'commercial', secondary_types: [], subject: 'premium coffee', audience: null, platform: null, runtime_ms: 30000, aspect_ratio: null, execution: 'real', execution_authority: 'creator', tonde_decided: [], answered_decisions: answered ? { product: 'North Bean' } : {}, dialogue_mode: 'minimal', constraints: {}, tone: [], deliverables: [], provenance: [], confidence: 'medium' }, questions: answered ? [] : [{ id: 'product', question: 'Which premium coffee brand is this for?', why: 'The product shapes direction.', priority: 'blocking', impact: 'critical', confidence: 'medium', depends_on: [], options: [], allow_tonde_decides: true, blocking: true, answered: false, answer: null, would_change: [] }], intake_analysis: intakeAnalysisFixture(answered), decisions: [intakeDecisionFixture(answered)], brief: { production_goal: 'A 30-second premium coffee commercial', production_type: 'commercial', producer: 'deterministic', revision: answered ? 2 : 1, tone: [], style_direction: [], resources: [], cast: [], environments: [], deliverables: [], hard_constraints: [], soft_preferences: [], assumptions: [], open_decisions: [], conflicts: [], runtime: { kind: 'exact', exact_ms: 30000, min_ms: null, max_ms: null, note: '' } }, story: null, script: null, scenes: [], characters: [], environments: [], products: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready with what you have, using one camera and available light.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, producer: 'deterministic', rationale: [], limitations: [], reference_influence: [], bundle: { production: { title: 'Browser test production', production_type: 'commercial', execution_method: 'real', planned_duration_ms: 30000 }, brief: {}, story: null, scenes: [], script: null, characters: [], environments: [], products: [], wardrobe_props: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, techniques: [], decisions: [], producer: 'deterministic', operation: {} } };
 }
 test('Home plans one Production, applies the answered decisions and opens that same Production in Studio',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -118,10 +148,10 @@ test('Home plans one Production, applies the answered decisions and opens that s
     if(path.endsWith('/director/studio')) return route.fulfill({json:apiEnvelope(studioSurfaceFixture)});
     if(path.endsWith('/director/provider')) return route.fulfill({json:apiEnvelope(studioSurfaceFixture.provider)});
     if(path.endsWith(`/productions/${productionId}/studio`)) return route.fulfill({json:apiEnvelope({
-      production:{id:productionId,workspace_id:workspace,title:initialProduction.title,production_type:'short_film',custom_type:null,execution_method:'real',planned_duration_ms:30000,calculated_duration_ms:0,approval:'draft',locked_at:null,revision:2,lifecycle:'active',updated_at:'2026-10-05T00:00:00Z'},
-      scenes:[],orphan_shots:[],assets:[],documents:{},
+      production:{id:productionId,workspace_id:workspace,title:initialProduction.title,production_type:'short_film',custom_type:null,execution_method:'real',planned_duration_ms:30000,calculated_duration_ms:30000,approval:'draft',locked_at:null,revision:2,lifecycle:'active',updated_at:'2026-10-05T00:00:00Z'},
+      scenes:[{id:'00000000-0000-4000-8000-0000000000b1',order:1,sort_order:1024,title:'Roastery dawn',purpose:'Establish the craft',story_beat:'Hook',description:'Steam and light.',action_lines:[],opening_state:'Darkness',ending_state:'The first sip',visual_intent:'Warm backlight',dialogue_notes:'',environment_asset_id:null,planned_duration_ms:30000,duration_ms:30000,timing:'derived',approval:'draft',locked_at:null,revision:1,updated_at:'2026-10-05T00:00:00Z',character_asset_ids:[],dialogue_lines:0,shot_count:0,bindings:[],shots:[]}],orphan_shots:[],assets:[],documents:{},
       timing:{total_ms:0,target_ms:30000,delta_ms:-30000,status:'under',scene_states:[]},runtime_conflict:true,timeline:[],
-      status_summary:{production_approval:'draft',production_locked:false,scenes:0,shots:0,scenes_locked:0,shots_locked:0,approval_counts:{},needs_attention:0},truncated:false,
+      status_summary:{production_approval:'draft',production_locked:false,scenes:1,shots:0,scenes_locked:0,shots_locked:0,approval_counts:{draft:1},needs_attention:0},truncated:false,
       provider:studioSurfaceFixture.provider,
       capabilities:{frame_extraction:false,frame_extraction_note:'ffmpeg is not installed.',timeline_editing:true,shot_execution:false,ai_prompt_compilation:false,note:'Real execution planning arrives with Prompt 6.'},
     })});
@@ -132,14 +162,33 @@ test('Home plans one Production, applies the answered decisions and opens that s
   await page.locator('form[aria-label="Director intake"]').getByRole('button',{name:'DIRECT THIS'}).click();
   await expect(page.getByRole('heading',{name:'TONDE is shaping one Master Production'})).toBeVisible();
   await expect(page.getByText(/No model provider is configured, so this plan is deterministic/)).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Which premium coffee brand is this for? *'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'BUILD PRODUCTION'})).toBeDisabled();
-  await page.getByLabel('Your answer').fill('North Bean');
-  await page.getByRole('button',{name:'Save answer'}).click();
-  const build=page.getByRole('button',{name:'BUILD PRODUCTION'});
+  await expect(page.getByRole('heading',{name:'Which premium coffee brand is this for?'})).toBeVisible();
+  await expect(page.getByText(/TONDE already understands/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'BUILD PRODUCTION →'})).toHaveCount(0);
+  await page.locator('section[aria-label="Adaptive creative intake"]').scrollIntoViewIfNeeded();
+  await page.screenshot({path: 'test-results/intake-decision.png'});
+  await page.getByRole('button',{name:'What do you recommend?'}).click();
+  await expect(page.getByText(/TONDE recommends: North Bean/)).toBeVisible();
+  await page.locator('section[aria-label="Adaptive creative intake"]').scrollIntoViewIfNeeded();
+  await page.screenshot({path: 'test-results/intake-recommendation.png'});
+  await page.getByRole('button',{name:'USE THIS'}).click();
+  await page.getByRole('button',{name:'Continue →'}).click();
+  await expect(page.getByRole('heading',{name:'I have enough to direct this.'})).toBeVisible();
+  const build=page.getByRole('button',{name:'BUILD PRODUCTION →'});
   await expect(build).toBeEnabled();
   expect(plans).toEqual([false,true]);
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path: 'test-results/intake-confirmation-mobile.png'});
+  await page.setViewportSize({width:1280,height:800});
+  await page.locator('section[aria-label="Adaptive creative intake"]').scrollIntoViewIfNeeded();
+  await page.screenshot({path: 'test-results/intake-confirmation.png'});
   await build.click();
+  await expect(page.getByText(/Building the production\./)).toBeVisible();
+  await page.locator('section[aria-label="Adaptive creative intake"]').scrollIntoViewIfNeeded();
+  const openStudio=page.getByRole('button',{name:'OPEN STUDIO NOW →'});
+  await expect(openStudio).toBeVisible();
+  await page.screenshot({path: 'test-results/intake-build.png'});
+  await openStudio.click();
   // Studio canonicalises its own query (tool/scene) after the read model loads, so the Production id
   // is the stable assertion and the canonical query is allowed to be present or still pending.
   await expect(page).toHaveURL(new RegExp(`/studio/${productionId}(\\?[^/]*)?$`));

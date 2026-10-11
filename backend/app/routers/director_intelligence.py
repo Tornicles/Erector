@@ -25,6 +25,7 @@ from app.domain.brief import IntelligentBrief, plan_questions
 from app.domain.commands import DirectorCommandKind, route_command
 from app.domain.creative import StoryPlan
 from app.domain.director import EvidenceItem, ProductionIntent
+from app.domain.intake import analyze_intake, decision_to_brief_payload, extract_answer_facts
 from app.domain.requests import (
     AudioPlanUpdateRequest,
     ReferenceIdentityUpdateRequest,
@@ -188,8 +189,33 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         shaping_references = context['shaping_references']
         shaping_reference_ids = {str(reference['id']) for reference in shaping_references}
         analyses = [analysis for reference_id, analysis in context['analyses'].items() if reference_id in shaping_reference_ids]
+        # The decision engine re-reads every answer: freeform text may settle
+        # sibling decisions (runtime, platform, counts) without another question.
+        engine_answers: dict[str, str] = dict(payload.answered_decisions or (intent.answered_decisions or {}))
+        for answer_value in list(engine_answers.values()):
+            for fact_key, fact_value in extract_answer_facts(str(answer_value)).items():
+                engine_answers.setdefault(fact_key, fact_value)
+        mechanics: list[str] = []
+        for analysis in analyses:
+            for section in (analysis.style.sections if analysis.style else []):
+                if section.section in {'camera', 'movement', 'lighting', 'editing', 'palette', 'contrast'}:
+                    mechanics.append(f'{section.section}: {section.description}'[:160])
+            for technique in (analysis.techniques or [])[:4]:
+                name = getattr(technique, 'name', None)
+                if name:
+                    mechanics.append(f'Technique: {name}'[:160])
+            if len(mechanics) >= 4:
+                break
+        story_material = any(len(str(reference.get('source_description') or '')) > 800 for reference in shaping_references)
+        setup_names = [str(item.get('name') or '') for item in context['setup']]
+        intake_analysis = analyze_intake(
+            (payload.goal or '').strip() or intent.goal, intent,
+            answered=engine_answers, reference_mechanics=mechanics[:4],
+            story_material=story_material, setup_names=setup_names,
+            collaboration_mode=intent.collaboration_mode.value,
+        )
         plan = build_production_plan(
-            intent, analyses=analyses, setup=context['setup'], answered=payload.answered_decisions,
+            intent, analyses=analyses, setup=context['setup'], answered=engine_answers,
             variation=payload.variation, include_optional_questions=payload.include_optional_questions,
         )
         story_outcome = None
@@ -207,11 +233,11 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             )
             if story is not None and story.producer == 'model':
                 plan = build_production_plan(
-                    intent, analyses=analyses, setup=context['setup'], answered=payload.answered_decisions,
+                    intent, analyses=analyses, setup=context['setup'], answered=engine_answers,
                     variation=payload.variation, include_optional_questions=payload.include_optional_questions, producer='model',
                 )
                 plan.bundle = build_production_plan(
-                    intent, analyses=analyses, setup=context['setup'], answered=payload.answered_decisions,
+                    intent, analyses=analyses, setup=context['setup'], answered=engine_answers,
                     variation=payload.variation, producer='model',
                 ).bundle.model_copy(update={'story': story})
                 plan.bundle = plan.bundle.model_copy(update={'script': plan.bundle.script})
@@ -242,7 +268,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             },
         })
         questions = plan_questions(
-            intent, answered=payload.answered_decisions, analyses=analyses,
+            intent, answered=engine_answers, analyses=analyses,
             include_optional=payload.include_optional_questions,
         )
         return envelope(request, {
@@ -250,6 +276,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             'provider': provider_info,
             'intent': intent.model_dump(mode='json'),
             'questions': question_payload(questions),
+            'intake_analysis': intake_analysis.model_dump(mode='json'),
+            'decisions': [decision_to_brief_payload(item) for item in intake_analysis.decisions],
             'brief': bundle['brief'],
             'story': bundle['story'],
             'script': bundle['script'],

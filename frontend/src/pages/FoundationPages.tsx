@@ -17,6 +17,7 @@ import { PRODUCT } from '../types/product';
 import { JobsPage } from './Prompt11Pages';
 import { prompt11Service, type Job } from '../services/prompt11';
 import { type DirectorCollaborationMode, type DirectorPlanResponse, type StudioReadModel } from '../services/productions';
+import { IntakeFlow, type BuildPhase } from '../home/IntakeFlow';
 import { continueHref, deriveHomeMode, failedJobs, homeHeroCopy, type HomeMode } from '../home/commandCenter';
 import { contextStripItem, rankLiveItems } from '../home/liveEngine';
 import { HomeContextStrip, HomeStartBox, ProductionCarousel, TondeLive, type CarouselProduction } from '../home/TondeLive';
@@ -99,6 +100,7 @@ export function HomePage() {
       goal, collaboration_mode: mode, answered_decisions: nextAnswers, include_optional_questions: true,
     });
     setPlan(response); setAnswers(nextAnswers); setCreatedProductionId(targetId);
+    setBuild({ state: 'idle', productionId: null, cardCount: null, error: null });
     if (intakeStorageKey) localStorage.setItem(intakeStorageKey, JSON.stringify({ productionId: targetId, goal, collaboration: mode, answers: nextAnswers }));
     return response;
   };
@@ -156,10 +158,32 @@ export function HomePage() {
     setPlanBusy(true); setPlanError(null);
     try {
       const next = { ...answers, [id]: value };
-      const question = plan.questions.find(item=>item.id===id)?.question ?? id;
+      const question = plan.questions.find(item=>item.id===id)?.question
+        ?? (plan.decisions ?? []).find(item=>item.id===id)?.question ?? id;
       await productionService.recordDirectorDecisions(workspaceId, createdProductionId, { [id]: value }, 'intake', { [id]: question });
+      // Re-run the server decision engine after every answer so the queue can
+      // shrink (or grow) — never blindly finish a precomputed list.
       await runPlan(createdProductionId, collaboration, next);
     }catch(failure){setPlanError(safeError(failure).message);}finally{setPlanBusy(false);}
+  };
+  const [build, setBuild] = useState<BuildPhase>({ state: 'idle', productionId: null, cardCount: null, error: null });
+  const pollFirstCards = async (targetId: string) => {
+    if (!workspaceId) return;
+    // Real backend state only: Studio opens as soon as the first meaningful
+    // card (scene) exists. No simulated progress, bounded polling.
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      try {
+        const surface = await productionService.studioSurface(workspaceId, targetId);
+        const cards = surface.scenes.length;
+        if (cards > 0) {
+          setBuild({ state: 'ready', productionId: targetId, cardCount: cards, error: null });
+          return;
+        }
+        setBuild(current => current.productionId === targetId
+          ? { ...current, cardCount: 0 } : current);
+      } catch { /* keep polling on transient read failures */ }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   };
   const buildProduction = async () => {
     if(!workspaceId||!createdProductionId||!plan)return;
@@ -173,9 +197,22 @@ export function HomePage() {
       if(intakeStorageKey)localStorage.removeItem(intakeStorageKey);
       pendingIntake.current = null;
       const target = result.production_id ?? createdProductionId;
-      setIntent(''); setUrl(''); setAttachments([]); setPlan(null); setAnswers({}); setCreatedProductionId(null); localStorage.removeItem('tonde:intake-context');
-      navigate(`/studio/${target}`);
-    }catch(failure){setPlanError(safeError(failure).message);}finally{setCommitBusy(false);}
+      setIntent(''); setUrl(''); setAttachments([]); localStorage.removeItem('tonde:intake-context');
+      setBuild({ state: 'building', productionId: target, cardCount: 0, error: null });
+      void pollFirstCards(target);
+    }catch(failure){
+      setPlanError(safeError(failure).message);
+      setBuild({ state: 'failed', productionId: createdProductionId, cardCount: null, error: safeError(failure).message });
+    }finally{setCommitBusy(false);}
+  };
+  const openStudioNow = () => {
+    const target = build.productionId ?? createdProductionId;
+    if (!target) return;
+    if(intakeStorageKey)localStorage.removeItem(intakeStorageKey);
+    pendingIntake.current = null;
+    setPlan(null); setAnswers({}); setCreatedProductionId(null);
+    setBuild({ state: 'idle', productionId: null, cardCount: null, error: null });
+    navigate(`/studio/${target}`);
   };
   const openQuestions = (plan?.questions ?? []).filter(question => !question.answered);
   const requiredOpen = openQuestions.filter(question => question.blocking && !answers[question.id]);
@@ -276,9 +313,21 @@ export function HomePage() {
       {plan.reference_influence.length>0&&<ul className="capability-notes">{plan.reference_influence.map(note=><li key={note}>{note}</li>)}</ul>}
       <dl className="director-brief"><div><dt>Production type</dt><dd>{plan.intent.primary_type.replaceAll('_',' ')}</dd></div><div><dt>Runtime</dt><dd>{plan.intent.runtime_ms===null?'Not required / unresolved':formatRuntime(plan.intent.runtime_ms)}</dd></div><div><dt>Platform</dt><dd>{plan.intent.platform||'Not specified'}</dd></div><div><dt>Execution</dt><dd>{plan.intent.execution}</dd></div><div><dt>Dialogue</dt><dd>{plan.intent.dialogue_mode?plan.intent.dialogue_mode.replaceAll('_',' '):'Not specified'}</dd></div></dl>
       <label className="collaboration-select">How should TONDE work?<select value={collaboration} disabled={planBusy||commitBusy} onChange={event=>{const value=event.target.value as DirectorCollaborationMode;setCollaboration(value);if(createdProductionId)void runPlan(createdProductionId,value,answers);}}><option value="guide_step_by_step">Guide Me Step-by-Step</option><option value="stop_at_major_decisions">Build It, Stop at Major Decisions</option><option value="complete_first_draft">Build Complete First Draft</option></select></label>
+      {plan.intake_analysis && plan.decisions ? <IntakeFlow
+        analysis={plan.intake_analysis}
+        decisions={plan.decisions}
+        deterministicNote={plan.producer==='model'?null:'No model provider is configured, so this plan is deterministic. Nothing here is presented as model reasoning.'}
+        busy={planBusy||commitBusy}
+        build={build}
+        buildBlocked={plan.reality.feasibility==='blocked'?'TONDE flagged this production as blocked — resolve the reality check below before building.':null}
+        onAnswer={(id,value)=>void submitDecision(id,value)}
+        onBuild={()=>void buildProduction()}
+        onOpenStudio={openStudioNow}
+      /> : <>
       {plan.brief.open_decisions.some(decision=>decision.answered&&decision.answer)&&<ul className="director-decided" aria-label="Decided questions">{plan.brief.open_decisions.filter(decision=>decision.answered&&decision.answer).map(decision=><li key={decision.id}><strong>{decision.question}</strong> — {decision.answer}</li>)}</ul>}
       {openQuestions.map(question=><article className="director-question" key={question.id}><h3>{question.question}{question.blocking?' *':''}</h3><p>{question.why}</p><p className="subtle">Impact {question.impact} · confidence {question.confidence}{question.depends_on.length?` · depends on ${question.depends_on.join(', ')}`:''}</p>{question.options.length>0?<div>{question.options.map(option=><button key={option} type="button" disabled={planBusy||commitBusy} onClick={()=>void submitDecision(question.id,option)}>{option}</button>)}{question.allow_tonde_decides&&!question.options.includes('TONDE decides')&&<button type="button" disabled={planBusy||commitBusy} onClick={()=>void submitDecision(question.id,'TONDE decides')}>TONDE decides</button>}</div>:<form onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void submitDecision(question.id,String(form.get('answer')||''));}}><label>{question.id==='runtime'?'Target runtime':'Your answer'}<input name="answer" required/></label><button type="submit" className="primary" disabled={planBusy||commitBusy}>Save answer</button></form>}</article>)}
       {openQuestions.length===0&&<p className="subtle">Every open decision is answered. Building writes the Brief, Story, Script, Scenes, Characters, Environments, Products and Style to this Production.</p>}
+      </>}
       {plan.brief.assumptions.length>0&&<p className="assumption-note"><strong>Assumptions:</strong> {plan.brief.assumptions.map(assumption=>assumption.statement).join(' ')}</p>}
       {plan.reality&&<section className="reality-card"><p className="eyebrow">PRODUCTION REALITY CHECK · {plan.reality.feasibility.toUpperCase()} · {plan.reality.complexity} complexity</p><p>{plan.reality.summary}</p>{plan.reality.items.slice(0,6).map(item=><p key={`${item.domain}-${item.requirement}`}><strong>{item.status.replaceAll('_',' ').toUpperCase()} · {item.requirement}</strong> — {item.recommendation}</p>)}{plan.reality.conflicts.slice(0,3).map(conflict=><p className="subtle" key={conflict}>Conflict: {conflict}</p>)}</section>}
       {plan.story&&<section className="story-preview"><p className="eyebrow">STORY · {plan.story.variation.replaceAll('_',' ').toUpperCase()} · DRAFT PREVIEW · NOT APPROVAL</p><h3>{plan.story.title}</h3><p>{plan.story.logline}</p><p>{plan.story.premise}</p><p className="subtle">Central question: {plan.story.central_question}</p><ol>{plan.story.beats.map(beat=><li key={beat.id}>{beat.name} · {beat.planned_duration_ms===null?'untimed':formatRuntime(beat.planned_duration_ms)}<small>{beat.content}</small></li>)}</ol></section>}
@@ -290,8 +339,8 @@ export function HomePage() {
       {plan.products.length>0&&<p className="subtle">Products: {plan.products.map(product=>`${product.name} (${product.required_visibility})`).join(', ')}</p>}
       {plan.style_bible&&<p className="subtle">Style: {plan.style_bible.sections.map(section=>section.section).join(', ')||'no Style sections yet'}</p>}
       {planError&&<p role="alert" className="intake-error">{planError}</p>}
-      <div className="director-submit"><button type="button" className="primary" disabled={planBusy||commitBusy||requiredOpen.length>0||plan.reality.feasibility==='blocked'} title={requiredOpen.length?'Answer the required production decisions before building':'Write this plan to the Production'} onClick={()=>void buildProduction()}>{commitBusy?'Building…':'BUILD PRODUCTION'}</button><button type="button" disabled={planBusy||commitBusy} onClick={()=>{if(createdProductionId)void runPlan(createdProductionId,collaboration,answers);}}>{planBusy?'Re-planning…':'Re-plan with these decisions'}</button></div>
-      <Link className="text-link" to={`/studio/${createdProductionId}`}>Open this Production in Studio <ArrowUpRight size={14}/></Link>
+      {!(plan.intake_analysis && plan.decisions) && <><div className="director-submit"><button type="button" className="primary" disabled={planBusy||commitBusy||requiredOpen.length>0||plan.reality.feasibility==='blocked'} title={requiredOpen.length?'Answer the required production decisions before building':'Write this plan to the Production'} onClick={()=>void buildProduction()}>{commitBusy?'Building…':'BUILD PRODUCTION'}</button><button type="button" disabled={planBusy||commitBusy} onClick={()=>{if(createdProductionId)void runPlan(createdProductionId,collaboration,answers);}}>{planBusy?'Re-planning…':'Re-plan with these decisions'}</button></div>
+      <Link className="text-link" to={`/studio/${createdProductionId}`}>Open this Production in Studio <ArrowUpRight size={14}/></Link></>}
     </section>}
     {workLoading ? <LoadingState label="Loading your work…" /> : workError ? <ErrorState message={workError} retry={() => { if(!workspaceId)return;setWorkLoading(true); productionService.list(workspaceId).then(items => setWork(orderWork(items).slice(0, 8))).catch(failure => setWorkError(safeError(failure).message)).finally(() => setWorkLoading(false)); }} /> : !workspaceId ? <EmptyState title="Connect a workspace to see Your Work">Your Productions and private uploads appear here when Supabase is configured.</EmptyState> : spotlight ? <>
       <section className="hl-section" aria-label="Continue">

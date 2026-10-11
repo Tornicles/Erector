@@ -63,11 +63,60 @@ const briefFixture = (): DirectorBrief => ({
 const realityFixture = { feasibility: 'adapt' as const, complexity: 'simple' as const, items: [{ domain: 'equipment', requirement: 'Single camera', status: 'missing', resource: null, evidence: [], recommendation: 'Use the phone camera you already listed, or change this scene to a locked frame.', confidence: 'medium' as const }], domains: { equipment: 'partial' }, conflicts: ['One camera against two simultaneous angles'], adaptations: [{ scope: 'scene', target: 'Scene 2', change: 'Shoot the pour and the reaction sequentially.', reason: 'One camera cannot cover both at once.' }], summary: 'Shootable with one camera and available light after a small Scene adaptation.', inventory_used: [], notes: [] };
 const storyFixture = { title: 'North Bean — Slow Craft', logline: 'A cup of coffee proves that patience is the ingredient.', premise: 'A barista slows down against a hurried morning.', central_question: 'Is there time to do it properly?', protagonist: 'The barista', desire: 'Serve the perfect cup', conflict: 'The morning rush', stakes: 'The craft is invisible', hook: 'Steam curling in a dark frame', payoff: 'The first sip', call_to_action: 'Find us', beats: [{ id: 'beat-hook', order: 1, name: 'Hook', story_function: 'Earn attention', content: 'A breath of steam in darkness.', emotion: 'Anticipation', visual_idea: 'Backlit steam', techniques: ['silhouette-reveal'], planned_duration_ms: 10000 }], emotional_progression: ['anticipation', 'satisfaction'], beginning: 'Darkness and steam', middle: 'The deliberate pour', ending: 'The first sip', theme: 'Patience', grammar: 'commercial_hero', variation: 'original', dialogue_mode: 'minimal', dialogue_approach: 'One line at the payoff', runtime_ms: 30000, producer: 'deterministic', assumptions: [] };
 const scriptFixture = { title: 'North Bean — Slow Craft', scenes: [{ scene_order: 1, scene_title: 'Roastery dawn', heading: 'INT. ROASTERY — DAWN', action: ['Steam curls through a shaft of window light.'], lines: [{ order: 1, kind: 'dialogue', speaker: 'Barista', content: 'Give it a minute.', estimated_ms: 1800, intention: 'Calm authority', delivery: 'quiet', pause_after_ms: 400, interruption: false, overlap: false, reaction_to: null, subtext: 'Craft is worth waiting for', scene_order: 1 }], product_direction: 'North Bean bag in frame left', transition: 'CUT TO:', notes: 'Keep the label readable.', planned_duration_ms: 30000 }], dialogue_mode: 'minimal', dialogue_approach: 'One line at the payoff', estimated_runtime_ms: 30000, producer: 'deterministic' };
+const intakeDecisionFixture = (answered: boolean) => ({
+  id: 'product', topic: 'Offer', question: 'Which premium coffee brand is this for?',
+  why: 'The hero product determines the label, packaging and proof shots.',
+  answer_mode: 'single_select' as const,
+  options: [
+    { id: 'north_bean', label: 'North Bean', description: 'House specialty roast' },
+    { id: 'guest_roast', label: 'Guest roast', description: 'Seasonal partner bean' },
+  ],
+  recommendation: { option_ids: ['north_bean'], reason: 'The brief already names North Bean as the hero product.' },
+  state: (answered ? 'answered' : 'open') as 'answered' | 'open',
+  impact: 'critical' as const, answer: answered ? 'North Bean' : null,
+  answered_by: (answered ? 'creator' : null) as 'creator' | null,
+  allow_tonde_decides: true, blocking: true, answered,
+});
+const intakeAnalysisFixture = (answered: boolean) => ({
+  production_family: 'commercial',
+  known: [{ key: 'runtime', label: 'Runtime', value: '30 seconds', confidence: 'high' as const, source: 'user_said', evidence: ['user said 30-second'], confirmed: false }],
+  inferred: [], deferred: ['Exact wardrobe', 'Specific lens choice'],
+  material_unknowns: answered ? [] : [{
+    decision_id: 'product', topic: 'Offer', question: 'Which premium coffee brand is this for?',
+    why: 'The hero product determines the label, packaging and proof shots.',
+    answer_mode: 'single_select' as const,
+    options: [
+      { id: 'north_bean', label: 'North Bean', description: 'House specialty roast' },
+      { id: 'guest_roast', label: 'Guest roast', description: 'Seasonal partner bean' },
+    ],
+    recommendation: { option_ids: ['north_bean'], reason: 'The brief already names North Bean as the hero product.' },
+    rank: 100, state: 'open' as const, impact: 'critical' as const, answer: null, answered_by: null,
+  }],
+  decisions: [{
+    decision_id: 'product', topic: 'Offer', question: 'Which premium coffee brand is this for?',
+    why: 'The hero product determines the label, packaging and proof shots.',
+    answer_mode: 'single_select' as const,
+    options: [
+      { id: 'north_bean', label: 'North Bean', description: 'House specialty roast' },
+      { id: 'guest_roast', label: 'Guest roast', description: 'Seasonal partner bean' },
+    ],
+    recommendation: { option_ids: ['north_bean'], reason: 'The brief already names North Bean as the hero product.' },
+    rank: 100, state: (answered ? 'answered' : 'open') as 'answered' | 'open',
+    impact: 'critical' as const, answer: answered ? 'North Bean' : null,
+    answered_by: (answered ? 'creator' : null) as 'creator' | null,
+  }],
+  enough_to_direct: answered, blocking_open: answered ? 0 : 1,
+  creative_direction_summary: answered ? 'A commercial designed to sell product for North Bean. Runs 30 seconds.' : '',
+  creative_facts: answered ? ['North Bean', '30 seconds'] : [],
+  producer: 'deterministic',
+});
 const planFixture = (answered: boolean): DirectorPlanResponse => ({
   operation: { operation_id: '00000000-0000-4000-8000-000000000009', status: 'succeeded', producer: 'deterministic' },
   provider: { provider: 'openai_compatible', configured: false, model_profile: 'default', capabilities: ['reasoning'], notes: ['No provider credentials configured.'], ffmpeg_available: false, ffmpeg_note: 'ffmpeg is not installed.' },
   intent: { goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions', primary_type: 'commercial', secondary_types: [], subject: 'premium coffee', audience: null, platform: null, runtime_ms: 30000, aspect_ratio: null, execution: 'real', execution_authority: 'creator', tonde_decided: [], answered_decisions: answered ? { product: 'North Bean' } : {}, dialogue_mode: 'minimal', constraints: {}, tone: ['premium'], deliverables: [], provenance: [], confidence: 'medium' },
   questions: answered ? [] : [question('product', 'Which premium coffee brand is this for?')],
+  intake_analysis: intakeAnalysisFixture(answered),
+  decisions: [intakeDecisionFixture(answered)],
   brief: { ...briefFixture(), revision: answered ? 2 : 1, open_decisions: answered ? briefFixture().open_decisions : [question('product', 'Which premium coffee brand is this for?')] },
   story: storyFixture, script: scriptFixture,
   scenes: [{ order: 1, title: 'Roastery dawn', purpose: 'Establish the craft', story_beat: 'Hook', description: 'Steam and light.', action_lines: ['Steam curls through a shaft of window light.'], planned_duration_ms: 30000, opening_state: 'Darkness', ending_state: 'The first sip', visual_intent: 'Warm backlight' }],
@@ -210,20 +259,43 @@ describe('canonical application routes', () => {
     await waitFor(()=>expect(productionService.create).toHaveBeenCalledWith(workspaceId,'A 30-second premium coffee commercial'));
     await waitFor(()=>expect(productionService.addReference).toHaveBeenCalledWith(workspaceId,productionId,{source_type:'description',source_description:'A 30-second premium coffee commercial'}));
     expect(productionService.directorPlan).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({ goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions' }));
-    expect(await screen.findByRole('heading',{name:'Which premium coffee brand is this for? *'})).toBeVisible();
-    expect(screen.getByRole('button',{name:'BUILD PRODUCTION'})).toBeDisabled();
+    expect(await screen.findByRole('heading',{name:'Which premium coffee brand is this for?'})).toBeVisible();
+    expect(screen.queryByRole('button',{name:'BUILD PRODUCTION →'})).toBeNull();
+    expect(screen.getByText(/TONDE already understands/)).toBeVisible();
     expect(screen.getByText(/STORY · ORIGINAL/)).toBeVisible();
     expect(screen.getByText(/SCRIPT · minimal/)).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Your answer'),{target:{value:'North Bean'}});
-    fireEvent.click(screen.getByRole('button',{name:'Save answer'}));
+    fireEvent.click(screen.getByRole('button',{name:'What do you recommend?'}));
+    expect(await screen.findByText(/TONDE recommends: North Bean/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'USE THIS'}));
+    fireEvent.click(screen.getByRole('button',{name:'Continue →'}));
     await waitFor(()=>expect(productionService.recordDirectorDecisions).toHaveBeenCalledWith(workspaceId, productionId, { product: 'North Bean' }, 'intake', { product: 'Which premium coffee brand is this for?' }));
     await waitFor(()=>expect(productionService.directorPlan).toHaveBeenCalledTimes(2));
-    const build = await screen.findByRole('button',{name:'BUILD PRODUCTION'});
+    expect(await screen.findByRole('heading',{name:'I have enough to direct this.'})).toBeVisible();
+    const build = await screen.findByRole('button',{name:'BUILD PRODUCTION →'});
     await waitFor(()=>expect(build).toBeEnabled());
     fireEvent.click(build);
     await waitFor(()=>expect(productionService.directorCommit).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({ operation_id: '00000000-0000-4000-8000-000000000009', expected_production_revision: 1, explicit_confirmation: true })));
+    expect(await screen.findByText(/Building the production\./)).toBeVisible();
+    const openStudio = await screen.findByRole('button',{name:'OPEN STUDIO NOW →'});
+    expect(openStudio).toBeVisible();
+    fireEvent.click(openStudio);
     await waitFor(()=>expect(router.state.location.pathname).toBe(`/studio/${productionId}`));
     expect(localStorage.getItem(`tonde:director-plan:${workspaceId}`)).toBeNull();
+  });
+  it('detailed prompts skip questions and go straight to creative confirmation', async () => {
+    vi.mocked(productionService.create).mockResolvedValue(productionId);
+    vi.mocked(productionService.directorPlan).mockResolvedValueOnce(planFixture(true));
+    vi.mocked(productionService.directorCommit).mockResolvedValue({ production_id: productionId, operation_id: '00000000-0000-4000-8000-000000000009', idempotent: false, production_revision: 4 });
+    const router = route('/home');
+    fireEvent.change(await screen.findByRole('textbox',{name:'Describe what you want to make'}),{target:{value:'Make me a six-part dark mystery-horror series in Nairobi, around two minutes per episode, filmed on my iPhone.'}});
+    fireEvent.click(screen.getByRole('button',{name:'DIRECT THIS →'}));
+    await waitFor(()=>expect(productionService.directorPlan).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('heading',{name:'I have enough to direct this.'})).toBeVisible();
+    expect(screen.queryByText(/TONDE already understands/)).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'BUILD PRODUCTION →'}));
+    await waitFor(()=>expect(productionService.directorCommit).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button',{name:'OPEN STUDIO NOW →'}));
+    await waitFor(()=>expect(router.state.location.pathname).toBe(`/studio/${productionId}`));
   });
   it('global command search opens from keyboard and navigates through real destinations', async () => {
     const router=route('/home');
