@@ -348,8 +348,10 @@ test('memory is inspectable, a pattern stays a proposal, and search returns real
   await expect(page.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
 
   // 11. A narrow viewport keeps the surface usable and never overflows horizontally.
+  // The drawer is ephemeral by design, so reopening after reload goes through the same link.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Memory`);
   await expect(page.getByText(/Memory is inspectable production knowledge with real provenance/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

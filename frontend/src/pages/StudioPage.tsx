@@ -1,28 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import {
-  BookOpen, Camera, Clapperboard, Compass, FileText, Film, Gauge, Layers, Lightbulb,
-  List, Library, Music, Network, Scissors, Send, ShieldCheck, Sparkles, Users, Package, PackageCheck, Palette, Shirt, Target, Repeat, Rows, GitBranch, ClipboardCheck,
-} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   productionService, type DirectorStudio,
   type StudioApproval, type StudioReadModel, type StudioScene, type StudioShot, type StudioWriteResult,
 } from '../services/productions';
+import { prompt11Service, type Job } from '../services/prompt11';
 import { AppError, safeError } from '../services/errors';
 import { useAutosave, useUnsavedNavigation } from '../hooks/useAutosave';
 import { ErrorState, LoadingState, PartialState } from '../components/StateComponents';
-import { BriefCanvas, RealityCanvas, ReferenceCanvas, ScriptCanvas, StoryCanvas, TechniqueTable } from '../components/StudioCanvases';
-import { AssetCanvas, AudioCanvas, FoundationCanvas, SceneCanvas, ShotCanvas, TimingInspector } from '../studio/StudioCanvases5';
-import { HybridBoard, IdeaLabCanvas, STUDIO_RAIL, StudioDrawer, StudioInspector, StudioTopBar, viewForTool, type StudioMode } from '../studio/StudioEight';
-import { StudioTimeline, approvalLabel, formatMs, type TimelineZoom } from '../studio/StudioTimeline';
+import { BriefCanvas, RealityCanvas, ReferenceCanvas, ScriptCanvas, StoryCanvas } from '../components/StudioCanvases';
+import { AssetCanvas, AudioCanvas } from '../studio/StudioCanvases5';
+import { StudioInspector, type StudioMode } from '../studio/StudioEight';
+import { approvalLabel, formatMs } from '../studio/StudioTimeline';
 import { RealProductionCanvas } from '../studio/RealProduction';
 import { AiCreationCanvas } from '../studio/AICreation';
 import { MovieModeCanvas } from '../studio/MovieMode';
 import { SeriesStudioCanvas } from '../studio/SeriesStudio';
-import { ProductionIntelligenceCanvas } from '../studio/ProductionIntelligence';
 import { ProductionContinuityCanvas } from '../studio/ProductionContinuity';
 import { ProductionMemoryCanvas } from '../studio/ProductionMemory';
+import { ProductionIntelligenceCanvas } from '../studio/ProductionIntelligence';
 import { ProductionVersioningCanvas } from '../studio/ProductionVersioning';
 import { ProductionReadinessCanvas } from '../studio/ProductionReadiness';
 import { PublishingCanvas } from '../prompt10/Publishing';
@@ -31,50 +28,40 @@ import { ProductionShotMatchCanvas } from '../studio/ProductionShotMatch';
 import { type ExecutionFace, type Production } from '../types/domain';
 import { DEFAULT_EXECUTION_FACE, PRODUCT } from '../types/product';
 import { saveStudioContext } from '../home/commandCenter';
-
-type StudioTool =
-  | 'Brief' | 'References' | 'Story' | 'Script' | 'Reality Check'
-  | 'Real Production' | 'AI Creation' | 'Hybrid' | 'Idea' | 'Movie Mode' | 'Series'
-  | 'Scenes' | 'Shots' | 'Impact' | 'Continuity' | 'Memory' | 'Versions' | 'Readiness'
-  | 'Publishing' | 'Exports'
-  | 'Characters' | 'World' | 'Products' | 'Wardrobe' | 'Style'
-  | 'Prompts' | 'Audio' | 'Edit' | 'Results';
-
-// Each execution face has a face of its own, but both are the same Production with the same Shots.
-const FACE_TOOL: Record<ExecutionFace, StudioTool> = { real: 'Real Production', ai: 'AI Creation' };
-const FACE_TOOL_NAMES: StudioTool[] = ['Real Production', 'AI Creation'];
-
-const TOOLS: Array<{ name: StudioTool; icon: typeof Layers; group: 'creative' | 'execution' }> = [
-  { name: 'Brief', icon: Compass, group: 'creative' },
-  { name: 'Story', icon: BookOpen, group: 'creative' },
-  { name: 'Script', icon: FileText, group: 'creative' },
-  { name: 'Movie Mode', icon: Rows, group: 'creative' },
-  { name: 'Impact', icon: Network, group: 'creative' },
-  { name: 'Continuity', icon: ShieldCheck, group: 'creative' },
-  { name: 'Memory', icon: Library, group: 'creative' },
-  { name: 'Versions', icon: GitBranch, group: 'creative' },
-  { name: 'Scenes', icon: List, group: 'creative' },
-  { name: 'Shots', icon: Clapperboard, group: 'creative' },
-  { name: 'References', icon: Film, group: 'creative' },
-  { name: 'Real Production', icon: Camera, group: 'execution' },
-  { name: 'AI Creation', icon: Sparkles, group: 'execution' },
-  { name: 'Characters', icon: Users, group: 'execution' },
-  { name: 'World', icon: Layers, group: 'execution' },
-  { name: 'Products', icon: Package, group: 'execution' },
-  { name: 'Wardrobe', icon: Shirt, group: 'execution' },
-  { name: 'Style', icon: Palette, group: 'execution' },
-  { name: 'Prompts', icon: Lightbulb, group: 'execution' },
-  { name: 'Audio', icon: Music, group: 'execution' },
-  { name: 'Edit', icon: Scissors, group: 'execution' },
-  { name: 'Results', icon: Target, group: 'execution' },
-  { name: 'Series', icon: Repeat, group: 'execution' },
-  { name: 'Readiness', icon: ClipboardCheck, group: 'execution' },
-  { name: 'Publishing', icon: Send, group: 'execution' },
-  { name: 'Exports', icon: PackageCheck, group: 'execution' },
-  { name: 'Reality Check', icon: Gauge, group: 'execution' },
-];
+import { liveJobs } from '../home/commandCenter';
+import {
+  CardMenu, CardTopBar, DetailsDrawer, EmptyCards, FilmStrip, HeroCarousel, ShotMenu, ShotStrip,
+  useProductionUndo,
+} from '../studio/StudioCards';
+import {
+  drawerSectionForTool, focusLabel, nextActionForScene, orderedCards,
+  resolveFocus, scopeText, type CardNextAction, type DrawerSection,
+} from '../studio/cards';
 
 const SAVE_LABELS = { idle: 'No unsaved changes', dirty: 'Unsaved changes', saving: 'Saving…', saved: 'Saved', failed: 'Save failed', offline: 'Offline · not saved', conflict: 'Conflict · not saved' } as const;
+
+const DRAWER_TITLES: Record<DrawerSection, string> = {
+  details: 'Production Details',
+  brief: 'Brief',
+  reality: 'Reality Check',
+  references: 'References',
+  story: 'Story',
+  script: 'Script',
+  assets: 'Characters & World',
+  audio: 'Audio & Edit',
+  results: 'Results',
+  readiness: 'Readiness',
+  versions: 'Change history',
+  impact: 'Impact',
+  continuity: 'Continuity',
+  memory: 'Memory',
+  series: 'Series',
+  exports: 'Export',
+  publishing: 'Publish',
+  preview: 'Preview',
+  playbook: 'AI Playbook',
+  realplan: 'Real Production Plan',
+};
 
 export function StudioPage() {
   const { productionId } = useParams();
@@ -95,12 +82,13 @@ export function StudioPage() {
   return <StudioComposition key={production.id} initial={production} reload={() => setAttempt(value => value + 1)} />;
 }
 
+
 export function StudioComposition({ initial, reload }: { initial: Production; reload: () => void }) {
   const workspaceId = initial.workspace_id;
   const [params, setParams] = useSearchParams();
-  const [face, setFace] = useState<ExecutionFace>(DEFAULT_EXECUTION_FACE);
-  const [directorOpen, setDirectorOpen] = useState(true);
-  const [zoom, setZoom] = useState<TimelineZoom>('scene');
+  // Real Production is the default Studio face. Faces are views of the same
+  // Production, never separate productions or persisted assignments.
+  const [face, setFace] = useState<StudioMode>(DEFAULT_EXECUTION_FACE as StudioMode);
   const [model, setModel] = useState<StudioReadModel | null>(null);
   const [modelLoading, setModelLoading] = useState(true);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -113,20 +101,18 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [surfaceAttempt, setSurfaceAttempt] = useState(0);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState<DrawerSection | null>(null);
+  const [assetKind, setAssetKind] = useState<'Characters' | 'World' | 'Products' | 'Wardrobe' | 'Style'>('Characters');
+  const [impactOffer, setImpactOffer] = useState<{ sceneId: string; label: string } | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const persisted = useRef(initial);
 
-  const requestedTool = (params.get('tool') as StudioTool) ?? 'Scenes';
-  // The face bar and the tool list must agree: a deep link to the AI face opens AI Creation,
-  // and an unknown tool name falls back rather than rendering a blank canvas.
-  // Idea and Hybrid are Studio views over the same vocabulary, not separate backends.
-  const tool = requestedTool === 'Idea' || requestedTool === 'Hybrid' ? requestedTool
-    : FACE_TOOL_NAMES.includes(requestedTool) ? requestedTool : (TOOLS.some(item => item.name === requestedTool) ? requestedTool : 'Scenes');
   const selectedSceneId = params.get('scene');
   const selectedShotId = params.get('shot');
+  const selectedSeriesId = params.get('series');
   // React Router builds its params from the render that created the writer, so a handler
   // can hold a query that is already out of date. Every Studio URL write therefore merges
-  // against this ref, which is always the live query: a deep-link repair and a selection
-  // made in the same tick compose instead of one silently replacing the other.
+  // against this ref, which is always the live query.
   const liveSearch = useRef(params.toString());
   liveSearch.current = params.toString();
   // Persist the exact Studio context so Home can resume it later.
@@ -138,32 +124,22 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     liveSearch.current = search.toString();
     setParams(search, { replace: true });
   }, [setParams]);
-  // Selection writes merge against the live query rather than a snapshot captured when the
-  // handler was created: a deep-link repair resolving in the same tick must not clobber a
-  // selection the creator just made, and vice versa.
-  const setUrl = useCallback((next: { tool?: StudioTool; scene?: string | null; shot?: string | null; series?: string | null }) => {
+  // Selection writes merge against the live query: focus changes never clobber each other.
+  const setUrl = useCallback((next: { scene?: string | null; shot?: string | null; series?: string | null }) => {
     writeParams(search => {
-      if (next.tool !== undefined) search.set('tool', next.tool);
       if (next.scene !== undefined) next.scene ? search.set('scene', next.scene) : search.delete('scene');
       if (next.shot !== undefined) next.shot ? search.set('shot', next.shot) : search.delete('shot');
       if (next.series !== undefined) next.series ? search.set('series', next.series) : search.delete('series');
     });
   }, [writeParams]);
 
-  // A deep link carries the face implicitly through its tool, so the face bar follows the tool.
-  // The creator's own face choice is preserved for every other tool.
-  useEffect(() => {
-    if (tool === FACE_TOOL.ai) setFace('ai');
-    else if (tool === FACE_TOOL.real) setFace('real');
-  }, [tool]);
-
-  const scenes = model?.scenes ?? [];
-  const selectedScene = scenes.find(scene => scene.id === selectedSceneId) ?? null;
-  const selectedShot = useMemo(() => {
-    if (!selectedShotId) return null;
-    return scenes.flatMap(scene => scene.shots).find(shot => shot.id === selectedShotId)
-      ?? model?.orphan_shots.find(shot => shot.id === selectedShotId) ?? null;
-  }, [scenes, model, selectedShotId]);
+  const scenes = useMemo(() => (model ? orderedCards(model) : []), [model]);
+  const focus = useMemo(
+    () => (model ? resolveFocus(model, selectedSceneId, selectedShotId) : { kind: 'production' as const }),
+    [model, selectedSceneId, selectedShotId],
+  );
+  const focusScene = focus.kind === 'production' ? null : focus.scene;
+  const focusShot = focus.kind === 'shot' ? focus.shot : null;
 
   const title = useAutosave(initial.title, async next => {
     if (!next.trim() || next.trim().length > 160) throw new AppError('validation', 'Enter a production title between 1 and 160 characters.');
@@ -182,11 +158,12 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
         throw new AppError('unavailable', 'The Studio could not read this Production. Nothing is shown rather than an invented structure.');
       }
       setModel(data); setConflict(false);
-      // A deep link must never silently open the wrong Production context, and the query is
-      // canonicalised in the same step so a hand-typed tool name cannot leave an unstable URL.
+      // Canonicalise selection: default to the first card. Legacy tool folding
+      // lives in its own effect so it also runs when the link arrives after load.
       writeParams(search => {
-        if (!search.get('tool')) search.set('tool', 'Scenes');
-        if (!search.get('scene') && data.scenes.length > 0) search.set('scene', data.scenes[0].id);
+        if (!search.get('scene') && data.scenes.length > 0) {
+          search.set('scene', [...data.scenes].sort((a, b) => a.sort_order - b.sort_order)[0].id);
+        }
       });
     }).catch(failure => {
       if (!active) return;
@@ -195,9 +172,18 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       setModelError(error.kind === 'conflict' ? `${error.message} Reload to see the newer Production state.` : error.message);
     }).finally(() => { if (active) setModelLoading(false); });
     return () => { active = false; };
-    // Deliberately keyed on the Production only: the deep-link repair below reads the
-    // current params without re-fetching the Production on every selection change.
+    // Deliberately keyed on the Production only: selection changes must not re-fetch.
   }, [workspaceId, initial.id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Legacy `?tool=` deep links fold into a drawer section whenever they appear —
+  // not only on the first model load — so a link opened while Studio is already
+  // open lands on the same drawer instead of being silently dropped.
+  useEffect(() => {
+    const tool = params.get('tool');
+    if (!tool) return;
+    const section = drawerSectionForTool(tool);
+    if (section) setDrawer(current => current ?? section);
+    writeParams(search => { search.delete('tool'); });
+  }, [params, writeParams]);
   useEffect(() => {
     let active = true; setSurfaceError(null);
     productionService.directorStudioSurface(workspaceId, initial.id).then(data => { if (active) setSurface(data); })
@@ -205,8 +191,30 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     return () => { active = false; };
   }, [workspaceId, initial.id, surfaceAttempt]);
 
+  // Progressive Director build: while cards are missing or background jobs for
+  // this Production are live, poll job state and refresh the moment anything
+  // completes. Cards appear as soon as each one is ready — never all-or-nothing.
+  useEffect(() => {
+    let active = true;
+    let lastSig = '';
+    const poll = async () => {
+      try {
+        const list = await prompt11Service.jobs(workspaceId);
+        if (!active) return;
+        const mine = list.jobs.filter(job => !job.production_id || job.production_id === initial.id);
+        setJobs(mine);
+        const sig = mine.map(job => `${job.job_id}:${job.status}`).join('|');
+        if (lastSig !== '' && sig !== lastSig) { refresh(); setSurfaceAttempt(value => value + 1); }
+        lastSig = sig;
+      } catch { /* jobs unavailable — the Studio still works from its read model */ }
+    };
+    void poll();
+    const timer = window.setInterval(poll, 6000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [workspaceId, initial.id, refresh]);
+
   const run = useCallback(async <T,>(action: () => Promise<T>, describe: (result: T) => string): Promise<T | null> => {
-    setBusy(true); setActionError(null); setActionNote(null);
+    setBusy(true); setActionError(null); setActionNote(null); setImpactOffer(null);
     try {
       const result = await action();
       setActionNote(describe(result));
@@ -243,7 +251,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       }), describeTiming),
     archive: (scene: StudioScene, cascade: boolean) => run(
       () => productionService.archiveStudioScene(workspaceId, initial.id, scene.id, scene.revision, cascade),
-      result => { if (selectedSceneId === scene.id) setUrl({ scene: null, shot: null }); return `Archived Scene${result.archived_shots ? ` and ${result.archived_shots} Shot(s)` : ''}. Content is archived, not deleted.`; }),
+      result => { if (selectedSceneId === scene.id) setUrl({ scene: null, shot: null }); return `Archived Card ${scene.order}${result.archived_shots ? ` and ${result.archived_shots} Shot(s)` : ''}. Content is archived, not deleted.`; }),
     move: (scene: StudioScene, direction: -1 | 1) => {
       const ordered = scenes.map(item => item.id);
       const index = ordered.indexOf(scene.id);
@@ -251,7 +259,10 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       if (target < 0 || target >= ordered.length) return Promise.resolve(null);
       [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
       return run(() => productionService.reorderStudioScenes(workspaceId, initial.id, ordered, model?.production.revision),
-        result => `Scene order saved (${result.scenes ?? ordered.length} Scenes).`);
+        result => {
+          setImpactOffer({ sceneId: scene.id, label: `Card ${scene.order} moved.` });
+          return `Card order saved (${result.scenes ?? ordered.length} Cards).`;
+        });
     },
     drop: (draggedId: string, targetId: string) => {
       const ordered = scenes.map(item => item.id);
@@ -259,18 +270,22 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       const to = ordered.indexOf(targetId);
       if (from < 0 || to < 0 || from === to) return Promise.resolve(null);
       ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+      const moved = scenes.find(item => item.id === draggedId);
       return run(() => productionService.reorderStudioScenes(workspaceId, initial.id, ordered, model?.production.revision),
-        result => `Scene order saved (${result.scenes ?? ordered.length} Scenes).`);
+        result => {
+          if (moved) setImpactOffer({ sceneId: moved.id, label: `Card ${moved.order} moved.` });
+          return `Card order saved (${result.scenes ?? ordered.length} Cards).`;
+        });
     },
     toggleLock: (scene: StudioScene) => run(
       () => productionService.setStudioLock(workspaceId, initial.id, 'scene', scene.id, !scene.locked_at, scene.revision),
-      result => `${result.locked ? 'Locked' : 'Unlocked'} the Scene.`),
+      result => `${result.locked ? 'Locked' : 'Unlocked'} Card ${scene.order}.`),
     approve: (scene: StudioScene, approval: StudioApproval) => run(
       () => productionService.setStudioApproval(workspaceId, initial.id, 'scene', scene.id, approval, scene.revision),
-      result => `Scene is ${approvalLabel(result.approval)}.`),
+      result => `Card ${scene.order} is ${approvalLabel(result.approval)}.`),
     reconcile: (scene: StudioScene) => run(
       () => productionService.reconcileStudioRuntime(workspaceId, initial.id, scene.id, model?.production.revision),
-      result => result.adjusted_ms === 0 ? 'The runtime already matches its target.' : `Adjusted the last Shot of that Scene by ${result.adjusted_ms} ms.`),
+      result => result.adjusted_ms === 0 ? 'The runtime already matches its target.' : `Adjusted the last Shot of that Card by ${result.adjusted_ms} ms.`),
   };
 
   const shotActions = {
@@ -299,7 +314,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       if (target < 0 || target >= ordered.length) return Promise.resolve(null);
       [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
       return run(() => productionService.reorderStudioShots(workspaceId, initial.id, scene.id, ordered, model?.production.revision),
-        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Scene).`);
+        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Card).`);
     },
     drop: (draggedId: string, targetId: string, sceneId: string) => {
       const scene = scenes.find(item => item.id === sceneId);
@@ -310,11 +325,11 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       if (from < 0 || to < 0 || from === to) return Promise.resolve(null);
       ordered.splice(to, 0, ordered.splice(from, 1)[0]);
       return run(() => productionService.reorderStudioShots(workspaceId, initial.id, sceneId, ordered, model?.production.revision),
-        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Scene).`);
+        result => `Shot order saved (${result.shots ?? ordered.length} Shots in the Card).`);
     },
     moveToScene: (shot: StudioShot, sceneId: string) => run(
       () => productionService.moveStudioShot(workspaceId, initial.id, shot.id, sceneId, shot.revision),
-      result => `Moved the Shot to Scene ${scenes.find(scene => scene.id === result.scene_id)?.order ?? ''}.`),
+      result => `Moved the Shot to Card ${scenes.find(scene => scene.id === result.scene_id)?.order ?? ''}.`),
     toggleLock: (shot: StudioShot) => run(
       () => productionService.setStudioLock(workspaceId, initial.id, 'shot', shot.id, !shot.locked_at, shot.revision),
       result => `${result.locked ? 'Locked' : 'Unlocked'} the Shot.`),
@@ -333,28 +348,106 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     },
   };
 
-  const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
-  const mode: StudioMode = tool === 'Hybrid' ? 'hybrid' : face;
-  const view = viewForTool(tool);
-  const setMode = (next: StudioMode) => {
-    if (next === 'hybrid') { setUrl({ tool: 'Hybrid' }); return; }
-    setFace(next);
-    if (tool === 'AI Creation' || tool === 'Real Production') setUrl({ tool: FACE_TOOL[next] });
+  const undo = useProductionUndo(workspaceId, initial.id, model?.production.revision ?? initial.revision, refresh);
+
+  const insertCard = (index: number) => {
+    void run(async () => {
+      const created = await productionService.createStudioScene(workspaceId, initial.id, {
+        title: 'New moment',
+        purpose: 'A new production beat.',
+        description: 'Tell TONDE what should happen here, or ask TONDE to develop the moment.',
+        expected_production_revision: model?.production.revision,
+      });
+      if (!created.scene_id) return created;
+      const ordered = scenes.map(item => item.id);
+      ordered.splice(Math.min(Math.max(index, 0), ordered.length), 0, created.scene_id);
+      const reorder = await productionService.reorderStudioScenes(workspaceId, initial.id, ordered, model?.production.revision);
+      setUrl({ scene: created.scene_id, shot: null });
+      return { ...reorder, scene_id: created.scene_id };
+    }, () => 'New card inserted at that position.');
   };
 
-  return <div className="studio-shell studio5-shell">
-    <StudioTopBar
+  const focusDirector = (hint: string) => {
+    setActionNote(hint);
+    requestAnimationFrame(() => {
+      document.getElementById('director-message')?.focus();
+    });
+  };
+
+  const runPrimary = (scene: StudioScene) => {
+    const action: CardNextAction = nextActionForScene(scene);
+    switch (action.kind) {
+      case 'locked':
+        setActionNote(action.detail);
+        return;
+      case 'review_decision':
+        setUrl({ scene: scene.id, shot: null });
+        setDrawer('readiness');
+        return;
+      case 'plan_coverage':
+        setUrl({ scene: scene.id, shot: null });
+        focusDirector(`Tell TONDE what Card ${scene.order} must accomplish — for example: “Give Card ${scene.order} three Shots: a wide reveal, Maya entering, and a reaction.”`);
+        return;
+      case 'review_result':
+      case 'start_execution':
+        setUrl({ scene: scene.id, shot: scene.shots[0]?.id ?? null });
+        setDrawer('results');
+        return;
+      case 'run_playbook':
+        setUrl({ scene: scene.id, shot: scene.shots[0]?.id ?? null });
+        setDrawer('playbook');
+        return;
+      case 'continue_next': {
+        const index = scenes.findIndex(item => item.id === scene.id);
+        const next = scenes[index + 1];
+        if (next) setUrl({ scene: next.id, shot: null });
+        else setActionNote('This is the last card. The Production is complete up to here.');
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
+  const directorFace = face === 'hybrid' ? 'Hybrid' : PRODUCT.executionFaces[face as ExecutionFace];
+  const reviewCount = model?.status_summary.needs_attention ?? 0;
+  const live = model ? liveJobs(jobs.filter(job => !job.production_id || job.production_id === initial.id)) : [];
+
+  const shotTargets = useMemo(() => scenes.flatMap(scene => scene.shots.map(shot => ({
+    id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, kind: 'shot',
+  }))), [scenes]);
+  const versionTargets = useMemo(() => [
+    { id: initial.id, label: `${initial.title} (Production)`, kind: 'production' },
+    ...Object.entries(model?.documents ?? {}).flatMap(([key, document]) => document?.document_id
+      ? [{
+        id: document.document_id, label: document.title ?? key, kind: 'creative_document',
+        scope: (key === 'script' ? 'script' : 'story') as 'script' | 'story',
+      }]
+      : []),
+    ...scenes.map(scene => ({ id: scene.id, label: scene.title, kind: 'scene', scope: 'scene' as const })),
+    ...scenes.flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot', scope: 'shot' as const }))),
+    ...(model?.assets ?? []).map(asset => ({ id: asset.id, label: asset.name, kind: 'asset', scope: 'asset' as const })),
+  ], [initial.id, initial.title, scenes, model]);
+  const readinessTargets = useMemo(() => [
+    { id: initial.id, label: `${initial.title} (Production)`, kind: 'production' },
+    ...scenes.map(scene => ({ id: scene.id, label: scene.title, kind: 'scene' })),
+    ...scenes.flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot' }))),
+  ], [initial.id, initial.title, scenes]);
+
+  return <div className="cs-shell">
+    <CardTopBar
+      productionTitle={initial.title}
       typeBadge={PRODUCT.productionTypes[initial.production_type as keyof typeof PRODUCT.productionTypes] ?? initial.production_type.replaceAll('_', ' ')}
       titleEditor={<><label className="sr-only" htmlFor="production-title">Production title</label>
         <input id="production-title" aria-label="Production title" value={title.value}
           onChange={event => title.setValue(event.target.value)} maxLength={160} disabled={!!initial.locked_at} /></>}
       saveState={SAVE_LABELS[title.state]}
-      reviewCount={model?.status_summary.needs_attention ?? 0}
-      mode={mode} onMode={setMode}
-      onPreview={() => setUrl({ tool: 'Movie Mode' })}
-      onShare={() => setUrl({ tool: 'Publishing' })}
-      onExport={() => setUrl({ tool: 'Exports' })}
-      directorOpen={directorOpen} onToggleDirector={() => setDirectorOpen(value => !value)}
+      reviewCount={reviewCount}
+      mode={face} onMode={setFace}
+      undoNote={undo.note} undoBusy={undo.busy} onUndo={() => void undo.undo()} onRedo={() => void undo.redo()}
+      onOpenDetails={() => setDrawer('details')}
+      onExport={() => setDrawer('exports')}
     />
 
     {title.error && <div className="save-error" role="alert">{title.error}
@@ -365,206 +458,199 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     </div>}
     {actionError && <div className="save-error" role="alert">{actionError}<button onClick={() => setActionError(null)}>Dismiss</button></div>}
     {actionNote && <p className="studio5-note" role="status">{actionNote}</p>}
+    {impactOffer && <p className="studio5-note cs-impact-offer" role="status">{impactOffer.label} Story order changed — later cards may need a transition update.
+      <button type="button" className="cs-btn" onClick={() => setDrawer('impact')}>Review impact</button>
+      <button type="button" className="cs-btn" onClick={() => setImpactOffer(null)}>Keep it</button></p>}
 
-    <div className="studio-workspace">
-      <nav className="s8-rail" aria-label="Studio functions">
-        {STUDIO_RAIL.map(({ view: itemView, label, access, icon: Icon }) => {
-          const active = view === itemView;
-          const open = () => {
-            if (itemView === 'idea') setUrl({ tool: 'Idea' });
-            else if (itemView === 'story') setUrl({ tool: 'Story' });
-            else if (itemView === 'script') setUrl({ tool: 'Script' });
-            else if (itemView === 'scenes') setUrl({ tool: 'Scenes' });
-            else if (itemView === 'shots') setUrl({ tool: 'Shots' });
-            else if (itemView === 'produce') setUrl({ tool: face === 'ai' ? 'AI Creation' : 'Real Production' });
-            else if (itemView === 'edit') setUrl({ tool: 'Audio' });
-            else setUrl({ tool: 'Results' });
-          };
-          // Names come from visible content exactly like the previous toolbox, so role
-          // queries keep working; only Edit carries an aria-label because the legacy
-          // Edit tool in All studio tools shares its visible name.
-          return <button key={itemView} type="button" aria-label={itemView === 'edit' ? access : undefined}
-            title={access} aria-pressed={active}
-            className={active ? 'active' : ''} onClick={open}><Icon size={17} aria-hidden="true" /><span>{label}</span></button>;
-        })}
-      </nav>
-      {model ? <StudioDrawer view={view} model={model} surface={surface}
-        selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
-        onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
-        onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
-        onOpenTool={name => setUrl({ tool: name as StudioTool })}
-        allTools={TOOLS.filter(item => !['Story', 'Script', 'Scenes', 'Shots', 'Results'].includes(item.name))}
-        activeTool={tool} />
-        : <aside className="s8-drawer" aria-label="Loading Studio tools"><LoadingState label="Loading tools…" /></aside>}
-
-      <section className="working-canvas" aria-label="Production working canvas">
-        <div className="canvas-heading">
-          <p className="eyebrow">{PRODUCT.executionFaces[face].toUpperCase()} / {tool.toUpperCase()}</p>
-          <span className="pill">{approvalLabel(model?.production.approval ?? initial.approval)}</span>
-          {model && <span className="pill">{providerLabel}</span>}
+    <div className="cs-workspace">
+      <section className="cs-stage" aria-label="Production sequence">
+        <div className="cs-stage-head">
+          <div>
+            <p className="eyebrow">PRODUCTION SEQUENCE</p>
+            <h2>One card. One moment. One next action.</h2>
+            <p>Scroll sideways through the production. TONDE stays with the card in focus.</p>
+          </div>
+          {focusScene && <button type="button" className="cs-btn" disabled={busy} onClick={() => insertCard(scenes.findIndex(item => item.id === focusScene.id) + 1)}>＋ Add after</button>}
         </div>
+
         {modelLoading && !model
-          ? <LoadingState label="Loading this Production's Studio…" />
+          ? <LoadingState label="Loading this Production's cards…" />
           : modelError && !model
             ? <PartialState title="The Studio could not read this Production" action={<button onClick={() => { setModelError(null); refresh(); }}>Try again</button>}>
               {modelError}
             </PartialState>
-            : model && <>
-              {tool === 'Scenes' && <SceneCanvas model={model} scene={selectedScene} busy={busy}
-                onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
-                onCreate={sceneActions.create} onUpdate={sceneActions.update} onDuplicate={sceneActions.duplicate}
-                onArchive={sceneActions.archive} onMove={sceneActions.move} onToggleLock={sceneActions.toggleLock}
-                onApprove={sceneActions.approve} onReconcile={sceneActions.reconcile} />}
-              {tool === 'Shots' && <ShotCanvas model={model} scene={selectedScene} shot={selectedShot} busy={busy}
-                onSelect={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
-                onCreate={shotActions.create} onUpdate={shotActions.update} onDuplicate={shotActions.duplicate}
-                onArchive={shotActions.archive} onMove={shotActions.move} onMoveToScene={shotActions.moveToScene}
-                onToggleLock={shotActions.toggleLock} onApprove={shotActions.approve} onBulk={shotActions.bulk} />}
-              {tool === 'Real Production' && <RealProductionCanvas workspaceId={workspaceId}
-                productionId={initial.id} model={model} timing={model.timing} surface={surface} busy={busy}
-                selectedShotId={selectedShotId}
-                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
-              {tool === 'AI Creation' && <AiCreationCanvas workspaceId={workspaceId} productionId={initial.id}
-                busy={busy} selectedShotId={selectedShotId}
-                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
-              {tool === 'Movie Mode' && <MovieModeCanvas workspaceId={workspaceId} productionId={initial.id}
-                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId} busy={busy}
-                onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
-                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
-              {tool === 'Series' && <SeriesStudioCanvas workspaceId={workspaceId} projectId={initial.project_id}
-                seriesId={params.get('series')} onSelectSeries={seriesId => setUrl({ series: seriesId })} />}
-              {tool === 'Impact' && <ProductionIntelligenceCanvas workspaceId={workspaceId} productionId={initial.id}
-                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
-                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
-                sceneTitle={selectedScene?.title ?? null} shotTitle={selectedShot?.title ?? null}
-                productionTitle={initial.title} busy={busy} onChanged={refresh} />}
-              {tool === 'Continuity' && <ProductionContinuityCanvas workspaceId={workspaceId} productionId={initial.id}
-                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
-                selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
-                sceneTitle={selectedScene?.title ?? null} shotTitle={selectedShot?.title ?? null}
-                busy={busy} onChanged={refresh} />}
-              {tool === 'Memory' && <ProductionMemoryCanvas workspaceId={workspaceId} productionId={initial.id}
-                assets={(model?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
-                busy={busy} onChanged={refresh} />}
-              {tool === 'Versions' && <ProductionVersioningCanvas workspaceId={workspaceId} productionId={initial.id}
-                targets={[
-                  ...Object.entries(model?.documents ?? {}).flatMap(([key, document]) => document?.document_id
-                    ? [{ id: document.document_id, label: document.title ?? key, kind: 'creative_document',
-                        scope: (key === 'script' ? 'script' : 'story') as 'script' | 'story' }] : []),
-                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: scene.title, kind: 'scene', scope: 'scene' as const })),
-                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot', scope: 'shot' as const }))),
-                  ...(model?.assets ?? []).map(asset => ({ id: asset.id, label: asset.name, kind: 'asset', scope: 'asset' as const })),
-                ]}
-                busy={busy} onChanged={refresh} />}
-              {tool === 'Readiness' && <ProductionReadinessCanvas workspaceId={workspaceId}
-                productionId={initial.id}
-                targets={[
-                  { id: initial.id, label: `${initial.title} (Production)`, kind: 'production' },
-                  ...Object.entries(model?.documents ?? {}).flatMap(([key, document]) => document?.document_id
-                    ? [{ id: document.document_id, label: document.title ?? key, kind: 'creative_document' }] : []),
-                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: scene.title, kind: 'scene' })),
-                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({ id: shot.id, label: shot.title, kind: 'shot' }))),
-                ]}
-                busy={busy} onChanged={refresh}
-                onOpen={(objectId, kind) => {
-                  if (kind === 'scene') { setUrl({ scene: objectId, shot: null }); return; }
-                  if (kind === 'shot') {
-                    const owning = (model?.scenes ?? []).find(scene => scene.shots.some(shot => shot.id === objectId));
-                    setUrl(owning ? { scene: owning.id, shot: objectId } : { shot: objectId });
-                  }
-                }} />}
-              {tool === 'Publishing' && <PublishingCanvas workspaceId={workspaceId} productionId={initial.id} />}
-              {tool === 'Exports' && <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />}
-              {['Characters', 'World', 'Products', 'Wardrobe', 'Style'].includes(tool) &&
-                <AssetCanvas model={model} tool={tool} busy={busy} onSelectAsset={setSelectedAssetId} />}
-              {tool === 'Idea' && (surfaceError && !surface
-                ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
-                : !surface ? <LoadingState label="Loading Director intelligence…" />
-                  : <IdeaLabCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface}
-                    onOpenTool={name => setUrl({ tool: name as StudioTool })} refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} />)}
-              {tool === 'Hybrid' && <HybridBoard scenes={model.scenes} busy={busy}
-                onSetExecution={(shot, method) => { void shotActions.bulk([shot.id], { execution_method: method }); }}
-                onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} />}
-              {tool === 'Audio' && <><AudioCanvas workspaceId={workspaceId} productionId={initial.id} model={model}
-                productionType={initial.production_type} durationMs={initial.planned_duration_ms}
-                references={(surface?.references ?? []).map(reference => ({ reference_id: reference.reference_id, source_identity: reference.source_identity, shaping_ready: reference.shaping_ready }))}
-                onChanged={() => { setAttempt(value => value + 1); setSurfaceAttempt(value => value + 1); }} busy={busy || !!model.production.locked_at} />
-                <section className="s8-edit-structure" aria-label="Edit structure">
-                  <h3>Edit structure</h3>
-                  <p className="subtle">The semantic edit follows Scene order. Timing {model.timing.status}{model.timing.target_ms ? ` against ${formatMs(model.timing.target_ms)}` : ''}.</p>
-                  <ol>{model.scenes.map(scene => <li key={scene.id}>
-                    <button type="button" className="text-link" onClick={() => setUrl({ scene: scene.id, shot: null })}>Scene {scene.order} · {scene.title}</button>
-                    <span> — {formatMs(scene.duration_ms)} · {scene.shots.length} Shot{scene.shots.length === 1 ? '' : 's'}</span>
-                  </li>)}</ol>
-                </section></>}
-              {['Prompts', 'Edit'].includes(tool) &&
-                <FoundationCanvas model={model} tool={tool} busy={busy} onReconcile={sceneActions.reconcile} />}
-              {tool === 'Results' && <ProductionShotMatchCanvas workspaceId={workspaceId}
-                productionId={initial.id}
-                shots={(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({
-                  id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, method: shot.execution_method,
-                  resultCount: shot.result_count,
-                })))}
-                targets={[
-                  ...(model?.scenes ?? []).flatMap(scene => scene.shots.map(shot => ({
-                    id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, kind: 'shot' }))),
-                  ...(model?.scenes ?? []).map(scene => ({ id: scene.id, label: `Scene ${scene.order} ${scene.title}`, kind: 'scene' })),
-                ]}
-                busy={busy} onChanged={refresh}
-                onOpenShot={shotId => {
-                  const owning = (model?.scenes ?? []).find(scene => scene.shots.some(shot => shot.id === shotId));
-                  setUrl(owning ? { scene: owning.id, shot: shotId } : { shot: shotId });
-                }} />}
-              {['Brief', 'References', 'Story', 'Script', 'Reality Check'].includes(tool) && (surfaceError && !surface
-                ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>
-                  {surfaceError}
-                </PartialState>
-                : !surface
-                  ? <LoadingState label="Loading Director intelligence…" />
-                  : <>
-                    {tool === 'Brief' && <BriefCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
-                    {tool === 'References' && <ReferenceCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
-                    {tool === 'Story' && <StoryCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
-                    {tool === 'Script' && <ScriptCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })} />}
-                    {tool === 'Reality Check' && <RealityCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />}
-                  </>)}
-              <section className="studio5-detail">
-                <TimingInspector timing={model.timing} />
-                {selectedShot && <section aria-label="Selected Shot summary" className="studio5-selected">
-                  <h3>Selected Shot</h3>
-                  <p><strong>{selectedShot.title}</strong> · {formatMs(selectedShot.planned_duration_ms ?? 0)} · {approvalLabel(selectedShot.approval)}</p>
-                  <p className="subtle">{selectedShot.purpose || 'purpose unset'} · {selectedShot.framing || 'framing unset'} · {selectedShot.execution_method.toUpperCase()}</p>
-                </section>}
-                {selectedAssetId && <p className="subtle" role="status">Asset {model.assets.find(asset => asset.id === selectedAssetId)?.name ?? selectedAssetId} is selected. Scene and Shot usage is listed in its row.</p>}
-                {model.truncated && <p className="subtle" role="status">This Production is larger than the Studio page size, so the read model is truncated.</p>}
-                <section aria-label="Extracted techniques">
-                  <h3>Techniques carried into this Production</h3>
-                  <TechniqueTable techniques={surface?.techniques ?? []} />
-                </section>
-              </section>
-            </>}
+            : model && (scenes.length === 0
+              ? <EmptyCards liveJobs={live.length} busy={busy}
+                onAsk={() => focusDirector('Describe the first moment — TONDE builds the cards from your direction.')}
+                onBlank={() => insertCard(0)} />
+              : <>
+                <HeroCarousel scenes={scenes} activeId={focusScene?.id ?? null} selectedShotId={selectedShotId}
+                  onFocusScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+                  onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
+                  onPrimary={runPrimary}
+                  renderMenu={scene => <CardMenu scene={scene} busy={busy}
+                    onRename={(target, next) => void sceneActions.update(target, { title: next, expected_revision: target.revision })}
+                    onApprove={target => void sceneActions.approve(target, target.approval === 'approved' ? 'needs_review' : 'approved')}
+                    onToggleLock={target => void sceneActions.toggleLock(target)}
+                    onArchive={target => void sceneActions.archive(target, true)}
+                    onMove={(target, direction) => void sceneActions.move(target, direction)}
+                    onHowTo={target => {
+                      setUrl({ scene: target.id, shot: null });
+                      setDrawer(target.shots.some(shot => shot.execution_method !== 'real') ? 'playbook' : 'realplan');
+                    }} />} />
+                <ShotStrip scene={focusScene} selectedShotId={selectedShotId}
+                  onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
+                  onAddShot={() => focusScene && void shotActions.create({
+                    scene_id: focusScene.id, title: 'New shot', expected_production_revision: model.production.revision,
+                  })}
+                  busy={busy} />
+                <FilmStrip scenes={scenes} activeId={focusScene?.id ?? null}
+                  onFocusScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+                  onInsert={insertCard}
+                  onDrop={(dragged, target) => void sceneActions.drop(dragged, target)}
+                  busy={busy} />
+              </>)}
+
+        <p className="subtle" role="status" style={{ padding: '0 18px' }}>
+          {model ? `${providerLabel} · ${reviewCount} review item${reviewCount === 1 ? '' : 's'}` : 'Connecting…'}
+          {model?.truncated ? ' · This Production is larger than the Studio page size, so the read model is truncated.' : ''}
+        </p>
       </section>
 
-      {directorOpen && model && <StudioInspector workspaceId={workspaceId} productionId={initial.id} surface={surface} model={model}
-        refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} face={mode === 'hybrid' ? 'Hybrid' : PRODUCT.executionFaces[face]}
-        scope={{ scene: selectedScene, shot: selectedShot }} />}
+      <aside className="cs-director" aria-label="TONDE Director">
+        <div className="cs-focus">
+          <strong>TONDE</strong>
+          <span role="status">{model ? focusLabel(focus, model) : 'FOCUS · PRODUCTION'}</span>
+        </div>
+        {model
+          ? <StudioInspector workspaceId={workspaceId} productionId={initial.id} surface={surface} model={model}
+            refresh={() => { setSurfaceAttempt(value => value + 1); refresh(); }} face={directorFace}
+            scope={{ scene: focusScene, shot: focusShot }} />
+          : <p className="subtle" style={{ padding: '0 14px' }}>Loading production intelligence…</p>}
+        {focusShot && <div style={{ padding: '0 14px 12px' }}>
+          <ShotMenu shot={focusShot} displayId={focusScene
+            ? `${String(focusScene.order).padStart(2, '0')}${String.fromCharCode(65 + Math.max(focusScene.shots.findIndex(item => item.id === focusShot.id), 0))}`
+            : focusShot.title}
+            busy={busy}
+            onRename={(target, next) => void shotActions.update(target, { title: next, expected_revision: target.revision })}
+            onApprove={target => void shotActions.approve(target, 'approved')}
+            onExecute={(target, method) => void shotActions.update(target, { execution_method: method, expected_revision: target.revision })}
+            onDuration={(target, durationMs) => void shotActions.update(target, { duration_ms: durationMs, expected_revision: target.revision })} />
+        </div>}
+        {model && <p className="subtle" style={{ padding: '0 14px 12px' }}>{scopeText(focus)}</p>}
+      </aside>
     </div>
 
-    {model && <StudioTimeline model={model} zoom={zoom} setZoom={setZoom}
-      selectedSceneId={selectedSceneId} selectedShotId={selectedShotId}
-      moments={(surface?.story?.beats ?? []).map(beat => ({ id: beat.id, title: beat.name }))}
-      resultsByShot={Object.fromEntries(model.scenes.flatMap(scene => scene.shots
-        .filter(shot => shot.result_count > 0).map(shot => [shot.id, shot.result_count])))}
-      onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
-      onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
-      onMoveScene={(sceneId, direction) => { const scene = scenes.find(item => item.id === sceneId); if (scene) void sceneActions.move(scene, direction); }}
-      onMoveShot={(shot, direction) => { const target = selectedShotList(scenes, shot.id); if (target) void shotActions.move(target, direction); }}
-      onDropScene={(dragged, target) => void sceneActions.drop(dragged, target)}
-      onDropShot={(dragged, target, sceneId) => void shotActions.drop(dragged, target, sceneId)}
-      busy={busy} />}
+    {drawer && model && <DetailsDrawer title={DRAWER_TITLES[drawer]} onClose={() => setDrawer(null)}>
+      {drawer === 'details' && <>
+        <section className="detail-section"><strong>Brief</strong><p>{surface?.brief ? surface.brief.production_goal : 'No Brief recorded yet. Ask TONDE to develop it.'}</p>
+          <button type="button" className="cs-btn" onClick={() => setDrawer('brief')}>Open Brief</button></section>
+        <section className="detail-section"><strong>Story</strong><p>{surface?.story ? `${surface.story.title} — ${surface.story.logline}` : 'No Story direction recorded yet. Ask TONDE to develop it.'}</p>
+          <button type="button" className="cs-btn" onClick={() => setDrawer('story')}>Open Story</button></section>
+        <section className="detail-section"><strong>Script</strong><p>{surface?.documents?.script ? surface.documents.script.title : 'No Script recorded yet.'}</p>
+          <button type="button" className="cs-btn" onClick={() => setDrawer('script')}>Open Script</button></section>
+        <section className="detail-section"><strong>Characters</strong><p>{(surface?.brief?.cast ?? []).join(', ') || 'No cast recorded yet.'}</p></section>
+        <section className="detail-section"><strong>Locations</strong><p>{(surface?.brief?.environments ?? []).join(', ') || 'No locations recorded yet.'}</p></section>
+        <section className="detail-section"><strong>Production Kit</strong><p>{surface ? (surface.setup_listed.length > 0 ? surface.setup_listed.join(', ') : 'No kit listed yet — TONDE adapts to what you actually have.') : 'Loading…'}</p></section>
+        <section className="detail-section"><strong>Schedule</strong><p>No shoot date is set on this Production.</p></section>
+        <section className="detail-section"><strong>References & Style</strong><p>{surface && surface.references.length > 0 ? `${surface.references.length} reference(s) shape this Production.` : 'No references shape this Production yet.'}</p></section>
+        <section className="detail-section"><strong>Change history</strong><p>Every accepted change is preserved with who made it and when.</p>
+          <button type="button" className="cs-btn" onClick={() => setDrawer('versions')}>Open history</button></section>
+        {selectedAssetId && <p className="subtle" role="status">Asset {model.assets.find(asset => asset.id === selectedAssetId)?.name ?? selectedAssetId} is selected.</p>}
+      </>}
+      {drawer === 'brief' && (surface
+        ? <BriefCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />
+        : surfaceError
+          ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+          : <LoadingState label="Loading Director intelligence…" />)}
+      {drawer === 'reality' && (surface
+        ? <RealityCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />
+        : surfaceError
+          ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+          : <LoadingState label="Loading Director intelligence…" />)}
+      {drawer === 'references' && (surface
+        ? <ReferenceCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />
+        : surfaceError
+          ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+          : <LoadingState label="Loading Director intelligence…" />)}
+      {drawer === 'story' && (surface
+        ? <StoryCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} />
+        : surfaceError
+          ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+          : <LoadingState label="Loading Director intelligence…" />)}
+      {drawer === 'script' && (surface
+        ? <ScriptCanvas workspaceId={workspaceId} productionId={initial.id} surface={surface} refresh={() => setSurfaceAttempt(value => value + 1)} onSelectScene={sceneId => { setUrl({ scene: sceneId, shot: null }); setDrawer(null); }} />
+        : surfaceError
+          ? <PartialState title="Director intelligence is unavailable" action={<button onClick={() => setSurfaceAttempt(value => value + 1)}>Try again</button>}>{surfaceError}</PartialState>
+          : <LoadingState label="Loading Director intelligence…" />)}
+      {drawer === 'assets' && <>
+        <div role="group" aria-label="Asset kinds" style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {(['Characters', 'World', 'Products', 'Wardrobe', 'Style'] as const).map(kind => <button key={kind} type="button"
+            className="cs-btn" aria-pressed={assetKind === kind} onClick={() => setAssetKind(kind)}>{kind}</button>)}
+        </div>
+        <AssetCanvas model={model} tool={assetKind} busy={busy} onSelectAsset={setSelectedAssetId} />
+      </>}
+      {drawer === 'audio' && <>
+        <AudioCanvas workspaceId={workspaceId} productionId={initial.id} model={model}
+          productionType={initial.production_type} durationMs={initial.planned_duration_ms}
+          references={(surface?.references ?? []).map(reference => ({ reference_id: reference.reference_id, source_identity: reference.source_identity, shaping_ready: reference.shaping_ready }))}
+          onChanged={() => { setAttempt(value => value + 1); setSurfaceAttempt(value => value + 1); }} busy={busy || !!model.production.locked_at} />
+        <section aria-label="Edit structure">
+          <h3>Edit structure</h3>
+          <p className="subtle">The semantic edit follows card order. Timing {model.timing.status}{model.timing.target_ms ? ` against ${formatMs(model.timing.target_ms)}` : ''}.</p>
+          <ol>{scenes.map(scene => <li key={scene.id}>
+            <button type="button" className="text-link" onClick={() => { setUrl({ scene: scene.id, shot: null }); setDrawer(null); }}>Card {scene.order} · {scene.title}</button>
+            <span> — {formatMs(scene.duration_ms)} · {scene.shots.length} Shot{scene.shots.length === 1 ? '' : 's'}</span>
+          </li>)}</ol>
+        </section>
+      </>}
+      {drawer === 'results' && <ProductionShotMatchCanvas workspaceId={workspaceId} productionId={initial.id}
+        shots={scenes.flatMap(scene => scene.shots.map(shot => ({
+          id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, method: shot.execution_method, resultCount: shot.result_count,
+        })))}
+        targets={shotTargets} busy={busy} onChanged={refresh}
+        onOpenShot={shotId => {
+          const owning = scenes.find(scene => scene.shots.some(shot => shot.id === shotId));
+          if (owning) setUrl({ scene: owning.id, shot: shotId });
+        }} />}
+      {drawer === 'readiness' && <ProductionReadinessCanvas workspaceId={workspaceId} productionId={initial.id}
+        targets={readinessTargets} busy={busy} onChanged={refresh}
+        onOpen={(objectId, kind) => {
+          if (kind === 'scene') { setUrl({ scene: objectId, shot: null }); return; }
+          if (kind === 'shot') {
+            const owning = scenes.find(scene => scene.shots.some(shot => shot.id === objectId));
+            setUrl(owning ? { scene: owning.id, shot: objectId } : { shot: objectId });
+          }
+        }} />}
+      {drawer === 'versions' && <ProductionVersioningCanvas workspaceId={workspaceId} productionId={initial.id}
+        targets={versionTargets} busy={busy} onChanged={refresh} />}
+      {drawer === 'continuity' && <ProductionContinuityCanvas workspaceId={workspaceId} productionId={initial.id}
+        assets={model.assets.map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+        selectedSceneId={focusScene?.id ?? null} selectedShotId={focusShot?.id ?? null}
+        sceneTitle={focusScene?.title ?? null} shotTitle={focusShot?.title ?? null}
+        busy={busy} onChanged={refresh} />}
+      {drawer === 'memory' && <ProductionMemoryCanvas workspaceId={workspaceId} productionId={initial.id}
+        assets={model.assets.map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+        busy={busy} onChanged={refresh} />}
+      {drawer === 'series' && <SeriesStudioCanvas workspaceId={workspaceId} projectId={initial.project_id}
+        seriesId={selectedSeriesId} onSelectSeries={seriesId => setUrl({ series: seriesId })} />}
+      {drawer === 'impact' && <ProductionIntelligenceCanvas workspaceId={workspaceId} productionId={initial.id}
+        assets={model.assets.map(asset => ({ id: asset.id, name: asset.name, asset_type: asset.asset_type }))}
+        selectedSceneId={focusScene?.id ?? null} selectedShotId={focusShot?.id ?? null}
+        sceneTitle={focusScene?.title ?? null} shotTitle={focusShot?.title ?? null}
+        productionTitle={initial.title} busy={busy} onChanged={refresh} />}
+      {drawer === 'exports' && <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />}
+      {drawer === 'publishing' && <PublishingCanvas workspaceId={workspaceId} productionId={initial.id} />}
+      {drawer === 'preview' && <MovieModeCanvas workspaceId={workspaceId} productionId={initial.id}
+        selectedSceneId={selectedSceneId} selectedShotId={selectedShotId} busy={busy}
+        onSelectScene={sceneId => setUrl({ scene: sceneId, shot: null })}
+        onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+      {drawer === 'playbook' && <AiCreationCanvas workspaceId={workspaceId} productionId={initial.id}
+        busy={busy} selectedShotId={selectedShotId}
+        onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+      {drawer === 'realplan' && <RealProductionCanvas workspaceId={workspaceId} productionId={initial.id}
+        model={model} timing={model.timing} surface={surface} busy={busy} selectedShotId={selectedShotId}
+        onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })} onChanged={refresh} />}
+    </DetailsDrawer>}
   </div>;
-}
-
-function selectedShotList(scenes: StudioScene[], shotId: string): StudioShot | null {
-  return scenes.flatMap(scene => scene.shots).find(shot => shot.id === shotId) ?? null;
 }

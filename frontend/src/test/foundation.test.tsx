@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@supabase/supabase-js';
@@ -188,9 +188,9 @@ describe('canonical application routes', () => {
     expect(await screen.findByLabelText('Production title')).toHaveValue(production.title);
     expect(productionService.get).toHaveBeenCalledWith(workspaceId, productionId);
     expect(localStorage.getItem(`tonde:${workspaceId}:production`)).toBe(productionId);
-    expect(screen.getByRole('button', { name: 'REAL PRODUCTION' })).toHaveAttribute('aria-pressed','true');
-    fireEvent.click(screen.getByRole('button', { name: 'AI CREATION' }));
-    expect(screen.getByRole('button', { name: 'AI CREATION' })).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByRole('button', { name: 'REAL' })).toHaveAttribute('aria-pressed','true');
+    fireEvent.click(screen.getByRole('button', { name: 'AI' }));
+    expect(screen.getByRole('button', { name: 'AI' })).toHaveAttribute('aria-pressed','true');
   });
   it('creates canonical project/production and opens its Studio', async () => {
     vi.mocked(productionService.create).mockResolvedValue(productionId);
@@ -290,32 +290,25 @@ describe('Studio Director intelligence surfaces', () => {
     expect(await screen.findByText(/Director · deterministic only/)).toBeVisible();
     expect(productionService.directorStudioSurface).toHaveBeenCalledWith(workspaceId, productionId);
     expect(await screen.findByText(/no provider configured/)).toBeVisible();
-    expect(screen.getByText(/Techniques carried into this Production/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'Brief'}));
+    fireEvent.click(screen.getByRole('button',{name:'Production Details'}));
+    expect(await screen.findByRole('dialog',{name:'Production Details'})).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Open Brief'}));
     expect(await screen.findByLabelText('Intelligent Brief')).toBeVisible();
     expect(screen.getByLabelText('Production goal')).toHaveValue('A 30-second premium coffee commercial');
     expect(screen.getByText(/Revision 2/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'References'}));
-    expect(await screen.findByLabelText('Reference analysis')).toBeVisible();
-    expect(screen.getByText(/Only container metadata was readable/)).toBeVisible();
-    expect(screen.getByText('Observed')).toBeVisible();
-    expect(screen.getByText(/What makes this work/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'Story'}));
-    expect(await screen.findByLabelText('Story')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Close details'}));
+    fireEvent.click(screen.getByRole('button',{name:'Production Details'}));
+    fireEvent.click(screen.getByRole('button',{name:'Open Story'}));
+    const storyDialog = await screen.findByRole('dialog',{name:'Story'});
+    expect(within(storyDialog).getByLabelText('Story')).toBeVisible();
     expect(screen.getByText('North Bean — Slow Craft')).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'Script'}));
-    expect(await screen.findByLabelText('Script')).toBeVisible();
-    expect(screen.getAllByText(/Give it a minute\./).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Persisted Script/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button',{name:'Reality Check'}));
-    expect(await screen.findByLabelText('Reality check')).toBeVisible();
-    expect(screen.getByText(/Shootable with one camera/)).toBeVisible();
-    expect(screen.getByText(/One camera against two simultaneous angles/)).toBeVisible();
   });
   it('saves an edited Brief against its revision and refuses to claim success on failure', async () => {
     vi.mocked(productionService.saveDirectorBrief).mockResolvedValueOnce({ brief: briefFixture(), revision: 3, producer: 'deterministic' });
     studio();
-    fireEvent.click(await screen.findByRole('button',{name:'Brief'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Production Details'}));
+    expect(await screen.findByRole('dialog',{name:'Production Details'})).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Open Brief'}));
     fireEvent.change(await screen.findByLabelText('Audience'),{target:{value:'Home brewers'}});
     fireEvent.click(screen.getByRole('button',{name:'Save Brief'}));
     await waitFor(()=>expect(productionService.saveDirectorBrief).toHaveBeenCalledWith(workspaceId, productionId, 2, expect.objectContaining({ audience: 'Home brewers' })));
@@ -340,7 +333,9 @@ describe('Studio Director intelligence surfaces', () => {
   it('reports an unavailable Director service instead of fabricating a surface', async () => {
     vi.mocked(productionService.directorStudioSurface).mockRejectedValueOnce(new AppError('unavailable','The TONDE service is unavailable.'));
     studio();
-    fireEvent.click(await screen.findByRole('button',{name:'Story'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Production Details'}));
+    expect(await screen.findByRole('dialog',{name:'Production Details'})).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Open Story'}));
     expect(await screen.findByText('Director intelligence is unavailable')).toBeVisible();
     expect(screen.getByText('The TONDE service is unavailable.')).toBeVisible();
   });

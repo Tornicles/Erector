@@ -170,7 +170,10 @@ test('Movie Mode plans and navigates a 3-Act film lazily with real rollups (§15
   await page.getByRole('combobox', { name: 'Execution' }).selectOption('real');
   await page.getByRole('button', { name: /^Search$/ }).click();
   await page.getByRole('button', { name: 'shot Marcus holds the phone' }).click();
-  await expect(page.getByRole('region', { name: 'Selected Shot summary' })).toContainText('Marcus holds the phone');
+  // The search result shares the Shot selection with the Studio: the URL carries
+  // the Shot and TONDE's focus follows it (there is no separate summary region).
+  await expect.poll(() => page.url()).toContain(`shot=${shotThree}`);
+  await expect(page.getByText(/FOCUS · SHOT/)).toBeVisible();
 
   // 8. A Director command resolves to one explicit scope and changes nothing by itself.
   const writesBefore = writes.length;
@@ -180,8 +183,10 @@ test('Movie Mode plans and navigates a 3-Act film lazily with real rollups (§15
   await expect(page.getByText(/no other Act is rewritten/)).toBeVisible();
   expect(writes.length).toBe(writesBefore + 1);
 
-  // 9. Reload keeps the tool, and the canonical state is re-read rather than remembered.
+  // 9. Reopening re-reads canonical state rather than remembering it (the drawer
+  // is ephemeral by design, so the check reopens it through the same link).
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Movie Mode`);
   await expect(page.getByRole('heading', { name: 'Long-form structure' })).toBeVisible();
   await expect(page.getByText('Act 3 - Coda', { exact: true })).toBeVisible();
 

@@ -245,8 +245,10 @@ test('an Asset change is traced, previewed and applied with one explicit decisio
   });
 
   // 9b. A narrow viewport keeps the whole surface usable and never overflows horizontally.
+  // The drawer is ephemeral by design, so reopening after reload goes through the same link.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Impact`);
   await expect(page.getByRole('heading', { name: 'What does this change affect?' })).toBeVisible();
   await page.getByLabel('Source object').selectOption(character);
   await page.getByRole('button', { name: /Preview impact/ }).click();
@@ -255,8 +257,10 @@ test('an Asset change is traced, previewed and applied with one explicit decisio
   await expect(page.getByRole('button', { name: /Apply CHANGE ONLY THIS/ })).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  // 10. Reload keeps the tool and re-reads canonical state instead of remembering it.
+  // 10. Reopening re-reads canonical state instead of remembering it (the drawer
+  // is ephemeral by design, so the check reopens it through the same link).
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Impact`);
   await expect(page.getByRole('heading', { name: 'What does this change affect?' })).toBeVisible();
   await expect(page.getByText(/Impact is computed, never applied by computing it/).first()).toBeVisible();
 

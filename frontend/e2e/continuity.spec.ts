@@ -281,8 +281,10 @@ test('a declared change is checked, a conflict is decided, and continuity stays 
   await expect(page.getByText(/3 statement\(s\), earliest first/)).toBeVisible();
 
   // 9. A narrow viewport keeps the whole surface usable and never overflows horizontally.
+  // The drawer is ephemeral by design, so reopening after reload goes through the same link.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Continuity&scene=${sceneEighteen}&shot=${shotTwelve}`);
   await expect(page.getByText(/a change is declared rather than inferred/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

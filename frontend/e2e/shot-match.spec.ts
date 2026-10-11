@@ -320,8 +320,10 @@ test('a Result is what was created, the comparison is a diagnosis, and FIX THIS 
   await expect(page.getByRole('button', { name: /^Generate/ })).toHaveCount(0);
 
   // 12. A narrow viewport keeps the surface usable and never overflows horizontally.
+  // The drawer is ephemeral by design, so reopening after reload goes through the same link.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Results`);
   await expect(page.getByLabel('Results').getByText(REAL_LINE)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

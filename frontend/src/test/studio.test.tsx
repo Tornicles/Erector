@@ -1,9 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StudioComposition } from '../pages/StudioPage';
 import { AppError } from '../services/errors';
-import { productionService, type DirectorStudio, type StudioReadModel, type StudioScene } from '../services/productions';
+import { productionService, type DirectorBundle, type DirectorStudio, type StudioReadModel, type StudioScene } from '../services/productions';
+import { prompt11Service } from '../services/prompt11';
+import { productionVersioningService } from '../services/productionVersioning';
 import type { Production } from '../types/domain';
 
 vi.mock('../services/productions', () => ({
@@ -19,6 +21,10 @@ vi.mock('../services/productions', () => ({
     saveRealPlan: vi.fn(), setRealPlanApproval: vi.fn(), setRealPlanLock: vi.fn(),
     setShotCaptureState: vi.fn(), saveShotTake: vi.fn(), deleteShotTake: vi.fn(), recordShotDeviation: vi.fn(),
   },
+}));
+vi.mock('../services/prompt11', () => ({ prompt11Service: { jobs: vi.fn() } }));
+vi.mock('../services/productionVersioning', () => ({
+  productionVersioningService: { vocabulary: vi.fn(), versions: vi.fn(), restore: vi.fn() },
 }));
 
 const workspaceId = '00000000-0000-4000-8000-000000000002';
@@ -100,7 +106,7 @@ const directorSurface = (): DirectorStudio => ({
   reference_roles: {},
 });
 
-function studio(entry = '/?tool=Scenes') {
+function studio(entry = '/') {
   const router = createMemoryRouter([{ path: '/', element: <StudioComposition initial={production} reload={vi.fn()} /> }], { initialEntries: [entry] });
   render(<RouterProvider router={router} />);
   return router;
@@ -111,7 +117,7 @@ beforeEach(() => {
   vi.mocked(productionService.saveTitle).mockResolvedValue({ ...production, title: 'Ridgeway coffee', revision: 8 });
   vi.mocked(productionService.directorStudioSurface).mockResolvedValue(directorSurface());
   vi.mocked(productionService.studioSurface).mockResolvedValue(model());
-  vi.mocked(productionService.createStudioScene).mockResolvedValue({ scene_id: sceneB, revision: 1, timing: model().timing });
+  vi.mocked(productionService.createStudioScene).mockResolvedValue({ scene_id: '00000000-0000-4000-8000-000000000012', revision: 1, timing: model().timing });
   vi.mocked(productionService.updateStudioScene).mockResolvedValue({ scene_id: sceneA, revision: 2, approval: 'draft', timing: model().timing });
   vi.mocked(productionService.reorderStudioScenes).mockResolvedValue({ scenes: 2, timing: model().timing });
   vi.mocked(productionService.archiveStudioScene).mockResolvedValue({ scene_id: sceneA, archived_shots: 1, timing: model().timing });
@@ -123,322 +129,330 @@ beforeEach(() => {
   vi.mocked(productionService.setStudioApproval).mockResolvedValue({ scope: 'shot', id: shotA, approval: 'approved', revision: 2 });
   vi.mocked(productionService.setStudioLock).mockResolvedValue({ scope: 'shot', id: shotA, locked: true, revision: 2 });
   vi.mocked(productionService.reconcileStudioRuntime).mockResolvedValue({ adjusted_ms: -2000, shot_id: shotA, scene_id: sceneA, shot_duration_ms: 10000, timing: model().timing });
+  vi.mocked(prompt11Service.jobs).mockResolvedValue({ jobs: [], count: 0, note: '' });
+  vi.mocked(productionVersioningService.vocabulary).mockResolvedValue({ scopes: [], branch_states: [], change_states: [], merge_states: [], source_actions: [], propagation_modes: [], branchable_kinds: [], rule: '', limitation: '' });
+  vi.mocked(productionVersioningService.versions).mockResolvedValue({ object_id: productionId, object_kind: 'production', object_label: 'Ridgeway coffee', branch: 'main', current_revision: 7, total: 1, limit: 50, offset: 0, truncated: false, note: '', items: [{ version_id: 'v1', object_id: productionId, revision: 7, branch: 'main', parent_version_id: null, actor_type: 'user', actor_user_id: null, source_action: 'create', source_action_label: 'Created', is_current: true, created_at: '2026-10-05T00:00:00Z' }] });
+  vi.mocked(productionVersioningService.restore).mockResolvedValue({ object_id: productionId, restored_from_version_id: 'v1', restored_from_revision: 6, new_revision: 8, changed_fields: [], note: '' });
 });
 
-describe('Studio shell', () => {
-  it('opens one real Production, keeps the Studio tool in the URL and restores selection on refresh', async () => {
-    const router = studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    expect(await screen.findByRole('heading', { name: /Shots in Scene 1: Dark kitchen/ })).toBeVisible();
+function openCardMenu(order: number) {
+  fireEvent.click(screen.getByRole('button', { name: `Card ${order} options` }));
+}
+
+describe('Card-first Studio shell', () => {
+  it('opens one real Production as cards with no tool maze', async () => {
+    const router = studio('/?scene=' + sceneA + '&shot=' + shotA);
+    expect(await screen.findByRole('region', { name: 'Production cards' })).toBeVisible();
+    expect(screen.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
     expect(productionService.studioSurface).toHaveBeenCalledWith(workspaceId, productionId);
-    expect(screen.getByText(/REAL PRODUCTION \/ SHOTS/)).toBeVisible();
-    expect(await screen.findByLabelText(`Shot editor for Establish`)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Scenes' }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Scenes'));
-    expect(await screen.findByRole('heading', { name: 'Scenes' })).toBeVisible();
+    // No permanent tool navigation competes with the cards.
+    expect(screen.queryByRole('navigation', { name: 'Studio functions' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /All studio tools/ })).toBeNull();
+    // The URL carries card/Shot focus, never a tool maze.
+    expect(router.state.location.search).toContain('scene=' + sceneA);
+    expect(router.state.location.search).not.toContain('tool=');
   });
 
-  it('repairs a deep link that names no Scene instead of opening the wrong context', async () => {
-    const router = studio('/?tool=Scenes');
+  it('repairs a selection that names no card instead of opening the wrong context', async () => {
+    const router = studio('/');
     await waitFor(() => expect(router.state.location.search).toContain(`scene=${sceneA}`));
-    expect(await screen.findByRole('heading', { name: /Scene 1: Dark kitchen/ })).toBeVisible();
+    expect(await screen.findByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
   });
 
-  it('keeps the timeline and the canvases on one shared selection', async () => {
-    studio('/?tool=Scenes&scene=' + sceneA);
-    const block = await screen.findByRole('button', { name: /Scene 2: Weighing/ });
-    fireEvent.click(block);
-    expect(await screen.findByRole('heading', { name: /Scene 2: Weighing/ })).toBeVisible();
-    const shotBlock = screen.getByRole('button', { name: /Shot 1 of Scene 2: Scale macro/ });
-    fireEvent.click(shotBlock);
-    expect(await screen.findByText(/Selected Shot/)).toBeVisible();
-    expect(screen.getAllByText('Scale macro').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/18s/).length).toBeGreaterThan(0);
+  it('maps a legacy tool deep link into a drawer section rather than a blank canvas', async () => {
+    const router = studio('/?tool=Results');
+    expect(await screen.findByRole('dialog', { name: 'Results' })).toBeVisible();
+    await waitFor(() => expect(router.state.location.search).not.toContain('tool='));
+    expect(router.state.location.search).toContain('scene=' + sceneA);
   });
 
-  it('shows a runtime conflict as a real number instead of a readiness score', async () => {
-    const conflict = model({
-      runtime_conflict: true,
-      timing: { total_ms: 34000, target_ms: 30000, delta_ms: 4000, status: 'over', scene_states: [
-        { scene_id: sceneA, order: 1024, duration_ms: 12000, shots: 1, timing: 'derived' },
-        { scene_id: sceneB, order: 2048, duration_ms: 22000, shots: 1, timing: 'derived' },
-      ] },
+  it('keeps one dominant card with honest readiness, visual state and next action', async () => {
+    studio('/?scene=' + sceneA);
+    const card = await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    expect(within(card).getByText('READY')).toBeVisible();
+    expect(within(card).getByText('NO VISUAL YET')).toBeVisible();
+    expect(within(card).getByRole('button', { name: 'START THIS CARD →' })).toBeVisible();
+  });
+
+  it('moves card focus by clicking a side card and syncs TONDE focus with it', async () => {
+    const router = studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Card 2: Weighing' }));
+    await waitFor(() => expect(router.state.location.search).toContain('scene=' + sceneB));
+    expect(screen.getByText('FOCUS · CARD 02')).toBeVisible();
+    expect(screen.getByRole('option', { name: /02A · Scale macro/ })).toBeVisible();
+  });
+
+  it('moves card focus with the keyboard', async () => {
+    const router = studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.keyDown(screen.getByRole('region', { name: 'Production cards' }), { key: 'ArrowRight' });
+    await waitFor(() => expect(router.state.location.search).toContain('scene=' + sceneB));
+  });
+
+  it('selects a Shot and makes it TONDE’s explicit scope', async () => {
+    const router = studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('option', { name: /01A · Establish/ }));
+    await waitFor(() => expect(router.state.location.search).toContain('shot=' + shotA));
+    expect(screen.getByText('FOCUS · SHOT 01A')).toBeVisible();
+    expect(screen.getByText(/affect Shot 01A unless you say otherwise/)).toBeVisible();
+  });
+
+  it('shows an honest empty state when the Production has no cards yet', async () => {
+    vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [] }));
+    studio('/');
+    expect(await screen.findByRole('heading', { name: 'This Production has no cards yet.' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Ask TONDE to develop it →' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add a blank card' })).toBeVisible();
+  });
+
+  it('says TONDE is building while background jobs for the Production are live', async () => {
+    vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [] }));
+    vi.mocked(prompt11Service.jobs).mockResolvedValue({
+      jobs: [{ job_id: 'job-1', job_type: 'director_plan', status: 'running', attempts: 1, max_attempts: 3, production_id: productionId }],
+      count: 1, note: '',
     });
-    vi.mocked(productionService.studioSurface).mockResolvedValue(conflict);
-    studio('/?tool=Scenes&scene=' + sceneA);
-    expect(await screen.findByText(/Over target by 4s/)).toBeVisible();
-    expect(screen.getByText(/is over its 30s target by 4s/)).toBeVisible();
+    studio('/');
+    expect(await screen.findByText(/TONDE is building cards in the background/)).toBeVisible();
+  });
+
+  it('adds a blank card from the empty state through the real create path', async () => {
+    vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [] }));
+    studio('/');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a blank card' }));
+    await waitFor(() => expect(productionService.createStudioScene).toHaveBeenCalledWith(workspaceId, productionId,
+      expect.objectContaining({ title: 'New moment', expected_production_revision: 7 })));
+  });
+
+  it('keeps the same cards when the execution face changes, defaulting to Real', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    expect(screen.getByRole('button', { name: 'REAL' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'AI' }));
+    expect(screen.getByRole('button', { name: 'AI' })).toHaveAttribute('aria-pressed', 'true');
+    // One read model, one Production: switching face refetches nothing and moves no selection.
+    expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+  });
+
+  it('routes a card waiting on review to Readiness instead of a generic page', async () => {
+    vi.mocked(productionService.studioSurface).mockResolvedValue(model({
+      scenes: [scene(sceneA, 1, 'Dark kitchen', 12000, { approval: 'needs_review', shots: [shot(shotA, sceneA, 1, 'Establish', 12000)], shot_count: 1 }), model().scenes[1]],
+    }));
+    studio('/?scene=' + sceneA);
+    const card = await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    expect(within(card).getByText('NEEDS YOU')).toBeVisible();
+    fireEvent.click(within(card).getByRole('button', { name: 'REVIEW DECISION →' }));
+    expect(await screen.findByRole('dialog', { name: 'Readiness' })).toBeVisible();
   });
 });
 
-describe('Scene and Shot editing', () => {
-  it('renames a Scene against its revision and reports the exact persisted result', async () => {
-    studio('/?tool=Scenes&scene=' + sceneA);
-    const title = await screen.findByLabelText('Title', { selector: '#scene-edit-title' });
-    fireEvent.change(title, { target: { value: 'Cold open' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Scene' }));
+describe('Card and Shot editing', () => {
+  it('renames a Card against its revision and reports the exact persisted result', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByLabelText('New title for Card 1'), { target: { value: 'Cold open' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(productionService.updateStudioScene).toHaveBeenCalledWith(workspaceId, productionId, sceneA,
       expect.objectContaining({ title: 'Cold open', expected_revision: 1 })));
     expect(await screen.findByText(/Saved\./)).toBeVisible();
   });
 
-  it('creates a Scene against the Production revision and selects it', async () => {
-    studio('/?tool=Scenes&scene=' + sceneA);
-    fireEvent.change(await screen.findByLabelText('New Scene title'), { target: { value: 'Cold open' } });
-    fireEvent.click(screen.getByRole('button', { name: /Add Scene/ }));
+  it('inserts a card after the focused one through create plus reorder', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: '＋ Add after' }));
     await waitFor(() => expect(productionService.createStudioScene).toHaveBeenCalledWith(workspaceId, productionId,
-      expect.objectContaining({ title: 'Cold open', expected_production_revision: 7 })));
+      expect.objectContaining({ title: 'New moment' })));
+    await waitFor(() => expect(productionService.reorderStudioScenes).toHaveBeenCalledWith(workspaceId, productionId,
+      [sceneA, '00000000-0000-4000-8000-000000000012', sceneB], 7));
+    expect(await screen.findByText(/New card inserted at that position\./)).toBeVisible();
   });
 
-  it('creates a Shot into the Scene that is actually selected', async () => {
-    studio('/?tool=Shots&scene=' + sceneA);
-    fireEvent.change(await screen.findByLabelText('New Shot title'), { target: { value: 'Kettle clicks' } });
-    fireEvent.click(screen.getByRole('button', { name: /Add Shot/ }));
-    await waitFor(() => expect(productionService.createStudioShot).toHaveBeenCalledWith(workspaceId, productionId,
-      expect.objectContaining({ scene_id: sceneA, title: 'Kettle clicks', expected_production_revision: 7 })));
-    // The form clears only after the write resolved, so it never pretends an unsaved Shot exists.
-    expect(screen.getByLabelText('New Shot title')).toHaveValue('');
-    expect(await screen.findByText(/Saved\./)).toBeVisible();
+  it('inserts between two cards from the film strip', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Insert a card after Card 1' }));
+    await waitFor(() => expect(productionService.reorderStudioScenes).toHaveBeenCalledWith(workspaceId, productionId,
+      [sceneA, '00000000-0000-4000-8000-000000000012', sceneB], 7));
   });
 
-  it('blocks a locked Shot from being edited and says why', async () => {
-    const locked = scene(sceneA, 1, 'Dark kitchen', 12000, {
-      locked_at: '2026-10-05T00:00:00Z',
-      shots: [{ ...shot(shotA, sceneA, 1, 'Establish', 12000), locked_at: '2026-10-05T00:00:00Z' }], shot_count: 1,
-    });
-    vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [locked, model().scenes[1]] }));
-    studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    expect(await screen.findByText(/Unlock this Shot to edit it\./)).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Save Shot' })).toBeDisabled();
-    expect(screen.getByLabelText('Title', { selector: '#shot-edit-title' })).toBeDisabled();
+  it('moves a card with the keyboardreachable control and offers a real impact review', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
+    await waitFor(() => expect(productionService.reorderStudioScenes).toHaveBeenCalledWith(workspaceId, productionId,
+      [sceneB, sceneA], 7));
+    expect(await screen.findByText(/Card 1 moved\./)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Review impact' }));
+    expect(await screen.findByRole('dialog', { name: 'Impact' })).toBeVisible();
   });
 
-  it('sends only the changed Shot fields, including an explicit empty duration', async () => {
-    studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    const duration = await screen.findByLabelText('Duration (ms)');
-    fireEvent.change(duration, { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Shot' }));
-    await waitFor(() => expect(productionService.updateStudioShot).toHaveBeenCalledWith(workspaceId, productionId, shotA,
-      expect.objectContaining({ duration_ms: null, expected_revision: 1 })));
-  });
-
-  it('moves a Shot to another Scene through the canonical move operation', async () => {
-    studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    fireEvent.change(await screen.findByLabelText('Move to Scene'), { target: { value: sceneB } });
-    await waitFor(() => expect(productionService.moveStudioShot).toHaveBeenCalledWith(workspaceId, productionId, shotA, sceneB, 1));
-    expect(await screen.findByText(/Moved the Shot to Scene 2\./)).toBeVisible();
-  });
-
-  it('archives rather than deletes, and reports how much was archived', async () => {
-    studio('/?tool=Scenes&scene=' + sceneA);
-    fireEvent.click(await screen.findByRole('button', { name: /Archive Dark kitchen/ }));
+  it('archives a card only after an explicit second step, never deleting', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Archive…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive card' }));
     await waitFor(() => expect(productionService.archiveStudioScene).toHaveBeenCalledWith(workspaceId, productionId, sceneA, 1, true));
     expect(await screen.findByText(/Content is archived, not deleted\./)).toBeVisible();
   });
 
-  it('reorders Scenes with the complete ordered set', async () => {
-    studio('/?tool=Scenes&scene=' + sceneA);
-    fireEvent.click(await screen.findByRole('button', { name: /Move Dark kitchen later/ }));
-    await waitFor(() => expect(productionService.reorderStudioScenes).toHaveBeenCalledWith(workspaceId, productionId,
-      [sceneB, sceneA], 7));
+  it('approves and locks a card through the real approval and lock paths', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve card' }));
+    await waitFor(() => expect(productionService.setStudioApproval).toHaveBeenCalledWith(workspaceId, productionId, 'scene', sceneA, 'approved', 1));
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Lock card' }));
+    await waitFor(() => expect(productionService.setStudioLock).toHaveBeenCalledWith(workspaceId, productionId, 'scene', sceneA, true, 1));
   });
 
-  it('applies one approval change to a multi-selected set of Shots', async () => {
-    studio('/?tool=Shots&scene=' + sceneA);
-    fireEvent.click(await screen.findByLabelText('Select shot 1: Establish'));
-    expect(await screen.findByText('1 Shot selected')).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Approval'), { target: { value: 'approved' } });
-    await waitFor(() => expect(productionService.setStudioApproval).toHaveBeenCalledWith(workspaceId, productionId, 'shot', shotA, 'approved', 1));
-    expect(await screen.findByText(/Updated 1 Shot\(s\) with the same change\./)).toBeVisible();
+  it('adds a Shot to the focused card through the real create path', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: '＋ Shot' }));
+    await waitFor(() => expect(productionService.createStudioShot).toHaveBeenCalledWith(workspaceId, productionId,
+      expect.objectContaining({ scene_id: sceneA, title: 'New shot', expected_production_revision: 7 })));
+  });
+
+  it('renames the focused Shot and reports changed-after-approval honestly', async () => {
+    vi.mocked(productionService.updateStudioShot).mockResolvedValueOnce({ shot_id: shotA, revision: 3, approval: 'changed_after_approval', timing: model().timing });
+    const router = studio('/?scene=' + sceneA + '&shot=' + shotA);
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Shot 01A options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByLabelText('New title for Shot 01A'), { target: { value: 'Tighter' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(productionService.updateStudioShot).toHaveBeenCalledWith(workspaceId, productionId, shotA,
+      expect.objectContaining({ title: 'Tighter', expected_revision: 1 })));
+    expect(await screen.findByText(/it is now Changed After Approval - review it again\./)).toBeVisible();
+    expect(router.state.location.search).toContain('shot=' + shotA);
+  });
+
+  it('saves an explicit empty duration as undecided, never guessed', async () => {
+    studio('/?scene=' + sceneA + '&shot=' + shotA);
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Shot 01A options' }));
+    fireEvent.change(screen.getByLabelText('Duration (ms)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save duration' }));
+    await waitFor(() => expect(productionService.updateStudioShot).toHaveBeenCalledWith(workspaceId, productionId, shotA,
+      expect.objectContaining({ duration_ms: null, expected_revision: 1 })));
   });
 
   it('reports a conflict instead of pretending the write succeeded', async () => {
     vi.mocked(productionService.updateStudioScene).mockRejectedValueOnce(new AppError('conflict', 'That scene changed since you loaded it'));
-    studio('/?tool=Scenes&scene=' + sceneA);
-    fireEvent.change(await screen.findByLabelText('Title', { selector: '#scene-edit-title' }), { target: { value: 'Stale edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Scene' }));
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    openCardMenu(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByLabelText('New title for Card 1'), { target: { value: 'Stale edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText('That scene changed since you loaded it')).toBeVisible();
     expect(await screen.findByText(/Reload before applying your change\./)).toBeVisible();
   });
-
-  it('surfaces a locked Scene error from the database rather than silently ignoring it', async () => {
-    vi.mocked(productionService.updateStudioScene).mockRejectedValueOnce(new AppError('conflict', 'That scene is locked. Unlock it before editing.'));
-    studio('/?tool=Scenes&scene=' + sceneA);
-    fireEvent.change(await screen.findByLabelText('Title', { selector: '#scene-edit-title' }), { target: { value: 'Locked edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Scene' }));
-    expect(await screen.findByText('That scene is locked. Unlock it before editing.')).toBeVisible();
-  });
-
-  it('shows changed-after-approval when approved content is edited', async () => {
-    vi.mocked(productionService.updateStudioShot).mockResolvedValueOnce({ shot_id: shotA, revision: 3, approval: 'changed_after_approval', timing: model().timing });
-    studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    fireEvent.change(await screen.findByLabelText('Title', { selector: '#shot-edit-title' }), { target: { value: 'Tighter' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Shot' }));
-    expect(await screen.findByText(/it is now Changed After Approval - review it again\./)).toBeVisible();
-  });
 });
 
-describe('Director scope', () => {
-  it('scopes a direction to the selected Shot only', async () => {
+describe('Director scope and proposals', () => {
+  it('scopes a direction to the selected Shot and previews through the server', async () => {
     vi.mocked(productionService.directorCommandPreview).mockResolvedValue({
       kind: 'shot_intensity', scope: 'shot', confidence: 'high', rationale: 'I will make this Shot more tense.',
       operations: ['intensify_shot'], signals: ['shot'], reference_role: null, target_runtime_ms: null, scene_order: 1,
     });
-    studio('/?tool=Shots&scene=' + sceneA + '&shot=' + shotA);
-    expect(await screen.findByText(/Scope: Shot “Establish” in Scene 1 · REAL PRODUCTION face\./)).toBeVisible();
+    studio('/?scene=' + sceneA + '&shot=' + shotA);
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
+    expect(screen.getByText(/Scope: Shot “Establish” in Scene 1/)).toBeVisible();
     fireEvent.change(screen.getByLabelText('Message to the Director'), { target: { value: 'Make this Shot more tense.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Preview change' }));
     expect(await screen.findByText(/I will make this Shot more tense\./)).toBeVisible();
     expect(productionService.directorCommandPreview).toHaveBeenCalledWith(workspaceId, productionId, 'Make this Shot more tense.');
   });
 
+  it('applies a Director plan only through an explicit apply call', async () => {
+    vi.mocked(productionService.directorCommand).mockResolvedValue({
+      command: { kind: 'scene_intensity', scope: 'scene', confidence: 'high', rationale: 'Intensify.', operations: ['intensify_scene'], signals: ['scene 1'], reference_role: null, target_runtime_ms: null, scene_order: 1, parameters: {} },
+      rationale: 'Scene 1 intensification', answer: 'Done.', changes: ['Scene 1 intensified'], operations: ['intensify_scene'],
+      limitations: [], causal: [], story_alternatives: [], line_alternatives: {}, reference_role: null,
+      adaptations_applied: [], plan: {} as unknown as DirectorBundle, producer: 'deterministic', applied: null,
+    });
+    studio('/?scene=' + sceneA);
+    await screen.findByText('FOCUS · CARD 01');
+    fireEvent.change(screen.getByLabelText('Message to the Director'), { target: { value: 'Make Card 1 scarier.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Ask the Director/ }));
+    expect(await screen.findByText('Done.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /Apply to this Production/ }));
+    await waitFor(() => expect(productionService.directorCommand).toHaveBeenCalledWith(workspaceId, productionId,
+      expect.objectContaining({ text: 'Make Card 1 scarier.', apply: true })));
+  });
+
   it('falls back to Production scope when nothing is selected', async () => {
-    studio('/?tool=Scenes&scene=' + '__none__');
-    expect(await screen.findByText(/Scope: whole Production · REAL PRODUCTION face\./)).toBeVisible();
-  });
-
-  it('targets a whole Scene when a Scene, not a Shot, is selected', async () => {
-    studio('/?tool=Scenes&scene=' + sceneB);
-    expect(await screen.findByText(/Scope: Scene “Weighing” · REAL PRODUCTION face\./)).toBeVisible();
-    expect(screen.getByLabelText('Message to the Director')).toHaveAttribute('placeholder', '“Make Scene 1 more intense.”');
+    studio('/?scene=__none__');
+    expect(await screen.findByText('FOCUS · CARD 01')).toBeVisible();
   });
 });
 
-describe('Script to Scene synchronization', () => {
-  // §33: a Script Scene selects the canonical Scene. There is no Script-only Scene universe.
-  it('selects the canonical Scene when a Script Scene is chosen, without leaving the Script tool', async () => {
-    vi.mocked(productionService.directorStudioSurface).mockResolvedValue({
-      ...directorSurface(),
-      scenes: [
-        { id: sceneA, order: 1, title: 'Dark kitchen', purpose: 'Earn attention', story_beat: 'Hook', description: 'A dark kitchen.',
-          action_lines: ['The kettle clicks off.'], characters: ['Barista'], environment: 'Kitchen', products: ['Ridgeway beans'],
-          techniques: [], shots: [], dialogue_notes: '', planned_duration_ms: 12000, opening_state: '', ending_state: '',
-          visual_intent: '', dialogue: [{ id: 'line-1', scene_id: sceneA, kind: 'dialogue', speaker: 'Barista', content: 'Still warm.', intention: '', delivery: '', subtext: '', duration_ms: 1500, pause_after_ms: null, flags: {} }] },
-        { id: sceneB, order: 2, title: 'Weighing', purpose: 'Prove the promise', story_beat: 'Turn', description: 'The scale settles.',
-          action_lines: [], characters: [], environment: 'Kitchen', products: [], techniques: [], shots: [], dialogue_notes: '',
-          planned_duration_ms: 18000, opening_state: '', ending_state: '', visual_intent: '', dialogue: [] },
-      ],
-    });
-    const router = studio('/?tool=Script&scene=' + sceneA);
-    fireEvent.click(await screen.findByRole('button', { name: 'Weighing' }));
-    await waitFor(() => expect(router.state.location.search).toContain('scene=' + sceneB));
-    // The canonical selection moved; switching to Shots proves the same Scene is active.
-    fireEvent.click(screen.getByRole('button', { name: 'Shots' }));
-    expect(await screen.findByRole('heading', { name: /Shots in Scene 2: Weighing/ })).toBeVisible();
+describe('Production Details drawer', () => {
+  it('opens honest production intelligence without a tool maze', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Production Details' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Production Details' });
+    expect(within(dialog).getByText(/No Story direction recorded yet/)).toBeVisible();
+    expect(within(dialog).getByText(/No references shape this Production yet/)).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close details' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('reads real change history from the versioning service', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Production Details' }));
+    expect(await screen.findByRole('dialog', { name: 'Production Details' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open history' })).toBeVisible();
   });
 });
 
-// §105: the Prompt 4 intelligence the Director produced must remain visible and usable
-// inside Studio. These canvases read the same persisted surface, not a copy.
-describe('Prompt 4 intelligence inside Studio', () => {
-  const brief = {
-    production_goal: 'Sell Ridgeway beans to commuters', audience: 'Urban commuters', core_message: 'Still warm when you get there',
-    desired_response: 'Try Ridgeway', production_type: 'commercial', format: '30s vertical', platform: 'social', aspect_ratio: '9:16',
-    tone: ['warm'], creative_concept: 'A dark kitchen that turns into a morning', story_approach: 'product_first',
-    dialogue_mode: 'sparse', dialogue_approach: 'A single line.', voiceover_approach: null, product_brand: 'Ridgeway',
-    product_category: null, call_to_action: 'Find Ridgeway', style_direction: ['one soft source'], execution_preference: 'real',
-    resources: [], crew_size: 1, available_hours: 4, deadline: null, budget_amount: null, cast: ['Barista'],
-    environments: ['Kitchen'], deliverables: ['30s master'], hard_constraints: ['one camera'], soft_preferences: [],
-    collaboration_mode: 'solo', producer: 'deterministic', revision: 1,
-    runtime: { kind: 'exact', exact_ms: 30000, min_ms: null, max_ms: null, note: '30 seconds' },
-    style_dna: null, assumptions: [], open_decisions: [], conflicts: [],
-  } as unknown as NonNullable<DirectorStudio['brief']>;
-  const story = {
-    title: 'Morning, weighed', logline: 'One barista proves freshness before sunrise.', premise: 'The scale settles on the beans.',
-    central_question: 'Is it fresh?', protagonist: 'Barista', desire: 'Serve it warm', conflict: 'Time', stakes: 'The promise',
-    hook: 'Dark kitchen', payoff: 'Steam rises', call_to_action: 'Find Ridgeway', beats: [], emotional_progression: [],
-    beginning: 'Dark', middle: 'Weighing', ending: 'Steam', theme: 'craft', grammar: 'trailer', variation: 'base',
-    dialogue_mode: 'sparse', dialogue_approach: null, runtime_ms: 30000, producer: 'deterministic', assumptions: [],
-  } as unknown as NonNullable<DirectorStudio['story']>;
-  const reality = {
-    feasibility: 'ready' as const, complexity: 'simple' as const, items: [], domains: { light: 'sufficient' },
-    conflicts: [], adaptations: [], summary: 'Shootable with one camera and one light.', inventory_used: [], notes: [],
-  };
-  beforeEach(() => {
-    vi.mocked(productionService.directorStudioSurface).mockResolvedValue({
-      ...directorSurface(), brief, brief_revision: 1, brief_producer: 'deterministic', story, story_producer: 'deterministic', reality,
-    });
+describe('Undo and redo', () => {
+  it('says there is nothing to undo when no earlier revision exists', async () => {
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText(/Nothing to undo/)).toBeVisible();
+    expect(productionVersioningService.restore).not.toHaveBeenCalled();
   });
 
-  it('shows the persisted Brief, Story and Reality Check the Director produced', async () => {
-    const router = studio('/?tool=Brief');
-    expect(await screen.findByRole('form', { name: 'Intelligent Brief' })).toBeVisible();
-    expect(screen.getByLabelText('Production goal')).toHaveValue('Sell Ridgeway beans to commuters');
-    fireEvent.click(screen.getByRole('button', { name: 'Story' }));
-    expect(await screen.findByText(/One barista proves freshness before sunrise\./)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Reality Check' }));
-    expect(await screen.findByText(/Shootable with one camera and one light\./)).toBeVisible();
-    // The tool survives in the URL, and the deep-link repair names the first Scene
-    // rather than leaving the Studio scoped to nothing.
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Reality+Check'));
-    expect(router.state.location.search).toContain('scene=' + sceneA);
-  });
-});
-
-// §106: REAL and AI are faces of one Master Production, not two Productions.
-describe('Real and AI execution faces', () => {
-  it('keeps the same canonical Scenes and Shots when the face changes', async () => {
-    const router = studio('/?tool=Scenes');
-    await screen.findByRole('heading', { name: 'Scenes' });
-    expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'AI CREATION' }));
-    expect(screen.getByRole('button', { name: 'AI CREATION' })).toHaveAttribute('aria-pressed', 'true');
-    // The face change is a change of execution tooling only: the wording says so, and the
-    // Production, Scene selection and Shot selection are untouched.
-    expect(screen.getByText(/Switching faces never changes the Production, Scene or Shot\./)).toBeVisible();
-    expect(screen.getByText(/AI CREATION \/ SCENES/)).toBeVisible();
-    // One read model, one Production: switching face does not create a second Production.
-    expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
-    expect(router.state.location.search).toContain('tool=Scenes');
-    expect(router.state.location.search).toContain(`scene=${sceneA}`);
-  });
-});
-
-// §64/§140: the Studio REAL face opens the practical execution canvas for the selected Shot.
-describe('Real Production tool inside Studio', () => {
-  const realShot = {
-    shot_id: shotA, scene_id: sceneA, scene_order: 1, scene_title: 'Dark kitchen', order: 1, title: 'Establish',
-    purpose: 'establish', subject: 'Kettle', framing: 'medium', execution_method: 'real' as const,
-    approval: 'draft' as const, locked: false, planned_duration_ms: 12000, expected_duration_ms: 12000,
-    plan_id: 'plan-1', plan_revision: 1, plan_status: 'ready' as const, readiness: 'ready' as const,
-    readiness_note: 'All requirements are owned.', complexity: 'quick' as const, camera_resource_id: null,
-    lens_resource_id: null, movement: 'locked', stabilization: 'tripod', lighting_intent: 'soft premium',
-    sound_plan: 'lav plus scratch', solo_feasibility: 'solo' as const, crew_roles: [], safety_flags: [],
-    requirements: { owned: 0, substitute: 0, missing: 0, unverified: 0 }, capture: null,
-    takes: { count: 0, preferred_take_id: null }, deviations: 0,
-  };
-  beforeEach(() => {
-    vi.mocked(productionService.realSurface).mockResolvedValue({
-      production: { id: productionId, workspace_id: workspaceId, title: 'Ridgeway coffee', production_type: 'commercial',
-        execution_method: 'real', planned_duration_ms: 30000, approval: 'draft', locked_at: null, revision: 7, lifecycle: 'active' },
-      execution_faces: ['real', 'ai'], setup: [], timing: model().timing,
-      scenes: [{ scene_id: sceneA, order: 1, title: 'Dark kitchen', shots: 1, ready: 1, unresolved: 0, captured: 0, pickup_needed: 0, complexity: 'quick', unresolved_note: null }],
-      shots: [realShot],
-      summary: { shots: 1, planned: 1, unplanned: 0, ready: 1, ready_with_substitution: 0, needs_decision: 0, missing_resource: 0,
-        safety_blocked: 0, captured: 0, pickup_needed: 0, in_progress: 0, approved_plans: 0, changed_after_approval: 0,
-        crew_roles: [], safety_flags: [], complexity: 'quick' },
-      readiness_queue: { ready_to_shoot: [shotA], needs_decision: [], missing_resource: [], pickup_required: [] },
-      provider: model().provider,
-      capabilities: { frame_extraction: false, frame_extraction_note: 'ffmpeg is not installed.', setup_matching: true, take_logging: true, on_set_mode: true, ai_prompt_compilation: false, note: 'Setup matching is deterministic.' },
-    });
-    vi.mocked(productionService.realShotDetail).mockResolvedValue({
-      shot: { shot_id: shotA, scene_id: sceneA, title: 'Establish', purpose: 'establish', subject: 'Kettle', framing: 'medium',
-        movement: 'locked', execution_method: 'real', approval: 'draft', locked: false, revision: 3, planned_duration_ms: 12000,
-        story_beat: 'Hook', creative_notes: '' },
-      scene: { scene_id: sceneA, title: 'Dark kitchen', order: 1, purpose: 'Earn attention', description: 'A dark kitchen.', environment_asset_id: null },
-      plan: null, readiness: 'unplanned', requirements: [], alternatives: [], capture: null, takes: [], deviations: [],
-      setup: [], brief: null, script_line: null,
-    });
-  });
-
-  it('opens the practical Real canvas and links to On-Set Mode', async () => {
-    const router = studio('/?tool=Real Production&scene=' + sceneA + '&shot=' + shotA);
-    expect(await screen.findByRole('region', { name: 'Real Production' })).toBeVisible();
-    expect(productionService.realSurface).toHaveBeenCalledWith(workspaceId, productionId);
-    expect(productionService.realShotDetail).toHaveBeenCalledWith(workspaceId, productionId, shotA);
-    expect(await screen.findByText('No Real plan yet')).toBeVisible();
-    for (const link of screen.getAllByRole('link', { name: /On-Set Mode/ }))
-      expect(link).toHaveAttribute('href', `/on-set/${productionId}`);
-    expect(router.state.location.search).toContain('tool=Real+Production');
+  it('undoes by restoring the earlier version as a new revision, then redoes', async () => {
+    vi.mocked(productionVersioningService.versions)
+      .mockResolvedValueOnce({
+        object_id: productionId, object_kind: 'production', object_label: 'Ridgeway coffee', branch: 'main',
+        current_revision: 7, total: 2, limit: 50, offset: 0, truncated: false, note: '',
+        items: [
+          { version_id: 'v7', object_id: productionId, revision: 7, branch: 'main', parent_version_id: 'v6', actor_type: 'user', actor_user_id: null, source_action: 'scene_update', source_action_label: 'Scene updated', is_current: true, created_at: '2026-10-05T00:00:00Z' },
+          { version_id: 'v6', object_id: productionId, revision: 6, branch: 'main', parent_version_id: null, actor_type: 'user', actor_user_id: null, source_action: 'scene_create', source_action_label: 'Scene created', is_current: false, created_at: '2026-10-05T00:00:00Z' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        object_id: productionId, object_kind: 'production', object_label: 'Ridgeway coffee', branch: 'main',
+        current_revision: 8, total: 3, limit: 50, offset: 0, truncated: false, note: '',
+        items: [
+          { version_id: 'v8', object_id: productionId, revision: 8, branch: 'main', parent_version_id: 'v7', actor_type: 'user', actor_user_id: null, source_action: 'restore', source_action_label: 'Restored', is_current: true, created_at: '2026-10-05T00:00:00Z' },
+          { version_id: 'v7', object_id: productionId, revision: 7, branch: 'main', parent_version_id: 'v6', actor_type: 'user', actor_user_id: null, source_action: 'scene_update', source_action_label: 'Scene updated', is_current: true, created_at: '2026-10-05T00:00:00Z' },
+          { version_id: 'v6', object_id: productionId, revision: 6, branch: 'main', parent_version_id: null, actor_type: 'user', actor_user_id: null, source_action: 'scene_create', source_action_label: 'Scene created', is_current: false, created_at: '2026-10-05T00:00:00Z' },
+        ],
+      });
+    studio('/?scene=' + sceneA);
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(productionVersioningService.restore).toHaveBeenCalledWith(workspaceId, productionId, 'v6', expect.stringContaining('Undo')));
+    expect(await screen.findByText(/Undone — revision 6 restored as new revision 8/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    await waitFor(() => expect(productionVersioningService.restore).toHaveBeenCalledWith(workspaceId, productionId, 'v7', expect.stringContaining('Redo')));
   });
 });
 

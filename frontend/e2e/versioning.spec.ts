@@ -256,6 +256,8 @@ test('history is immutable, a branch stays an alternative, and a merge is a revi
   await expect(page.getByText(/1 alternative\(s\) are open/)).toBeVisible();
 
   // 6. Creating a branch posts its name, scope, source version and reason.
+  // The branch is created against the selected object, so choose the Story document first.
+  await page.getByLabel('Version object').selectOption(storyId);
   await page.getByLabel('Branch name').fill('Ending A');
   await page.getByLabel('Branch scope').selectOption('story');
   await page.getByLabel('Branch source version').selectOption(versionTwo);
@@ -311,8 +313,10 @@ test('history is immutable, a branch stays an alternative, and a merge is a revi
   await expect(page.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
 
   // 11. A narrow viewport keeps the surface usable and never overflows horizontally.
+  // The drawer is ephemeral by design, so reopening after reload goes through the same link.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Versions`);
   await expect(page.getByText(/A branch is an object-level alternative/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

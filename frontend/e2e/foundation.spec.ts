@@ -43,19 +43,38 @@ test('all seven destinations render and browser back/forward retain canonical ro
 });
 test('Studio defaults to Real, switches to AI, saves persistently and restores selected production', async ({page}) => {
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
-  await platform(page);await page.goto(`/studio/${productionId}`);
+  await platform(page);
+  const sceneId='00000000-0000-4000-8000-000000000010'; const shotId='00000000-0000-4000-8000-000000000014';
+  const envelope=(data:unknown)=>({success:true,data,errors:null,metadata:{request_id:'e2e-foundation',timestamp:'2026-10-05T00:00:00Z',version:'1'}});
+  await page.route('http://127.0.0.1:8001/api/v1/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path.endsWith('/director/studio')) return route.fulfill({json:envelope(studioSurfaceFixture)});
+    if(path.endsWith('/jobs')) return route.fulfill({json:envelope({jobs:[],count:0,note:''})});
+    if(path.endsWith(`/productions/${productionId}/studio`)) return route.fulfill({json:envelope({
+      production:{id:productionId,workspace_id:workspace,title:initialProduction.title,production_type:'short_film',custom_type:null,execution_method:'real',planned_duration_ms:3333,calculated_duration_ms:5000,approval:'draft',locked_at:null,revision:1,lifecycle:'active',updated_at:'2026-10-05T00:00:00Z'},
+      scenes:[{id:sceneId,order:1,sort_order:1024,title:'Opening',purpose:'Earn attention',story_beat:'Hook',description:'A dark kitchen.',action_lines:[],opening_state:'',ending_state:'',visual_intent:'',dialogue_notes:'',environment_asset_id:null,planned_duration_ms:5000,duration_ms:5000,timing:'derived',approval:'draft',locked_at:null,revision:1,updated_at:'2026-10-05T00:00:00Z',character_asset_ids:[],dialogue_lines:0,shot_count:1,bindings:[],shots:[{id:shotId,scene_id:sceneId,order:1,sort_order:1024,title:'Establish',description:'',action:'',purpose:'establish',subject:'Scale',framing:'wide',angle:'eye level',movement:'slow push',composition:'centred',transition:'cut',story_relationship:'proves the promise',story_beat:'Hook',creative_notes:'',execution_method:'real',planned_duration_ms:5000,approval:'draft',locked_at:null,revision:1,updated_at:'2026-10-05T00:00:00Z',result_count:0,bindings:[]}]}],
+      orphan_shots:[],assets:[],documents:{},
+      timing:{total_ms:5000,target_ms:3333,delta_ms:1667,status:'over',scene_states:[{scene_id:sceneId,order:1024,duration_ms:5000,shots:1,timing:'derived'}]},runtime_conflict:true,timeline:[],
+      status_summary:{production_approval:'draft',production_locked:false,scenes:1,shots:1,scenes_locked:0,shots_locked:0,approval_counts:{draft:2},needs_attention:0},truncated:false,
+      provider:studioSurfaceFixture.provider,
+      capabilities:{frame_extraction:false,frame_extraction_note:'ffmpeg is not installed.',timeline_editing:true,shot_execution:false,ai_prompt_compilation:false,note:'Later prompts deepen execution.'},
+    })});
+    return route.fulfill({json:envelope(null)});
+  });
+  await page.goto(`/studio/${productionId}`);
   await expect(page.getByLabel('Production title')).toHaveValue(initialProduction.title);
-  await expect(page.locator('main').getByText('Draft', {exact:true})).toBeVisible();
+  await expect(page.getByRole('article',{name:'Card 1: Opening'})).toBeVisible();
+  await expect(page.getByText('FOCUS · CARD 01')).toBeVisible();
   const executionWrites: string[] = [];
   page.on('request', request => { if (request.method() === 'PATCH') executionWrites.push(request.postData() ?? ''); });
-  await expect(page.getByRole('button',{name:'REAL PRODUCTION',exact:true})).toHaveAttribute('aria-pressed','true');
-  await page.getByRole('button',{name:'AI CREATION',exact:true}).click();
-  await expect(page.getByRole('button',{name:'AI CREATION',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('button',{name:'REAL',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'AI',exact:true}).click();
+  await expect(page.getByRole('button',{name:'AI',exact:true})).toHaveAttribute('aria-pressed','true');
   expect(executionWrites).toEqual([]); // Switching representation is local UI state, not a second production or assignment.
   await page.getByLabel('Production title').fill('Persisted browser title');
   await expect(page.getByText('Saved',{exact:true})).toBeVisible();
   await page.reload();await expect(page.getByLabel('Production title')).toHaveValue('Persisted browser title');
-  await expect(page.getByRole('button',{name:'REAL PRODUCTION',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('button',{name:'REAL',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('navigation',{name:'Main navigation'}).getByRole('link',{name:'Studio',exact:true}).click();
   await expect(page.getByRole('link',{name:'Continue selected production'})).toHaveAttribute('href',`/studio/${productionId}`);
   await expect(page.getByText('Short Film · 0:03.333')).toBeVisible();
@@ -70,7 +89,7 @@ test('mobile shell collapses navigation deliberately with no horizontal overflow
   await expect(page.getByRole('navigation',{name:'Main navigation'})).not.toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.goto(`/studio/${productionId}`);
-  await expect(page.getByRole('button',{name:'REAL PRODUCTION',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'REAL',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 test('unauthenticated users cannot open productions and login actions stay in Supabase',async({page})=>{
@@ -126,7 +145,9 @@ test('Home plans one Production, applies the answered decisions and opens that s
   await expect(page).toHaveURL(new RegExp(`/studio/${productionId}(\\?[^/]*)?$`));
   await expect(page.getByLabel('Production title')).toHaveValue(initialProduction.title);
   await expect(page.getByText(/Director · deterministic only/)).toBeVisible();
-  await page.getByRole('button',{name:'Reality Check'}).click();
+  // A legacy Reality Check link folds into the Reality drawer over the cards.
+  await page.goto(`/studio/${productionId}?tool=Reality Check`);
+  await expect(page.getByRole('dialog',{name:'Reality Check'})).toBeVisible();
   await expect(page.getByText('No Reality Check yet')).toBeVisible();
   expect(await page.evaluate((key)=>localStorage.getItem(key),`tonde:director-plan:${workspace}`)).toBeNull();
   expect(errors).toEqual([]);

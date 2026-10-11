@@ -249,16 +249,19 @@ test('AI Creation plans, refuses politely, records a manual Attempt, selects a R
   await expect(page.getByText(/identifiers are unchanged/)).toBeVisible();
   await expect(page.getByText(/SHOT 1 · SHOOT/)).toBeVisible();
 
-  // Switching to the REAL face keeps the same Production and the same Shot.
-  await page.getByRole('button', { name: 'REAL PRODUCTION', exact: true }).click();
+  // The Real plan for the same Production and Shot opens as a drawer over the same cards.
+  await page.goto(`/studio/${productionId}?tool=Real Production&scene=${sceneA}&shot=${shotA}`);
+  await expect(page.getByRole('dialog', { name: 'Real Production Plan' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Real Production' })).toBeVisible();
   await expect(page.getByText('Ridgeway coffee').first()).toBeVisible();
   await expect(page.getByText('Bag reveal').first()).toBeVisible();
-  await page.getByRole('button', { name: 'AI CREATION', exact: true }).click();
+  await page.goto(`/studio/${productionId}?tool=AI Creation&scene=${sceneA}&shot=${shotA}`);
   await expect(page.getByRole('region', { name: 'AI Creation' })).toBeVisible();
 
   // A reload keeps the prompt, the Attempt, the selected Result and the execution method.
+  // The drawer is ephemeral by design, so the post-reload check reopens it through the same link.
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=AI Creation&scene=${sceneA}&shot=${shotA}`);
   await expect(page.getByRole('region', { name: 'AI Creation' })).toBeVisible();
   await expect(page.getByText('Attempt 1', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Selected result: Attempt 1/)).toBeVisible();

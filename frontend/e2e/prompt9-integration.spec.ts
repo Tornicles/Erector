@@ -288,8 +288,10 @@ test('the whole production loop composes across Impact, Results and Readiness (9
   expect(applyWrite?.body.selected_ids).not.toContain(shotOne);
 
   // The affected prompt is marked stale, not rewritten, and the marker survives a reload.
+  // The drawer itself is ephemeral, so the post-reload check reopens it through the same link.
   await expect(page.getByLabel('Stale artifacts')).toContainText('Real plan for Marcus enters');
   await page.reload();
+  await page.goto(`/studio/${productionId}?tool=Impact`);
   await expect(page.getByLabel('Stale artifacts')).toContainText('Real plan for Marcus enters');
   await expect(page.getByRole('heading', { name: 'What does this change affect?' })).toBeVisible();
 

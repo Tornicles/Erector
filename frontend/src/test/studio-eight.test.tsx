@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StudioComposition } from '../pages/StudioPage';
+import { productionShotMatchService } from '../services/productionShotMatch';
 import { productionService, type DirectorBrief, type DirectorStory, type DirectorStudio, type StudioReadModel, type StudioScene } from '../services/productions';
+import { prompt11Service } from '../services/prompt11';
 import { productionContinuityService } from '../services/productionContinuity';
 import { longFormService } from '../services/longForm';
 import type { Production } from '../types/domain';
@@ -35,13 +37,19 @@ vi.mock('../services/longForm', () => ({
 vi.mock('../services/productionContinuity', () => ({
   productionContinuityService: { summary: vi.fn(), findings: vi.fn(), check: vi.fn() },
 }));
+vi.mock('../services/prompt11', () => ({ prompt11Service: { jobs: vi.fn() } }));
+vi.mock('../services/productionVersioning', () => ({
+  productionVersioningService: { vocabulary: vi.fn(), versions: vi.fn(), restore: vi.fn() },
+}));
 vi.mock('../services/productionShotMatch', () => {
-  const fail = vi.fn(async () => { throw new Error('unavailable in this test'); });
+  // Each method gets its own rejecting mock so a test can override one method
+  // without changing the behaviour of the others.
+  const fail = () => vi.fn(async () => { throw new Error('unavailable in this test'); });
   return {
     productionShotMatchService: {
-      vocabulary: fail, results: fail, reports: fail, result: fail, report: fail,
-      setResultState: vi.fn(), analyze: fail, decide: fail,
-      proposeCorrection: fail, applyCorrection: fail, rejectCorrection: fail,
+      vocabulary: fail(), results: fail(), reports: fail(), result: fail(), report: fail(),
+      setResultState: vi.fn(), analyze: fail(), decide: fail(),
+      proposeCorrection: fail(), applyCorrection: fail(), rejectCorrection: fail(),
     },
   };
 });
@@ -124,7 +132,7 @@ const surface = (): DirectorStudio => ({
   reference_roles: {},
 });
 
-function studio(entry = '/?tool=Scenes') {
+function studio(entry = '/') {
   const router = createMemoryRouter([{ path: '/', element: <StudioComposition initial={production} reload={vi.fn()} /> }], { initialEntries: [entry] });
   render(<RouterProvider router={router} />);
   return router;
@@ -132,6 +140,7 @@ function studio(entry = '/?tool=Scenes') {
 
 beforeEach(() => {
   localStorage.clear();
+  vi.mocked(prompt11Service.jobs).mockResolvedValue({ jobs: [], count: 0, note: '' });
   vi.mocked(productionService.studioSurface).mockResolvedValue(readModel());
   vi.mocked(productionService.directorStudioSurface).mockResolvedValue(surface());
   vi.mocked(productionService.updateStudioShot).mockResolvedValue({ shot_id: shotA, revision: 2, approval: 'draft', timing: readModel().timing });
@@ -221,57 +230,52 @@ beforeEach(() => {
   vi.mocked(longFormService.summaries).mockResolvedValue({ items: [], total: 0, truncated: false });
 });
 
-describe('Studio eight views', () => {
-  it('offers all eight faces of the same Production on one rail', async () => {
-    studio('/?tool=Scenes');
-    await screen.findByRole('heading', { name: 'Scenes' });
-    const rail = screen.getByRole('navigation', { name: 'Studio functions' });
-    expect(rail.querySelectorAll('button').length).toBe(8);
-    for (const name of ['Idea', 'Story', 'Script', 'Scenes', 'Shots', 'Produce', 'Results']) {
-      expect(screen.getByRole('button', { name })).toBeVisible();
-    }
+describe('Card-first Studio views', () => {
+  it('shows cards, Shots and the film strip with no eight-view rail', async () => {
+    studio('/');
+    expect(await screen.findByRole('region', { name: 'Production cards' })).toBeVisible();
+    expect(screen.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+    expect(screen.getByRole('option', { name: /01A · Establish/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Studio functions' })).toBeNull();
   });
 
-  it('opens the Idea Lab from the real Brief, explores directions and applies one', async () => {
-    const router = studio('/?tool=Idea');
-    expect(await screen.findByText('IDEA LAB · SEARCH + DIRECTION')).toBeVisible();
-    expect(screen.getAllByText('A 30-second premium coffee commercial').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Example film')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: /Explore directions/ }));
-    expect(await screen.findByText('Alt direction')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: /Use this direction/ }));
-    await waitFor(() => expect(productionService.directorCommand).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({ apply: true })));
-    fireEvent.click(screen.getByRole('button', { name: /Continue into Story/ }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Story'));
+  it('reads the persisted Story from Production Details instead of a Story tool', async () => {
+    studio('/');
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Production Details' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Production Details' });
+    expect(dialog.textContent).toMatch(/North Bean — Slow Craft/);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Story' }));
+    expect(await screen.findByRole('dialog', { name: 'Story' })).toBeVisible();
+    expect(screen.getByText(/Steam and light\./)).toBeVisible();
   });
 
-  it('switches Produce, Edit and Hybrid through the top bar without leaving the Production', async () => {
-    const router = studio('/?tool=Scenes');
-    await screen.findByRole('heading', { name: 'Scenes' });
-    fireEvent.click(screen.getByRole('button', { name: 'Produce' }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Real+Production'));
+  it('switches Real, AI and Hybrid faces without leaving the Production or refetching it', async () => {
+    studio('/');
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'HYBRID' }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Hybrid'));
-    expect(await screen.findByText('HYBRID · PER-SHOT STRATEGY')).toBeVisible();
-    expect(screen.getByText(/1 Real · 0 AI · 0 Hybrid/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Audio and edit' }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Audio'));
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    await waitFor(() => expect(router.state.location.search).toContain('tool=Movie+Mode'));
+    expect(screen.getByRole('button', { name: 'HYBRID' })).toHaveAttribute('aria-pressed', 'true');
+    expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'AI' }));
+    expect(screen.getByRole('button', { name: 'AI' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('assigns per-Shot execution on the Hybrid board without splitting the Production', async () => {
-    studio('/?tool=Hybrid');
-    const select = await screen.findByRole('combobox', { name: 'Execution for Establish' });
-    fireEvent.change(select, { target: { value: 'ai' } });
+  it('assigns per-Shot execution from the Shot menu without splitting the Production', async () => {
+    studio(`/?scene=${sceneA}&shot=${shotA}`);
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Shot 01A options' }));
+    fireEvent.change(screen.getByLabelText('Execution for Establish'), { target: { value: 'ai' } });
     await waitFor(() => expect(productionService.updateStudioShot).toHaveBeenCalledWith(
       workspaceId, productionId, shotA, expect.objectContaining({ execution_method: 'ai' })));
   });
 
-  it('selects a Scene from the drawer and follows it in canvas, inspector and timeline', async () => {
-    const router = studio('/?tool=Scenes');
-    await screen.findByRole('heading', { name: 'Scenes' });
-    fireEvent.click(await screen.findByRole('button', { name: /Scene 1 · Dark kitchen/ }));
+  it('selects a card from the film strip and follows it in the carousel and inspector', async () => {
+    const router = studio('/');
+    await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    fireEvent.click(screen.getByRole('button', { name: 'Card 1: Dark kitchen' }));
     await waitFor(() => expect(router.state.location.search).toContain(`scene=${sceneA}`));
     fireEvent.click(screen.getByRole('tab', { name: 'Inspect' }));
     expect(await screen.findByText('INSPECT · SCENE 1')).toBeVisible();
@@ -279,8 +283,8 @@ describe('Studio eight views', () => {
   });
 
   it('inspects the selected Shot and surfaces scoped continuity findings honestly', async () => {
-    studio(`/?tool=Shots&scene=${sceneA}&shot=${shotA}`);
-    await screen.findByText('Selected Shot');
+    studio(`/?scene=${sceneA}&shot=${shotA}`);
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
     fireEvent.click(screen.getByRole('tab', { name: 'Inspect' }));
     expect(await screen.findByText('INSPECT · SHOT')).toBeVisible();
     expect(screen.getByText('Macro on the scale.', { selector: '.s8-info-value' })).toBeVisible();
@@ -290,9 +294,73 @@ describe('Studio eight views', () => {
     await waitFor(() => expect(productionContinuityService.check).toHaveBeenCalledWith(workspaceId, productionId, 'Run from Studio inspector.'));
   });
 
-  it('shows Result evidence on the Results drawer and the timeline', async () => {
-    studio('/?tool=Results');
-    expect(await screen.findByRole('button', { name: /Establish.*2 Results/ })).toBeVisible();
-    expect(screen.getAllByText(/2 Results/).length).toBeGreaterThanOrEqual(2);
+  it('opens the Results drawer from a legacy Results link with the Shot in focus', async () => {
+    const router = studio(`/?tool=Results&scene=${sceneA}&shot=${shotA}`);
+    expect(await screen.findByRole('dialog', { name: 'Results' })).toBeVisible();
+    expect(await screen.findByText('FOCUS · SHOT 01A')).toBeVisible();
+    await waitFor(() => expect(router.state.location.search).not.toContain('tool='));
+  });
+
+  it('routes a card with execution evidence to Results and accepts the Result through Shot Match', async () => {
+    const resultId = '00000000-0000-4000-8000-000000000021';
+    const reportId = '00000000-0000-4000-8000-000000000022';
+    vi.mocked(productionShotMatchService.vocabulary).mockResolvedValue({
+      result_states: [{ state: 'needs_review', label: 'Needs review' }],
+      result_origins: [{ origin: 'real_take', label: 'Real Take' }],
+      match_verdicts: [{ verdict: 'mismatch', label: 'Mismatch' }],
+      correction_states: [{ state: 'proposed', label: 'Proposed' }],
+      correction_recommendations: [{ recommendation: 'pickup_required', label: 'Pickup required' }],
+      match_origins: [{ origin: 'creator', label: 'Creator statement' }],
+      severities: [{ severity: 'critical', label: 'Critical' }],
+      rule: 'A Result is what was actually created, not the plan.',
+      limitation: 'Comparison only uses verified media rows.',
+    });
+    vi.mocked(productionShotMatchService.results).mockResolvedValue({
+      items: [{
+        result_id: resultId, shot_id: shotA, shot_label: 'Shot 1 Establish',
+        state: 'needs_review', state_label: 'Needs review', approval: 'draft',
+        locked: false, revision: 3, origin: 'real_take', origin_label: 'Real Take',
+        provenance: { origin: 'real_take', take_number: 1, take_status: 'preferred' },
+        capabilities: { metadata: true, thumbnail: true, image: true, video_frames: true, audio: false, media_state: 'uploaded/ready', notes: [] },
+        capability_line: 'Compared from metadata and extracted frames.',
+        match_reports: 1, match_worst_severity: 'warning', match_severity_label: 'Warning',
+        match_recommendation: 'pickup_required', match_recommendation_label: 'Pickup required',
+        created_at: '2026-10-05T00:00:00Z',
+        final_line: 'Final is explicitly accepted evidence or deliverable state.',
+      }],
+      total: 1, limit: 50, offset: 0, note: 'A Result is what was created, not the plan.',
+    });
+    vi.mocked(productionShotMatchService.result).mockResolvedValue({
+      result_id: resultId, shot_id: shotA, shot_label: 'Shot 1 Establish',
+      state: 'needs_review', state_label: 'Needs review', approval: 'draft',
+      locked: false, revision: 3, origin: 'real_take', origin_label: 'Real Take',
+      provenance: { origin: 'real_take', take_number: 1, take_status: 'preferred' },
+      capabilities: { metadata: true, thumbnail: true, image: true, video_frames: true, audio: false, media_state: 'uploaded/ready', notes: [] },
+      capability_line: 'Compared from metadata and extracted frames.',
+      scene_id: sceneA, media_id: '00000000-0000-4000-8000-000000000023', plan: null, version_count: 1,
+      match_reports: [{ report_id: reportId, state: 'complete', severity: 'warning',
+        recommendation: 'pickup_required', decision: null, origin: 'creator',
+        approval: 'draft', created_at: '2026-10-05T00:00:00Z' }],
+      corrections: [],
+      final_line: 'Final is explicitly accepted evidence or deliverable state.',
+    });
+    vi.mocked(productionShotMatchService.reports).mockResolvedValue({ items: [], total: 0, note: '' });
+    vi.mocked(productionShotMatchService.setResultState).mockResolvedValue({
+      result_id: resultId, state: 'approved', state_label: 'Approved', previous_state: 'needs_review',
+      approval: 'approved', revision: 4, note: '',
+      meaning: 'A creator accepted this Result. Shot Match never approves a Result.',
+    });
+    // The fixture Shot already carries 2 recorded results, so the card is RESULT READY.
+    studio(`/?scene=${sceneA}`);
+    const card = await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    expect(within(card).getByText('RESULT READY')).toBeVisible();
+    fireEvent.click(within(card).getByRole('button', { name: 'REVIEW RESULT →' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Results' });
+    expect(await within(dialog).findByLabelText('Recorded results')).toBeVisible();
+    expect(within(dialog).getByText('Real Take 1 · preferred')).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept Result' }));
+    await waitFor(() => expect(productionShotMatchService.setResultState).toHaveBeenCalledWith(
+      workspaceId, productionId, resultId, expect.objectContaining({ state: 'approved' })));
+    expect(await within(dialog).findByText(/A creator accepted this Result/)).toBeVisible();
   });
 });

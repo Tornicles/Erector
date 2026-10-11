@@ -22,7 +22,7 @@ import { LoadingState } from '../components/StateComponents';
  * branch creates revisions and marks dependent artifacts, it never approves content.
  */
 
-type Target = { id: string; label: string; kind: string; scope: BranchScope };
+type Target = { id: string; label: string; kind: string; scope?: BranchScope };
 
 const FIELD_LABELS: Record<string, string> = {
   title: 'Title', content: 'Content', description: 'Description', purpose: 'Purpose',
