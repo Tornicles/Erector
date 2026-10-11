@@ -206,7 +206,7 @@ describe('canonical application routes', () => {
     vi.mocked(productionService.directorCommit).mockResolvedValue({ production_id: productionId, operation_id: '00000000-0000-4000-8000-000000000009', idempotent: false, production_revision: 4 });
     const router = route('/home');
     fireEvent.change(await screen.findByRole('textbox',{name:'Describe what you want to make'}),{target:{value:'A 30-second premium coffee commercial'}});
-    fireEvent.click(screen.getByRole('button',{name:'DIRECT THIS'}));
+    fireEvent.click(screen.getByRole('button',{name:'DIRECT THIS →'}));
     await waitFor(()=>expect(productionService.create).toHaveBeenCalledWith(workspaceId,'A 30-second premium coffee commercial'));
     await waitFor(()=>expect(productionService.addReference).toHaveBeenCalledWith(workspaceId,productionId,{source_type:'description',source_description:'A 30-second premium coffee commercial'}));
     expect(productionService.directorPlan).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({ goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions' }));
@@ -267,11 +267,12 @@ describe('canonical application routes', () => {
   it('Home upload/URL mode truthfully gates unsupported import and recording actions', async () => {
     route('/home');
     await screen.findByRole('heading',{name:/Bring the idea/});
-    fireEvent.click(screen.getByRole('tab',{name:/Script \/ Doc/}));
-    expect(screen.getByRole('status')).toHaveTextContent('No external import source is connected yet');
-    fireEvent.click(screen.getByRole('tab',{name:/Record/}));
-    expect(screen.getByRole('status')).toHaveTextContent('Recording is not configured');
-    fireEvent.click(screen.getByRole('tab',{name:/Paste link/}));
+    const intake = within(screen.getByRole('form',{name:'Director intake'}));
+    fireEvent.click(intake.getByRole('button',{name:'▤ Script'}));
+    expect(intake.getByRole('status')).toHaveTextContent('No external import source is connected yet');
+    fireEvent.click(intake.getByRole('button',{name:'◉ Record'}));
+    expect(intake.getByRole('status')).toHaveTextContent('Recording is not configured');
+    fireEvent.click(screen.getByRole('button',{name:'↗ Reference'}));
     expect(screen.getByLabelText('Reference URL')).toBeVisible();
   });
   it('Settings exposes its real application sections and asset/setup terminology is separate', async () => {
