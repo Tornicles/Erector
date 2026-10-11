@@ -24,6 +24,7 @@ import { ProductionVersioningCanvas } from '../studio/ProductionVersioning';
 import { ProductionReadinessCanvas } from '../studio/ProductionReadiness';
 import { PublishingCanvas } from '../prompt10/Publishing';
 import { ExportsCanvas } from '../prompt10/Exports';
+import { DownloadFlow, type DownloadFlowInitial } from '../studio/DownloadFlow';
 import { ProductionShotMatchCanvas } from '../studio/ProductionShotMatch';
 import { type ExecutionFace, type Production } from '../types/domain';
 import { DEFAULT_EXECUTION_FACE, PRODUCT } from '../types/product';
@@ -56,7 +57,7 @@ const DRAWER_TITLES: Record<DrawerSection, string> = {
   continuity: 'Continuity',
   memory: 'Memory',
   series: 'Series',
-  exports: 'Export',
+  exports: 'Download',
   publishing: 'Publish',
   preview: 'Preview',
   playbook: 'AI Playbook',
@@ -102,6 +103,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   const [surfaceAttempt, setSurfaceAttempt] = useState(0);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerSection | null>(null);
+  const [download, setDownload] = useState<DownloadFlowInitial | null>(null);
   const [assetKind, setAssetKind] = useState<'Characters' | 'World' | 'Products' | 'Wardrobe' | 'Style'>('Characters');
   const [impactOffer, setImpactOffer] = useState<{ sceneId: string; label: string } | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -386,7 +388,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
         return;
       case 'plan_coverage':
         setUrl({ scene: scene.id, shot: null });
-        focusDirector(`Tell TONDE what Card ${scene.order} must accomplish — for example: “Give Card ${scene.order} three Shots: a wide reveal, Maya entering, and a reaction.”`);
+        focusDirector(`Tell TONDE what Card ${scene.order} must accomplish — for example: “Give Card ${scene.order} three Shots: a wide reveal, the entrance, and a reaction.”`);
         return;
       case 'review_result':
       case 'start_execution':
@@ -447,7 +449,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       mode={face} onMode={setFace}
       undoNote={undo.note} undoBusy={undo.busy} onUndo={() => void undo.undo()} onRedo={() => void undo.redo()}
       onOpenDetails={() => setDrawer('details')}
-      onExport={() => setDrawer('exports')}
+      onExport={() => setDownload({})}
     />
 
     {title.error && <div className="save-error" role="alert">{title.error}
@@ -489,6 +491,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
                   onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
                   onPrimary={runPrimary}
                   renderMenu={scene => <CardMenu scene={scene} busy={busy}
+                    onDownload={target => setDownload({ choice: 'current', sceneId: target.id })}
                     onRename={(target, next) => void sceneActions.update(target, { title: next, expected_revision: target.revision })}
                     onApprove={target => void sceneActions.approve(target, target.approval === 'approved' ? 'needs_review' : 'approved')}
                     onToggleLock={target => void sceneActions.toggleLock(target)}
@@ -533,6 +536,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
             : focusShot.title}
             busy={busy}
             onRename={(target, next) => void shotActions.update(target, { title: next, expected_revision: target.revision })}
+            onDownload={target => setDownload({ shotId: target.id })}
             onApprove={target => void shotActions.approve(target, 'approved')}
             onExecute={(target, method) => void shotActions.update(target, { execution_method: method, expected_revision: target.revision })}
             onDuration={(target, durationMs) => void shotActions.update(target, { duration_ms: durationMs, expected_revision: target.revision })} />
@@ -541,6 +545,9 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       </aside>
     </div>
 
+    {download && model && <DownloadFlow workspaceId={workspaceId} productionId={initial.id} model={model}
+      focusSceneId={focusScene?.id ?? null} focusShotId={focusShot?.id ?? null}
+      initial={download} onClose={() => setDownload(null)} />}
     {drawer && model && <DetailsDrawer title={DRAWER_TITLES[drawer]} onClose={() => setDrawer(null)}>
       {drawer === 'details' && <>
         <section className="detail-section"><strong>Brief</strong><p>{surface?.brief ? surface.brief.production_goal : 'No Brief recorded yet. Ask TONDE to develop it.'}</p>
@@ -639,7 +646,14 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
         selectedSceneId={focusScene?.id ?? null} selectedShotId={focusShot?.id ?? null}
         sceneTitle={focusScene?.title ?? null} shotTitle={focusShot?.title ?? null}
         productionTitle={initial.title} busy={busy} onChanged={refresh} />}
-      {drawer === 'exports' && <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />}
+      {drawer === 'exports' && <>
+        <div style={{ marginBottom: 12 }}>
+          <button type="button" className="cs-primary" onClick={() => setDownload({})}>
+            DOWNLOAD CARDS ↓</button>
+          <p className="subtle">Landscape PDF Cards from this Production. Below: every requested download and production package.</p>
+        </div>
+        <ExportsCanvas workspaceId={workspaceId} productionId={initial.id} />
+      </>}
       {drawer === 'publishing' && <PublishingCanvas workspaceId={workspaceId} productionId={initial.id} />}
       {drawer === 'preview' && <MovieModeCanvas workspaceId={workspaceId} productionId={initial.id}
         selectedSceneId={selectedSceneId} selectedShotId={selectedShotId} busy={busy}

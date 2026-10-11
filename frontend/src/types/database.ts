@@ -3161,6 +3161,8 @@ export interface Database {
           expired_at: string | null;
           failure_code: string | null;
           failure_message: string | null;
+          scope_type: string;
+          scope_refs: Json;
         };
         Insert: {
           id?: string;
@@ -3187,6 +3189,8 @@ export interface Database {
           expired_at?: string | null;
           failure_code?: string | null;
           failure_message?: string | null;
+          scope_type?: string;
+          scope_refs?: Json;
         };
         Update: {
           id?: string;
@@ -3213,6 +3217,8 @@ export interface Database {
           expired_at?: string | null;
           failure_code?: string | null;
           failure_message?: string | null;
+          scope_type?: string;
+          scope_refs?: Json;
         };
         Relationships: [];
       };

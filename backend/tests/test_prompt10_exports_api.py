@@ -384,7 +384,23 @@ def test_requesting_an_export_pins_a_version_and_creates_no_file() -> None:
     assert data['entitlement']['enforced'] is False, 'an undeclared entitlement is not a commercial gate'
     request_call = next(call for call in calls['rpc'] if call['name'] == 'export_request')
     assert request_call['payload'] == {'target_workspace': WORKSPACE, 'target_production': PRODUCTION,
-        'target_kind': 'production_package', 'target_format': 'zip', 'target_package_type': 'shot_list'}
+        'target_kind': 'production_package', 'target_format': 'zip', 'target_package_type': 'shot_list',
+        'target_scope_type': 'full_production',
+        'target_scope_refs': {'scene_ids': [], 'shot_ids': [], 'act_id': None, 'act_title': None,
+            'style': 'standard', 'include': {}, 'with_results': False}}
+    # A card scope rides the same request; anything but a PDF full document is refused up front.
+    scoped = client.post(base(), headers=HEADERS, json={'production_id': PRODUCTION,
+        'kind': 'full_document', 'format': 'pdf', 'scope_type': 'current_card',
+        'scope_refs': {'scene_ids': [SCENE]}})
+    assert scoped.status_code == 200
+    scoped_call = [call for call in calls['rpc'] if call['name'] == 'export_request'][-1]
+    assert scoped_call['payload']['target_scope_type'] == 'current_card'
+    assert scoped_call['payload']['target_scope_refs']['scene_ids'] == [SCENE]
+    scoped_docx = client.post(base(), headers=HEADERS, json={'production_id': PRODUCTION,
+        'kind': 'full_document', 'format': 'docx', 'scope_type': 'current_card',
+        'scope_refs': {'scene_ids': [SCENE]}})
+    assert scoped_docx.status_code == 422
+    assert 'card download is a PDF' in scoped_docx.json()['errors'][0]['message']
     assert calls['storage'] == [], 'requesting an export must not write an artifact'
 
     # The two products are distinct before the database is asked anything.
@@ -425,15 +441,18 @@ def test_building_a_full_document_records_the_version_it_pins_and_a_real_pdf() -
     assert manifest['production_id'] == PRODUCTION and manifest['production_revision'] == 3
     assert manifest['format'] == 'pdf' and manifest['kind'] == 'full_document'
     assert manifest['production_version_id'] == VERSION
-    assert manifest['files'][0]['path'] == 'production.pdf'
+    assert manifest['files'][0]['path'] == 'TONDE_Marquee_Film_Full_Production.pdf'
     assert manifest['files'][0]['checksum'].startswith('sha256:')
+    assert manifest['scope']['scope_type'] == 'full_production' and manifest['scope']['pages'] >= 1
     assert manifest['pin']['reconstructed'] is True and manifest['pin']['objects_included'] >= 2
     assert completed['payload']['target_checksum'] == manifest['checksums']['content']
     assert completed['payload']['target_file_count'] == 1
 
     uploaded = calls['uploads'][0]
     assert uploaded[:5] == b'%PDF-', 'the artifact that was stored must be the rendered document'
-    assert 'MARQUEE FILM' in extract_pdf(uploaded).text
+    assert b'792 612' in uploaded, 'a card download is US Letter landscape, not portrait'
+    assert 'Marquee Film' in extract_pdf(uploaded).text
+    assert 'CARD 01' in extract_pdf(uploaded).text, 'the PDF carries the card, not a generic report'
     assert calls['storage'][0].startswith('/storage/v1/object/tonde-exports/')
     # The media row is written with the server credential, because the client path excludes this bucket.
     media_calls = [call for call in calls['rest'] if call['table'] == 'media_files']

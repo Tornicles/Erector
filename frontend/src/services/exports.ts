@@ -30,9 +30,16 @@ export type ExportVocabulary = {
   boundary: string;
 };
 
+export type DownloadScopeType = 'full_production' | 'current_card' | 'selected_cards' | 'episode' | 'shot_prompt';
+export type DownloadScopeRefs = {
+  scene_ids?: string[]; shot_ids?: string[]; act_id?: string | null; act_title?: string | null;
+  style?: 'standard' | 'print'; include?: Record<string, boolean>; with_results?: boolean;
+};
 export type ProductionExport = {
   id: string; workspace_id: string; production_id: string; job_id: string | null;
-  kind: ExportKind; requested_format: ExportFormat; package_type: PackageType; state: ExportState;
+  kind: ExportKind; requested_format: ExportFormat; package_type: PackageType;
+  scope_type?: DownloadScopeType | string; scope_refs?: DownloadScopeRefs | null;
+  state: ExportState;
   production_revision: number; production_version_id: string | null; generated_media_id: string | null;
   file_count: number | null; total_bytes: number | null; content_checksum: string | null;
   requested_by: string; created_at: string; ready_at: string | null; failed_at: string | null;
@@ -65,7 +72,7 @@ export const exportService = {
   },
 
   request: (workspaceId: string, body: { production_id: string; kind: ExportKind; format: ExportFormat;
-    package_type?: PackageType }) =>
+    package_type?: PackageType; scope_type?: DownloadScopeType; scope_refs?: DownloadScopeRefs }) =>
     authenticatedRequest<ExportRequestResult>(`/api/v1/workspaces/${workspaceId}/exports`, {
       method: 'POST', body: JSON.stringify(body),
     }),

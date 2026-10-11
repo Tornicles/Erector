@@ -35,6 +35,9 @@ SCENE_FIELDS = ('id,workspace_id,production_id,title,purpose,story_beat,descript
 SHOT_FIELDS = ('id,workspace_id,production_id,scene_id,title,description,action,purpose,subject,framing,angle,'
     'movement,composition,transition,story_relationship,story_beat,creative_notes,execution_method,sort_order,'
     'planned_duration_ms,calculated_duration_ms,approval,locked_at,lifecycle,revision,updated_at')
+PLAN_FIELDS = ('shot_id,execution_method,plan_status,readiness_note,performance,blocking,camera_position,'
+    'framing,lighting_plan,sound_plan,microphone_plan,setup_steps,capture_checklist,canonical_prompt,'
+    'provider_prompt,provider_prompt_edited,motion,continuity,negative_constraints,hybrid,revision')
 PRODUCTION_FIELDS = ('id,workspace_id,title,production_type,custom_type,execution_method,planned_duration_ms,'
     'calculated_duration_ms,approval,locked_at,revision,lifecycle,updated_at')
 
@@ -86,12 +89,18 @@ class StudioWorkspaceRepository:
         result_rows, _ = await self._rows('/rest/v1/results', token, {
             **scope, 'select': 'id,shot_id,state', 'limit': '400',
         }, 400)
+        # Execution direction for card completeness: one bounded read, latest revision per Shot wins.
+        # A Shot without a plan row is reported as unplanned, never assumed.
+        plan_rows, _ = await self._rows('/rest/v1/execution_plans', token, {
+            **scope, 'select': PLAN_FIELDS, 'order': 'revision.desc', 'limit': '400',
+        }, 400)
         timing = await self.timing(workspace_id, production_id, token)
         return studio_read_model(
             production=production, scene_rows=scene_rows, shot_rows=shot_rows, asset_rows=asset_rows,
             binding_rows=binding_rows, participant_rows=participant_rows, dialogue_rows=dialogue_rows,
             document_rows=document_rows, result_rows=result_rows, timing=timing,
             truncated=scenes_truncated or shots_truncated or assets_truncated,
+            plan_rows=plan_rows,
         )
 
     async def timing(self, workspace_id: UUID, production_id: UUID, token: str, *, expected_revision: int | None = None) -> dict[str, Any]:

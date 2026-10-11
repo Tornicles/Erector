@@ -42,7 +42,9 @@ Envelope = Any
 EXPORT_VOCABULARY: dict[str, Any] = {
     'products': {
         'full_document': {'label': 'Download Full Document', 'formats': ['pdf', 'docx'],
-            'note': 'Rendered from the exact Production version this export pins.'},
+            'note': ('Rendered from the exact Production version this export pins. A PDF download is the '
+                'Studio Card on a landscape sheet: full production, current card, selected cards, group or '
+                'shot prompt cards. Card scopes are PDF only.')},
         'production_package': {'label': 'Export Production Package', 'formats': ['zip', 'json'],
             'note': 'A ZIP described file by file by its manifest, or its structured-data JSON.'},
     },
@@ -53,6 +55,8 @@ EXPORT_VOCABULARY: dict[str, Any] = {
     'retry': {action: RETRY_CLASSIFICATION[action] for action in ('export_build', 'export_download')},
     'boundary': ('An export is built from the Production version it pins. If that version cannot be '
         'reconstructed the export fails truthfully instead of exporting current state.'),
+    'scopes': ['full_production', 'current_card', 'selected_cards', 'episode', 'shot_prompt'],
+    'card_styles': ['standard', 'print'],
 }
 
 
@@ -135,9 +139,10 @@ def register_export_routes(application: FastAPI, config: Settings, logger: loggi
         entitlement = EXPORT_DOCUMENT_ENTITLEMENT if body.kind == 'full_document' else EXPORT_PACKAGE_ENTITLEMENT
         capability = 'Downloading a full document' if body.kind == 'full_document' else 'Exporting a production package'
         decision = await ensure_entitlement(gateway, workspace_id, entitlement, request.state.access_token, capability)
+        scope_refs = body.scope_refs.model_dump(mode='json')
         result = await service(gateway, config).request(workspace_id, request.state.access_token, {
             'production_id': str(body.production_id), 'kind': body.kind, 'format': body.format,
-            'package_type': body.package_type})
+            'package_type': body.package_type, 'scope_type': body.scope_type, 'scope_refs': scope_refs})
         logger.info('export_requested', extra={'context': {'event': 'export_requested',
             'workspace_id': str(workspace_id), 'export_id': str(result.get('export_id')), 'kind': body.kind,
             'format': body.format}})

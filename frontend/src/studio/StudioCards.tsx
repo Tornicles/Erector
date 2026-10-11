@@ -71,7 +71,7 @@ export function CardTopBar({ productionTitle, typeBadge, titleEditor, saveState,
         {value.toUpperCase()}</button>)}
     </div>
     <button type="button" className="cs-btn" onClick={onOpenDetails}>Production Details</button>
-    <button type="button" className="cs-primary" onClick={onExport}>Export</button>
+    <button type="button" className="cs-primary" onClick={onExport}>DOWNLOAD</button>
     {undoNote && <p className="cs-undo-note" role="status">{undoNote}</p>}
   </header>;
 }
@@ -258,7 +258,7 @@ export function FilmStrip({ scenes, activeId, onFocusScene, onInsert, onDrop, bu
   </div>;
 }
 
-export function CardMenu({ scene, busy, onRename, onApprove, onToggleLock, onArchive, onMove, onHowTo }: {
+export function CardMenu({ scene, busy, onRename, onApprove, onToggleLock, onArchive, onMove, onHowTo, onDownload }: {
   scene: StudioScene; busy: boolean;
   onRename: (scene: StudioScene, title: string) => void;
   onApprove: (scene: StudioScene) => void;
@@ -266,6 +266,7 @@ export function CardMenu({ scene, busy, onRename, onApprove, onToggleLock, onArc
   onArchive: (scene: StudioScene) => void;
   onMove: (scene: StudioScene, direction: -1 | 1) => void;
   onHowTo: (scene: StudioScene) => void;
+  onDownload?: (scene: StudioScene) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -292,6 +293,7 @@ export function CardMenu({ scene, busy, onRename, onApprove, onToggleLock, onArc
     <button type="button" disabled={busy} onClick={() => onMove(scene, -1)}>Move earlier</button>
     <button type="button" disabled={busy} onClick={() => onMove(scene, 1)}>Move later</button>
     <button type="button" disabled={busy} onClick={() => { onHowTo(scene); setOpen(false); }}>How to create this</button>
+    {onDownload && <button type="button" disabled={busy} onClick={() => { onDownload(scene); setOpen(false); }}>Download card PDF ↓</button>}
     {confirmingArchive
       ? <><p className="cs-confirm">Archive this card? Its Shots leave the live order but stay readable.</p>
         <button type="button" className="cs-danger" disabled={busy} onClick={() => { onArchive(scene); setOpen(false); setConfirmingArchive(false); }}>Archive card</button>
@@ -301,11 +303,12 @@ export function CardMenu({ scene, busy, onRename, onApprove, onToggleLock, onArc
   </div>;
 }
 
-export function ShotMenu({ shot, displayId, busy, onRename, onApprove, onExecute, onDuration }: {
+export function ShotMenu({ shot, displayId, busy, onRename, onApprove, onExecute, onDuration, onDownload }: {
   shot: StudioShot; displayId: string; busy: boolean;
   onRename: (shot: StudioShot, title: string) => void; onApprove: (shot: StudioShot) => void;
   onExecute: (shot: StudioShot, method: StudioShot['execution_method']) => void;
   onDuration: (shot: StudioShot, durationMs: number | null) => void;
+  onDownload?: (shot: StudioShot) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(shot.title);
@@ -341,6 +344,7 @@ export function ShotMenu({ shot, displayId, busy, onRename, onApprove, onExecute
         <option value="hybrid">Hybrid — shoot + AI</option>
       </select></label>
     <button type="button" disabled={busy} onClick={() => { onApprove(shot); setOpen(false); }}>Approve shot</button>
+    {onDownload && (shot.execution_method === 'ai' || shot.execution_method === 'hybrid') && <button type="button" disabled={busy} onClick={() => { onDownload(shot); setOpen(false); }}>Download prompt card ↓</button>}
     <button type="button" onClick={() => setOpen(false)}>Close</button>
   </div>;
 }

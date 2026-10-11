@@ -41,8 +41,19 @@ export function cardReadiness(scene: StudioScene): CardReadiness {
   if (scene.approval === 'needs_review' || scene.approval === 'changed_after_approval') return 'NEEDS YOU';
   const results = scene.shots.reduce((total, shot) => total + shot.result_count, 0);
   if (results > 0) return 'RESULT READY';
+  // Server-side completeness evaluates executability from execution plans; the local shot
+  // count is only the fallback for read models that predate it.
+  if (scene.completeness) {
+    if (scene.completeness.state === 'NEEDS YOU') return 'NEEDS YOU';
+    return scene.completeness.state;
+  }
   if (scene.shots.length > 0) return 'READY';
   return 'DRAFT';
+}
+
+/** Named gaps from the server completeness evaluation, empty when the card is executable. */
+export function cardGaps(scene: StudioScene): string[] {
+  return scene.completeness?.missing ?? [];
 }
 
 /** Dominant execution of a Card from its Shots; PLANNING when nothing is planned yet. */
@@ -87,6 +98,24 @@ export function nextActionForScene(scene: StudioScene): CardNextAction {
       detail: `Card ${scene.order} has no Shots yet. Ask TONDE to plan its coverage.`,
       kind: 'plan_coverage',
     };
+  }
+  // Prefer the server-evaluated next action (it names the actual missing direction).
+  if (scene.completeness?.next_action_label && cardReadiness(scene) !== 'COMPLETE') {
+    const readiness = cardReadiness(scene);
+    if (readiness === 'READY' || readiness === 'DRAFT' || readiness === 'NEEDS YOU') {
+      const kind = scene.locked_at ? 'locked' as const
+        : readiness === 'NEEDS YOU' ? 'review_decision' as const
+        : readiness === 'DRAFT' ? 'plan_coverage' as const
+        : scene.completeness.next_action_label === 'RUN THE PLAYBOOK' ? 'run_playbook' as const
+        : 'start_execution' as const;
+      return {
+        label: scene.locked_at ? 'LOCKED' : scene.completeness.next_action_label,
+        detail: scene.locked_at
+          ? 'This card is locked. Unlock it from the card menu before TONDE or anyone changes it.'
+          : scene.completeness.next_action_detail,
+        kind,
+      };
+    }
   }
   const results = scene.shots.reduce((total, shot) => total + shot.result_count, 0);
   if (results > 0) {

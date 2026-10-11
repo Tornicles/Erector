@@ -31,6 +31,13 @@ from uuid import UUID, uuid4
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.client import SupabaseGateway
+from app.services.card_download import (
+    INCLUDE_KEYS,
+    assemble_cards,
+    cover_card,
+    download_filename,
+)
+from app.services.card_pdf import CardImage, jpeg_size, render_card_pdf
 from app.services.export_builder import (
     Block,
     RenderedDocument,
@@ -103,6 +110,8 @@ class ExportContent:
     media: dict[str, dict[str, Any]]
     pin: PinInfo
     limitations: list[str] = field(default_factory=list)
+    scope_type: str = 'full_production'
+    scope_refs: dict[str, Any] = field(default_factory=dict)
 
 
 def _text(value: Any) -> str:
@@ -176,10 +185,14 @@ class ExportContentLoader:
             limitations.append(f'{len(pin.reconstruction_gaps)} object(s) had no recorded version at the request time.')
         if pin.truncated_reads:
             limitations.append('Some collections were truncated at the read bound: ' + ', '.join(pin.truncated_reads))
+        scope_refs = row.get('scope_refs')
         return ExportContent(export_id=str(row['id']), workspace_id=workspace_id, production_id=production_id,
             production_revision=production_revision, production_version_id=pin.production_version_id,
             kind=str(row.get('kind') or ''), requested_format=str(row.get('requested_format') or ''),
-            package_type=str(row.get('package_type') or 'complete'), requested_by=str(row.get('requested_by') or ''),
+            package_type=str(row.get('package_type') or 'complete'),
+            scope_type=str(row.get('scope_type') or 'full_production'),
+            scope_refs=dict(scope_refs) if isinstance(scope_refs, dict) else {},
+            requested_by=str(row.get('requested_by') or ''),
             requested_at=requested_at, production=production, documents=documents, brief=brief, story=story,
             children=children, media=media, pin=pin, limitations=limitations)
 
@@ -705,10 +718,14 @@ class ExportService:
         return rows[0]
 
     async def request(self, workspace_id: UUID, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+        scope_refs = payload.get('scope_refs')
         return await self.gateway.rpc_detailed('export_request', token=token, json={
             'target_workspace': str(workspace_id), 'target_production': payload['production_id'],
             'target_kind': payload['kind'], 'target_format': payload['format'],
-            'target_package_type': payload.get('package_type') or 'complete'}, layer='Prompt 10 exports')
+            'target_package_type': payload.get('package_type') or 'complete',
+            'target_scope_type': payload.get('scope_type') or 'full_production',
+            'target_scope_refs': scope_refs if isinstance(scope_refs, dict) else {}},
+            layer='Prompt 10 exports')
 
     async def expire(self, workspace_id: UUID, export_id: UUID, token: str) -> dict[str, Any]:
         return await self.gateway.rpc_detailed('export_expire', token=token, json={
@@ -756,6 +773,11 @@ class ExportService:
 
     async def _render_and_store(self, workspace_id: UUID, export_id: UUID, token: str, row: dict[str, Any]) -> dict[str, Any]:
         content = await ExportContentLoader(self.gateway).load(row, token)
+        if content.kind == 'full_document' and content.requested_format == 'pdf':
+            return await self._render_card_document(workspace_id, export_id, token, content)
+        if content.kind == 'full_document' and content.scope_type != 'full_production':
+            raise AppError('EXPORT_SCOPE_FORMAT', 'validation',
+                'A card download is a PDF full document; other products keep their own narrowing.', 422)
         if content.kind == 'full_document':
             document = render_document(document_blocks(content), title=_text(content.production.get('title')) or 'Production',
                 requested_format=content.requested_format)
@@ -783,6 +805,86 @@ class ExportService:
         manifest = self._package_manifest(content, document, entries, copied, object_key, checksum)
         files = [dict(entry) for entry in manifest['files']]
         return await self._complete(workspace_id, export_id, token, media_id, manifest, files, len(payload), checksum)
+
+    async def _render_card_document(self, workspace_id: UUID, export_id: UUID, token: str,
+        content: ExportContent) -> dict[str, Any]:
+        """A download is the Studio Card on a landscape sheet, built from the pinned version."""
+
+        refs = content.scope_refs if isinstance(content.scope_refs, dict) else {}
+        style = str(refs.get('style') or 'standard')
+        if style not in ('standard', 'print'):
+            raise AppError('EXPORT_CARD_STYLE', 'validation',
+                'A card PDF is TONDE Standard or print-friendly.', 422)
+        include = refs.get('include')
+        include_map = {key: bool(include.get(key, True)) for key in INCLUDE_KEYS} if isinstance(include, dict) else None
+        with_results = bool(refs.get('with_results'))
+        title = _text(content.production.get('title')) or 'Production'
+        production_line = f'{title} - rev {content.production_revision}'
+        children = content.children
+        images = await self._card_images(content, token) if with_results else {}
+        cards = assemble_cards(production=content.production, scenes=children.get('scenes', []),
+            shots=children.get('shots', []), plans=children.get('execution_plans', []),
+            results=children.get('results', []), scope_type=content.scope_type, scope_refs=refs,
+            include=include_map, images=images, with_results=with_results)
+        scope_label = self._scope_label(content, cards)
+        creative_direction = _text((content.brief or {}).get('brief'))[:1200]
+        if content.scope_type != 'shot_prompt':
+            cards.insert(0, cover_card(production_title=title, scope_label=scope_label,
+                card_count=len(cards), creative_direction=creative_direction,
+                revision_line=f'{production_line} - {content.export_id[:8]}'))
+        payload, pages = render_card_pdf(cards, title=title, style=style, production_line=production_line)
+        filename = download_filename(production_title=title, scope_type=content.scope_type,
+            scope_refs=refs, style=style, card_count=len(cards))
+        media_id, object_key, _ = await self._store_artifact(content, payload, filename, 'application/pdf')
+        checksum = sha256_checksum(payload)
+        document = RenderedDocument(payload, 'application/pdf', filename, [])
+        manifest = self._document_manifest(content, document, object_key, checksum)
+        manifest['scope'] = {'scope_type': content.scope_type, 'cards': len(cards), 'pages': pages,
+            'style': style}
+        files = [{'path': filename, 'bytes': len(payload), 'checksum': document.checksum}]
+        return await self._complete(workspace_id, export_id, token, media_id, manifest, files, len(payload), checksum)
+
+    def _scope_label(self, content: ExportContent, cards: list[Any]) -> str:
+        refs = content.scope_refs if isinstance(content.scope_refs, dict) else {}
+        if content.scope_type == 'current_card' and cards:
+            return cards[0].card_ref.title().replace('_', ' ')
+        if content.scope_type == 'selected_cards':
+            return f'{len(cards)} selected cards'
+        if content.scope_type == 'episode':
+            return str(refs.get('act_title') or 'Episode')
+        if content.scope_type == 'shot_prompt':
+            return 'AI prompt cards'
+        return 'Full production'
+
+    async def _card_images(self, content: ExportContent, token: str) -> dict[str, CardImage]:
+        """Accepted Result frames for card visuals, bounded; anything unreadable is omitted."""
+
+        images: dict[str, CardImage] = {}
+        total = 0
+        for result in content.children.get('results', []):
+            if len(images) >= 6 or total >= 8 * 1024 * 1024:
+                break
+            if str(result.get('state') or '').lower() not in ('approved', 'final'):
+                continue
+            media = content.media.get(str(result.get('media_id')))
+            if not media:
+                continue
+            try:
+                payload = await self._download_object(token, str(media.get('bucket')), str(media.get('object_key')))
+            except AppError:
+                continue
+            size = jpeg_size(payload)
+            if size is None:
+                continue
+            shot_id = str(result.get('shot_id'))
+            scene_id = next((str(shot.get('scene_id')) for shot in content.children.get('shots', [])
+                if str(shot.get('id')) == shot_id), '')
+            if scene_id and scene_id not in images:
+                images[scene_id] = CardImage(jpeg=payload, width=size[0], height=size[1])
+                total += len(payload)
+        if len(images) >= 6 or total >= 8 * 1024 * 1024:
+            content.limitations.append('Some Result frames exceeded the card visual bound and ship as intent text.')
+        return images
 
     async def _fail(self, workspace_id: UUID, export_id: UUID, token: str, code: str, message: str) -> dict[str, Any]:
         return await self.gateway.rpc_detailed('export_fail', token=token, json={
@@ -964,7 +1066,8 @@ class ExportService:
             'limitations': content.limitations}
 
 
-_EXPORT_SELECT = ('id,workspace_id,production_id,job_id,kind,requested_format,package_type,state,production_revision,'
+_EXPORT_SELECT = ('id,workspace_id,production_id,job_id,kind,requested_format,package_type,scope_type,scope_refs,'
+    'state,production_revision,'
     'production_version_id,generated_media_id,manifest,file_count,total_bytes,content_checksum,requested_by,created_at,'
     'ready_at,failed_at,expired_at,failure_code,failure_message,completed_at')
 

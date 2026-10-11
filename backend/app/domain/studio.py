@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domain.card_completeness import evaluate_card
+
 StudioScope = Literal['production', 'scene', 'shot']
 ApprovalValue = Literal['draft', 'needs_review', 'approved', 'changed_after_approval']
 ExecutionMethod = Literal['real', 'ai', 'hybrid']
@@ -144,6 +146,7 @@ def studio_read_model(
     result_rows: list[dict[str, Any]],
     timing: dict[str, Any],
     truncated: bool = False,
+    plan_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One aggregated Studio read model: Scenes, Shots, usage, status and timing."""
 
@@ -154,6 +157,7 @@ def studio_read_model(
         shots_by_scene.setdefault(str(row.get('scene_id')), []).append(row)
     for group in shots_by_scene.values():
         group.sort(key=lambda row: (row.get('sort_order') or 0, str(row.get('id'))))
+    plans_by_shot = _plans_by_shot(plan_rows or [])
 
     participants_by_scene: dict[str, list[str]] = {}
     for row in participant_rows:
@@ -203,9 +207,19 @@ def studio_read_model(
             'dialogue_lines': dialogue_by_scene.get(scene_id, 0),
             'shot_count': len(scene_shots),
             'bindings': [binding_view(item) for item in bindings_by_scope.get(scene_id, [])],
-            'shots': [shot_view(item, results_by_shot, bindings_by_scope) for item in scene_shots],
+            'shots': [shot_view(item, results_by_shot, bindings_by_scope,
+                plans_by_shot.get(str(item.get('id')))) for item in scene_shots],
         })
-    orphan_shots = [shot_view(item, results_by_shot, bindings_by_scope) for item in shots_by_scene.get('None', [])]
+        scene_entry = scenes[-1]
+        scene_entry['completeness'] = evaluate_card(
+            {'id': scene_id, 'order': scene_entry['order'], 'purpose': scene_entry['purpose'],
+                'description': scene_entry['description'],
+                'opening_state': row.get('opening_state'), 'ending_state': row.get('ending_state')},
+            [{'id': str(item.get('id')), 'execution_method': item.get('execution_method') or 'real'}
+                for item in scene_shots],
+            plans_by_shot).model_dump(mode='json')
+    orphan_shots = [shot_view(item, results_by_shot, bindings_by_scope,
+        plans_by_shot.get(str(item.get('id')))) for item in shots_by_scene.get('None', [])]
     assets = [{
         'id': str(row.get('id')), 'asset_type': row.get('asset_type'), 'name': row.get('name'),
         'description': row.get('description'), 'approval': row.get('approval'),
@@ -269,7 +283,42 @@ def binding_view(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def shot_view(row: dict[str, Any], results_by_shot: dict[str, int], bindings_by_scope: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def _plans_by_shot(plan_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Latest plan per Shot, merging the real and AI sides of hybrid coverage.
+
+    `execution_plans` holds at most one row per (shot, method); the higher revision wins when
+    history overlaps. A hybrid Shot needs both sides, so its real and AI rows merge with the
+    stricter plan status carried forward."""
+
+    from app.domain.card_completeness import DECISION_STATUSES
+
+    latest: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in plan_rows:
+        key = (str(row.get('shot_id')), str(row.get('execution_method') or 'real'))
+        current = latest.get(key)
+        if current is None or int(row.get('revision') or 0) >= int(current.get('revision') or 0):
+            latest[key] = row
+    merged: dict[str, dict[str, Any]] = {}
+    shot_ids = {shot_id for shot_id, _ in latest}
+    for shot_id in shot_ids:
+        real = latest.get((shot_id, 'real'), {})
+        ai = latest.get((shot_id, 'ai'), {})
+        plan = {**real, **ai}
+        statuses = [str(real.get('plan_status') or ''), str(ai.get('plan_status') or '')]
+        if any(status in DECISION_STATUSES for status in statuses):
+            plan['plan_status'] = next(status for status in statuses if status in DECISION_STATUSES)
+            notes = '; '.join(note for note in
+                (str(real.get('readiness_note') or ''), str(ai.get('readiness_note') or '')) if note.strip())
+            plan['readiness_note'] = notes[:600]
+        elif 'ready' in statuses:
+            plan['plan_status'] = 'ready'
+        merged[shot_id] = plan
+    return merged
+
+
+def shot_view(row: dict[str, Any], results_by_shot: dict[str, int],
+    bindings_by_scope: dict[str, list[dict[str, Any]]],
+    plan: dict[str, Any] | None = None) -> dict[str, Any]:
     shot_id = str(row.get('id'))
     return {
         'id': shot_id,
@@ -297,6 +346,8 @@ def shot_view(row: dict[str, Any], results_by_shot: dict[str, int], bindings_by_
         'updated_at': row.get('updated_at'),
         'result_count': results_by_shot.get(shot_id, 0),
         'bindings': [binding_view(item) for item in bindings_by_scope.get(shot_id, [])],
+        'direction': ({'has_plan': True, 'plan_status': plan.get('plan_status') or 'draft'}
+            if plan else {'has_plan': False, 'plan_status': 'unplanned'}),
     }
 
 

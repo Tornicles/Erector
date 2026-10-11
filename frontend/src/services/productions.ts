@@ -174,6 +174,12 @@ export type StudioShot = {
   creative_notes: string; execution_method: StudioExecutionContext; planned_duration_ms: number|null;
   approval: StudioApproval; locked_at: string|null; revision: number; updated_at: string|null;
   result_count: number; bindings: StudioBinding[];
+  direction?: { has_plan: boolean; plan_status: string };
+};
+export type CardCompleteness = {
+  scene_id: string; state: 'READY' | 'DRAFT' | 'NEEDS YOU'; missing: string[];
+  shots: Array<{ shot_id: string; execution_method: string; state: 'READY' | 'DRAFT' | 'NEEDS YOU'; missing: string[] }>;
+  next_action_label: string; next_action_detail: string;
 };
 export type StudioScene = {
   id: string; order: number; sort_order: number; title: string; purpose: string; story_beat: string;
@@ -183,6 +189,7 @@ export type StudioScene = {
   approval: StudioApproval; locked_at: string|null; revision: number; updated_at: string|null;
   character_asset_ids: string[]; dialogue_lines: number; shot_count: number;
   bindings: StudioBinding[]; shots: StudioShot[];
+  completeness?: CardCompleteness;
 };
 export type StudioAsset = {
   id: string; asset_type: Database['tonde']['Enums']['asset_type']; name: string; description: string;

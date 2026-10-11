@@ -107,11 +107,26 @@ ExportPackageType = Literal['complete', 'script', 'shot_list', 'storyboard', 'pr
     'continuity_report', 'audio_plan', 'edit_plan', 'structured_data']
 
 
+ExportScopeType = Literal['full_production', 'current_card', 'selected_cards', 'episode', 'shot_prompt']
+
+
+class ExportScopeRefs(CommercialModel):
+    scene_ids: list[UUID] = Field(default_factory=list, max_length=200)
+    shot_ids: list[UUID] = Field(default_factory=list, max_length=200)
+    act_id: UUID | None = None
+    act_title: str | None = Field(default=None, max_length=160)
+    style: Literal['standard', 'print'] = 'standard'
+    include: dict[str, bool] = Field(default_factory=dict)
+    with_results: bool = False
+
+
 class ExportRequestBody(CommercialModel):
     production_id: UUID
     kind: Literal['full_document', 'production_package']
     format: Literal['pdf', 'docx', 'zip', 'json']
     package_type: ExportPackageType = 'complete'
+    scope_type: ExportScopeType = 'full_production'
+    scope_refs: ExportScopeRefs = Field(default_factory=ExportScopeRefs)
 
     @model_validator(mode='after')
     def validate_product_pairing(self) -> 'ExportRequestBody':
@@ -123,6 +138,8 @@ class ExportRequestBody(CommercialModel):
             raise ValueError('A production package is a ZIP (or its structured-data JSON); a PDF is the full document.')
         if self.kind == 'full_document' and self.package_type != 'complete':
             raise ValueError('A package type only applies to a production package.')
+        if self.scope_type != 'full_production' and (self.kind != 'full_document' or self.format != 'pdf'):
+            raise ValueError('A card download is a PDF full document; other products keep their own narrowing.')
         return self
 
 
