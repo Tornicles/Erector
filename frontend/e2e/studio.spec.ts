@@ -84,6 +84,24 @@ function studioModel(current: StudioState) {
         planned_duration_ms: own.duration, duration_ms: own.duration, timing: own.timing, approval: scene.approval,
         locked_at: scene.locked ? '2026-10-05T00:00:00Z' : null, revision: scene.revision, updated_at: '2026-10-05T00:00:00Z',
         character_asset_ids: [], dialogue_lines: 0, shot_count: shotsOf(scene.id).length, bindings: [],
+        // Canonical Card direction as the server writes it: the floating Card summarizes these
+        // same fields, so both presentations can be checked against one source in the browser.
+        card_mode: 'real', card_status: 'READY', card_status_detail: '',
+        card_direction: {
+          title: scene.title,
+          summary: `${scene.title} carries the Production forward without a new objective.`,
+          what_happens: 'The Card opens on the room, the action develops once, and the Card ends on the next decision.',
+          director_direction: 'Keep the pace observational. Let the action finish before cutting away from it.',
+          audience_feeling: 'Curious, slightly tense',
+          subject_direction: 'Enter without hurry. Walk four steps, then slow. Let the eyes react before the head turns.',
+          camera_direction: 'Phone main camera, 1×, vertical. Locked medium-wide coverage; no handheld drift.',
+          look_direction: 'Practical daylight with one warm source. Keep the palette muted and the contrast gentle.',
+          audio_direction: 'Capture the sounds the action makes, then hold 20 seconds of clean room tone.',
+          location_direction: 'A room with enough depth for one wide master and a clear route to the exit.',
+          continuity: 'Same wardrobe and carry position as the previous Card. Do not restage the subject.',
+          resources: 'Subject · phone · practical light · clear floor.',
+          next_action: 'Open Shot 01 and shoot the establishing frame.',
+        },
         shots: shotsOf(scene.id).map((shot, order) => ({
           id: shot.id, scene_id: shot.scene_id, order: order + 1, sort_order: (order + 1) * 1024, title: shot.title, description: '', action: '',
           purpose: 'establish', subject: 'Scale', framing: 'wide', angle: 'eye level', movement: 'slow push', composition: 'centred',
@@ -235,6 +253,112 @@ test('Studio edits canonical Cards and Shots, keeps one Master Production and su
 // §102 mobile review and §103 keyboard alternative to dragging. Drag/drop is not the
 // only way to reorder: every card exposes a labelled Move earlier/later control, and
 // the Director stays reachable on a narrow viewport.
+// §110 The floating Card and the expanded Card are the SAME Card: the creator never leaves Card 01,
+// and every focus area stays inside it. Screenshots are written for visual review.
+test('the floating Card opens into the same Card expanded and every focus stays inside it', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await platform(page);
+  const current = state();
+  const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+  await studioRoutes(page, current, writes);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+
+  await page.goto(`/studio/${productionId}?scene=${sceneA}`);
+  await expect(page.getByRole('region', { name: 'Production cards' })).toBeVisible();
+  const card = page.getByRole('article', { name: 'Card 1: Dark kitchen' });
+
+  // The floating Card shows summarized direction for the same fields, plus a real next action.
+  await expect(card.getByRole('button', { name: 'Open camera direction' })).toBeVisible();
+  await expect(card.getByText('Open Shot 01 and shoot the establishing frame.')).toBeVisible();
+  await page.screenshot({ path: 'test-results/cards/floating-card.png', fullPage: false });
+
+  // Visual acceptance, measured rather than eyeballed: the centred Card is the largest and is
+  // centred in the stage, its neighbour is visibly peeking beside it, and the floating Card does
+  // not lay out as a full production manual.
+  const geometry = await page.evaluate(() => {
+    const stage = document.querySelector('.cs-carousel')!.getBoundingClientRect();
+    const cards = [...document.querySelectorAll('.cs-hero')].map(node => {
+      const rect = node.getBoundingClientRect();
+      const transform = new DOMMatrixReadOnly(getComputedStyle(node).transform);
+      return {
+        name: node.getAttribute('aria-label'),
+        rect: { left: rect.left, right: rect.right, width: rect.width },
+        centreOffset: Math.abs(rect.left + rect.width / 2 - (stage.left + stage.width / 2)),
+        scale: Number(transform.a.toFixed(3)),
+        words: (node.textContent ?? '').trim().split(/\s+/).length,
+      };
+    });
+    const centred = cards.find(item => item.name === 'Card 1: Dark kitchen')!;
+    const neighbour = cards.find(item => item.name === 'Card 2: Weighing')!;
+    // The neighbour's visible sliver: inside the stage, outside the centred Card's own box.
+    const peek = Math.min(neighbour.rect.right, stage.right)
+      - Math.max(neighbour.rect.left, stage.left, centred.rect.right);
+    return { centredScale: centred.scale, neighbourScale: neighbour.scale,
+      centredOffset: centred.centreOffset, neighbourOffset: neighbour.centreOffset,
+      peek, centredWords: centred.words, stageWidth: stage.width, cardWidth: centred.rect.width };
+  });
+  expect(geometry.centredScale).toBeGreaterThan(geometry.neighbourScale);
+  expect(geometry.centredOffset).toBeLessThan(geometry.neighbourOffset);
+  // The centred Card is the focus: near the middle of the stage, larger, and the neighbouring Card
+  // peeks beside it without competing for focus.
+  expect(geometry.centredOffset).toBeLessThanOrEqual(geometry.cardWidth / 8);
+  expect(geometry.peek).toBeGreaterThan(24);
+  // The floating Card stays a Card, not a production manual.
+  expect(geometry.centredWords).toBeGreaterThan(30);
+  expect(geometry.centredWords).toBeLessThan(400);
+
+  // The Card is not cluttered to the point that its own next action falls outside it.
+  const clipping = await page.evaluate(() => {
+    const card = document.querySelector('[aria-label="Card 1: Dark kitchen"]')!;
+    const box = card.getBoundingClientRect();
+    const primary = card.querySelector('.cs-primary')!.getBoundingClientRect();
+    return { inside: primary.top >= box.top - 1 && primary.bottom <= box.bottom + 1,
+      primaryHeight: primary.height, primaryWidth: primary.width };
+  });
+  expect(clipping.inside).toBe(true);
+  expect(clipping.primaryHeight).toBeGreaterThanOrEqual(24);
+
+  // A focus area opens the same Card expanded, focused on that area.
+  await card.getByRole('button', { name: 'Open camera direction' }).click();
+  const expanded = page.getByRole('region', { name: 'Card 1 expanded' });
+  await expect(expanded).toBeVisible();
+  await expect(expanded.getByRole('status')).toHaveText('FOCUS · CAMERA');
+  await expect(expanded.getByText(/Phone main camera, 1×, vertical/)).toBeVisible();
+  await expect(page).toHaveURL(/view=card/);
+  await expect(page.getByRole('region', { name: 'Production cards' })).toBeHidden();
+
+  // The full Card direction is one Card, one screen: no separate tool workspace.
+  await expect(expanded.getByText("DIRECTOR'S DIRECTION")).toBeVisible();
+  await page.screenshot({ path: 'test-results/cards/expanded-camera.png' });
+
+  // Focusing a Shot expands exactly one Shot inside the same Card.
+  await expanded.getByRole('button', { name: /01A · REAL/ }).click();
+  await expect(expanded.getByRole('status')).toHaveText('FOCUS · SHOT 01A');
+  await expect(expanded.getByRole('heading', { name: 'Establish' })).toBeVisible();
+  await page.screenshot({ path: 'test-results/cards/expanded-shot.png' });
+
+  // Returning restores the floating sequence with the same Card centred.
+  await expanded.getByRole('button', { name: '← BACK TO PRODUCTION' }).click();
+  await expect(page.getByRole('region', { name: 'Production cards' })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+  await expect(page).not.toHaveURL(/view=card/);
+
+  // Clicking the centred Card opens the Card itself (overview), not a neighbouring one.
+  await page.getByRole('article', { name: 'Card 1: Dark kitchen' }).click();
+  await expect(page.getByRole('region', { name: 'Card 1 expanded' }).getByRole('status')).toHaveText('FOCUS · CARD 01');
+  await expect(page.getByRole('tab', { name: 'OVERVIEW' })).toHaveAttribute('aria-selected', 'true');
+
+  // Narrow viewport: the same Card remains usable, with no horizontal page overflow.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('region', { name: 'Card 1 expanded' })).toBeVisible();
+  await expect(page.getByLabel('Message to the Director')).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'test-results/cards/expanded-mobile.png' });
+
+  expect(errors).toEqual([]);
+});
+
 test('a narrow viewport keeps cards, Shots and the Director usable and reorders with the keyboard', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));

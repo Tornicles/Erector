@@ -13,6 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.card_completeness import evaluate_card
+from app.domain.cards import card_status, status_detail
 
 StudioScope = Literal['production', 'scene', 'shot']
 ApprovalValue = Literal['draft', 'needs_review', 'approved', 'changed_after_approval']
@@ -206,6 +207,12 @@ def studio_read_model(
             'character_asset_ids': participants_by_scene.get(scene_id, []),
             'dialogue_lines': dialogue_by_scene.get(scene_id, 0),
             'shot_count': len(scene_shots),
+            # Card-level direction: the same canonical row the Card system writes.
+            'card_mode': row.get('card_mode') or 'real',
+            'card_direction': row.get('card_direction') or {},
+            'card_provenance': row.get('card_provenance') or {},
+            'card_validation': row.get('card_validation') or {},
+            'card_generated_by': row.get('card_generated_by') or 'deterministic',
             'bindings': [binding_view(item) for item in bindings_by_scope.get(scene_id, [])],
             'shots': [shot_view(item, results_by_shot, bindings_by_scope,
                 plans_by_shot.get(str(item.get('id')))) for item in scene_shots],
@@ -218,6 +225,14 @@ def studio_read_model(
             [{'id': str(item.get('id')), 'execution_method': item.get('execution_method') or 'real'}
                 for item in scene_shots],
             plans_by_shot).model_dump(mode='json')
+        # The Card status is derived here, from persisted state, so the browser never decides it.
+        status = card_status(has_structure=bool(str(scene_entry['title'] or '').strip()
+                or str(scene_entry['purpose'] or '').strip()),
+            direction=scene_entry['card_direction'],
+            completeness=scene_entry['completeness']['state'], approval=scene_entry['approval'],
+            results=sum(results_by_shot.get(str(item.get('id')), 0) for item in scene_shots))
+        scene_entry['card_status'] = status
+        scene_entry['card_status_detail'] = status_detail(status)
     orphan_shots = [shot_view(item, results_by_shot, bindings_by_scope,
         plans_by_shot.get(str(item.get('id')))) for item in shots_by_scene.get('None', [])]
     assets = [{

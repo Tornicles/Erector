@@ -6720,6 +6720,11 @@ export interface Database {
           scene_detail: Json;
           source_operation_id: string | null;
           act_id: string | null;
+          card_mode: Database['tonde']['Enums']['execution_method'];
+          card_direction: Json;
+          card_provenance: Json;
+          card_validation: Json;
+          card_generated_by: string;
         };
         Insert: {
           id?: string;
@@ -6750,6 +6755,11 @@ export interface Database {
           scene_detail?: Json;
           source_operation_id?: string | null;
           act_id?: string | null;
+          card_mode?: Database['tonde']['Enums']['execution_method'];
+          card_direction?: Json;
+          card_provenance?: Json;
+          card_validation?: Json;
+          card_generated_by?: string;
         };
         Update: {
           id?: string;
@@ -6780,6 +6790,11 @@ export interface Database {
           scene_detail?: Json;
           source_operation_id?: string | null;
           act_id?: string | null;
+          card_mode?: Database['tonde']['Enums']['execution_method'];
+          card_direction?: Json;
+          card_provenance?: Json;
+          card_validation?: Json;
+          card_generated_by?: string;
         };
         Relationships: [];
       };

@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   productionService, type DirectorStudio,
-  type StudioApproval, type StudioReadModel, type StudioScene, type StudioShot, type StudioWriteResult,
+  type CardFocusArea, type StudioApproval, type StudioReadModel, type StudioScene, type StudioShot, type StudioWriteResult,
 } from '../services/productions';
 import { prompt11Service, type Job } from '../services/prompt11';
 import { AppError, safeError } from '../services/errors';
@@ -34,9 +34,11 @@ import {
   CardMenu, CardTopBar, DetailsDrawer, EmptyCards, FilmStrip, HeroCarousel, ShotMenu, ShotStrip,
   useProductionUndo,
 } from '../studio/StudioCards';
+import { CardExpanded } from '../studio/CardExpanded';
+import { focusLabelFor, floatingCardView } from '../studio/floating';
 import {
   drawerSectionForTool, focusLabel, nextActionForScene, orderedCards,
-  resolveFocus, scopeText, type CardNextAction, type DrawerSection,
+  resolveFocus, scopeText, shotDisplayId, type CardNextAction, type DrawerSection,
 } from '../studio/cards';
 
 const SAVE_LABELS = { idle: 'No unsaved changes', dirty: 'Unsaved changes', saving: 'Saving…', saved: 'Saved', failed: 'Save failed', offline: 'Offline · not saved', conflict: 'Conflict · not saved' } as const;
@@ -127,11 +129,18 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     setParams(search, { replace: true });
   }, [setParams]);
   // Selection writes merge against the live query: focus changes never clobber each other.
-  const setUrl = useCallback((next: { scene?: string | null; shot?: string | null; series?: string | null }) => {
+  const setUrl = useCallback((next: {
+    scene?: string | null; shot?: string | null; series?: string | null;
+    view?: 'card' | null; focus?: CardFocusArea | null; expand?: string | null;
+  }) => {
     writeParams(search => {
       if (next.scene !== undefined) next.scene ? search.set('scene', next.scene) : search.delete('scene');
       if (next.shot !== undefined) next.shot ? search.set('shot', next.shot) : search.delete('shot');
       if (next.series !== undefined) next.series ? search.set('series', next.series) : search.delete('series');
+      // The expanded Card is the same Card, so its focus and open Shot are deep-linkable state.
+      if (next.view !== undefined) next.view ? search.set('view', next.view) : search.delete('view');
+      if (next.focus !== undefined) next.focus ? search.set('focus', next.focus) : search.delete('focus');
+      if (next.expand !== undefined) next.expand ? search.set('expand', next.expand) : search.delete('expand');
     });
   }, [writeParams]);
 
@@ -142,6 +151,10 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   );
   const focusScene = focus.kind === 'production' ? null : focus.scene;
   const focusShot = focus.kind === 'shot' ? focus.shot : null;
+  // Expanded Card state: the Card stays the same object, only its presentation changes.
+  const expandedCard = params.get('view') === 'card';
+  const cardFocus = (params.get('focus') as CardFocusArea | null) ?? 'card';
+  const expandedShotId = params.get('expand');
 
   const title = useAutosave(initial.title, async next => {
     if (!next.trim() || next.trim().length > 160) throw new AppError('validation', 'Enter a production title between 1 and 160 characters.');
@@ -475,7 +488,18 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
           {focusScene && <button type="button" className="cs-btn" disabled={busy} onClick={() => insertCard(scenes.findIndex(item => item.id === focusScene.id) + 1)}>＋ Add after</button>}
         </div>
 
-        {modelLoading && !model
+        {expandedCard && focusScene
+          ? <CardExpanded scene={focusScene} focus={cardFocus} expandedShotId={expandedShotId}
+            nextAction={nextActionForScene(focusScene).detail} nextActionLabel={nextActionForScene(focusScene).label}
+            onFocusChange={area => setUrl({ scene: focusScene.id, view: 'card', focus: area, expand: null })}
+            onExpandShot={shotId => setUrl({ scene: focusScene.id, view: 'card', expand: shotId })}
+            onOpenShot={shotId => {
+              const shot = focusScene.shots.find(item => item.id === shotId);
+              setUrl({ scene: focusScene.id, shot: shotId, view: null, focus: null, expand: null });
+              setDrawer(shot?.execution_method === 'real' ? 'realplan' : 'playbook');
+            }}
+            onBack={() => setUrl({ view: null, focus: null, expand: null })} />
+          : modelLoading && !model
           ? <LoadingState label="Loading this Production's cards…" />
           : modelError && !model
             ? <PartialState title="The Studio could not read this Production" action={<button onClick={() => { setModelError(null); refresh(); }}>Try again</button>}>
@@ -490,6 +514,9 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
                   onFocusScene={sceneId => setUrl({ scene: sceneId, shot: null })}
                   onSelectShot={(sceneId, shotId) => setUrl({ scene: sceneId, shot: shotId })}
                   onPrimary={runPrimary}
+                  onOpenCard={sceneId => setUrl({ scene: sceneId, shot: null, view: 'card', focus: 'card', expand: null })}
+                  onFocusArea={(sceneId, area) => setUrl({ scene: sceneId, shot: null, view: 'card', focus: area, expand: null })}
+                  floatingForScene={scene => floatingCardView(scene)}
                   renderMenu={scene => <CardMenu scene={scene} busy={busy}
                     onDownload={target => setDownload({ choice: 'current', sceneId: target.id })}
                     onRename={(target, next) => void sceneActions.update(target, { title: next, expected_revision: target.revision })}
@@ -523,7 +550,16 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       <aside className="cs-director" aria-label="TONDE Director">
         <div className="cs-focus">
           <strong>TONDE</strong>
-          <span role="status">{model ? focusLabel(focus, model) : 'FOCUS · PRODUCTION'}</span>
+          <span role="status">{model
+            ? expandedCard && focusScene
+              ? focusLabelFor(focusScene, cardFocus, {
+                shotDisplayId: expandedShotId
+                  ? shotDisplayId(focusScene.order, focusScene.shots.findIndex(item => item.id === expandedShotId))
+                  : null,
+                subjectLabel: cardFocus === 'subject' ? focusScene.title : null,
+              })
+              : focusLabel(focus, model)
+            : 'FOCUS · PRODUCTION'}</span>
         </div>
         {model
           ? <StudioInspector workspaceId={workspaceId} productionId={initial.id} surface={surface} model={model}

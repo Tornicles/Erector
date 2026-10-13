@@ -456,4 +456,31 @@ describe('Undo and redo', () => {
   });
 });
 
+describe('expanded Card view', () => {
+  it('opens the expanded same Card from a deep link and keeps one Shot detail closed until asked', async () => {
+    const router = studio('/?scene=' + sceneA + '&view=card&focus=card');
+    const expanded = await screen.findByRole('region', { name: 'Card 1 expanded' });
+    expect(within(expanded).getByRole('heading', { name: 'Dark kitchen' })).toBeVisible();
+    expect(within(expanded).getByRole('status')).toHaveTextContent('FOCUS · CARD 01');
+    // The floating sequence is replaced by the same Card expanded — never a second Studio.
+    expect(screen.queryByRole('region', { name: 'Production cards' })).toBeNull();
+    expect(router.state.location.search).toContain('view=card');
+  });
+
+  it('carries Card area focus in the URL and returns to Production with the Card centred', async () => {
+    const router = studio('/?scene=' + sceneB + '&view=card&focus=camera');
+    const expanded = await screen.findByRole('region', { name: 'Card 2 expanded' });
+    expect(within(expanded).getByRole('status')).toHaveTextContent('FOCUS · CAMERA');
+    fireEvent.click(within(expanded).getByRole('tab', { name: 'AUDIO' }));
+    await waitFor(() => expect(router.state.location.search).toContain('focus=audio'));
+
+    fireEvent.click(within(expanded).getByRole('button', { name: '← BACK TO PRODUCTION' }));
+    await waitFor(() => expect(router.state.location.search).not.toContain('view=card'));
+    expect(await screen.findByRole('region', { name: 'Production cards' })).toBeVisible();
+    // The same Card stays centred in the floating sequence.
+    expect(router.state.location.search).toContain('scene=' + sceneB);
+    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+  });
+});
+
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

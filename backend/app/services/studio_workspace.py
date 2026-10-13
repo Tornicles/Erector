@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.core.errors import AppError
 from app.db.client import SupabaseGateway
+from app.domain.cards import card_cap_for_runtime
 from app.domain.studio import (
     MAX_SCENES,
     MAX_SHOTS,
@@ -31,7 +32,9 @@ from app.domain.studio import (
 
 SCENE_FIELDS = ('id,workspace_id,production_id,title,purpose,story_beat,description,action_lines,opening_state,'
     'ending_state,visual_intent,dialogue_notes,environment_asset_id,sort_order,planned_duration_ms,'
-    'calculated_duration_ms,approval,locked_at,lifecycle,revision,updated_at')
+    'calculated_duration_ms,approval,locked_at,lifecycle,revision,updated_at,'
+    # Card-level direction lives on the canonical Card (a Scene): see migration 052.
+    'card_mode,card_direction,card_provenance,card_validation,card_generated_by')
 SHOT_FIELDS = ('id,workspace_id,production_id,scene_id,title,description,action,purpose,subject,framing,angle,'
     'movement,composition,transition,story_relationship,story_beat,creative_notes,execution_method,sort_order,'
     'planned_duration_ms,calculated_duration_ms,approval,locked_at,lifecycle,revision,updated_at')
@@ -109,11 +112,45 @@ class StudioWorkspaceRepository:
             'expected_production_revision': expected_revision,
         })
 
+    async def card_density(self, workspace_id: UUID, production_id: UUID, token: str) -> dict[str, Any]:
+        """How many Cards this Production's own runtime supports, and where it stands.
+
+        Card density is product law (1 minute -> at most 3 Cards, 10 minutes -> at most 25, normally
+        20+ seconds each), and it is checked server-side against the Production's target runtime.
+
+        TONDE's own Card planning REFUSES to exceed the cap: that is where Cards are created on the
+        creator's behalf, so it is where silence would be a defect. A creator editing their own
+        Production keeps authority, so a manual Card over the cap is reported rather than blocked —
+        the count, the cap and the reason come back with the write instead of being hidden.
+        """
+
+        production_rows, _ = await self._rows('/rest/v1/productions', token, {
+            'id': f'eq.{production_id}', 'workspace_id': f'eq.{workspace_id}',
+            'select': 'planned_duration_ms', 'limit': '1'}, 1)
+        planned = int((production_rows[0].get('planned_duration_ms') or 0) if production_rows else 0)
+        if planned <= 0:
+            return {'known': False, 'cap': None, 'count': None, 'over_cap': False,
+                'detail': 'This Production has no target runtime yet, so no Card density limit applies.'}
+        cap = card_cap_for_runtime(planned)
+        scenes, _ = await self._rows('/rest/v1/scenes', token, {
+            'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}',
+            'lifecycle': 'eq.active', 'select': 'id', 'limit': '400'}, 400)
+        count = len(scenes)
+        over = count > cap
+        detail = (f'{planned // 1000} seconds of finished production supports at most {cap} Cards and '
+            f'this Production has {count}. Cards direct meaningful production beats rather than '
+            'camera cuts, so merge the Cards that share one objective, place or story change.'
+            if over else
+            f'{count} of {cap} Cards used for {planned // 1000} seconds of finished production.')
+        return {'known': True, 'cap': cap, 'count': count, 'over_cap': over, 'detail': detail}
+
     async def create_scene(self, workspace_id: UUID, production_id: UUID, token: str, body: CreateSceneRequest) -> dict[str, Any]:
-        return await self.gateway.rpc_detailed('create_studio_scene', token=token, json={
+        result = await self.gateway.rpc_detailed('create_studio_scene', token=token, json={
             'target_workspace': str(workspace_id), 'target_production': str(production_id),
             'expected_production_revision': body.expected_production_revision, 'scene': scene_payload(body),
         })
+        density = await self.card_density(workspace_id, production_id, token)
+        return {**(result or {}), 'card_density': density}
 
     async def update_scene(self, workspace_id: UUID, production_id: UUID, scene_id: UUID, token: str, body: UpdateSceneRequest) -> dict[str, Any]:
         return await self.gateway.rpc_detailed('update_studio_scene', token=token, json={

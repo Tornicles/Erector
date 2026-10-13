@@ -181,6 +181,23 @@ export type CardCompleteness = {
   shots: Array<{ shot_id: string; execution_method: string; state: 'READY' | 'DRAFT' | 'NEEDS YOU'; missing: string[] }>;
   next_action_label: string; next_action_detail: string;
 };
+/**
+ * The Card-level direction the server wrote onto the canonical Card (a Scene). Every presentation
+ * of a Card — floating, expanded, later the PDF — reads these same fields; nothing here is a second
+ * copy of the content.
+ */
+export type CardDirection = Partial<Record<
+  | 'title' | 'summary' | 'what_happens' | 'director_direction' | 'audience_feeling'
+  | 'subject_direction' | 'camera_direction' | 'look_direction' | 'audio_direction'
+  | 'location_direction' | 'continuity' | 'resources' | 'next_action'
+  | 'purpose' | 'starts_from' | 'ends_with' | 'story_change', string>>;
+export type CardStatus = 'DRAFT' | 'BUILDING' | 'NEEDS YOU' | 'READY' | 'RESULT READY' | 'COMPLETE';
+/** What the creator selected inside a Card: the Card itself, one of its areas, or one Shot. */
+export type CardFocusArea = 'card' | 'subject' | 'camera' | 'look' | 'audio' | 'location';
+export type CardValidationFinding = { field: string; code: string; severity: string; detail: string };
+export type CardValidation = {
+  ready?: boolean; missing?: string[]; findings?: CardValidationFinding[]; word_total?: number;
+};
 export type StudioScene = {
   id: string; order: number; sort_order: number; title: string; purpose: string; story_beat: string;
   description: string; action_lines: string[]; opening_state: string; ending_state: string;
@@ -190,6 +207,8 @@ export type StudioScene = {
   character_asset_ids: string[]; dialogue_lines: number; shot_count: number;
   bindings: StudioBinding[]; shots: StudioShot[];
   completeness?: CardCompleteness;
+  card_mode?: string; card_direction?: CardDirection; card_validation?: CardValidation;
+  card_generated_by?: string; card_status?: CardStatus; card_status_detail?: string;
 };
 export type StudioAsset = {
   id: string; asset_type: Database['tonde']['Enums']['asset_type']; name: string; description: string;

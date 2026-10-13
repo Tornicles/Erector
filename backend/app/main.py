@@ -34,6 +34,7 @@ from app.routers.production_versioning import register_production_versioning_rou
 from app.routers.production_readiness import register_production_readiness_routes
 from app.routers.production_shot_match import register_production_shot_match_routes
 from app.routers.billing import register_billing_routes
+from app.routers.cards import register_card_routes
 from app.routers.jobs import register_job_routes
 from app.routers.knowledge import register_knowledge_routes
 from app.routers.device_scene import register_device_scene_routes
@@ -265,6 +266,9 @@ def create_app(
 
     register_director_intelligence_routes(application, config, logger, envelope)
     register_studio_routes(application, config, logger, envelope)
+    # The Card system sits on top of the canonical Studio objects: cards are Scenes, so these
+    # routes plan, write and validate Card-level direction without adding a second Card model.
+    register_card_routes(application, config, logger, envelope)
     register_real_production_routes(application, config, logger, envelope)
     register_ai_creation_routes(application, config, logger, envelope)
     register_long_form_routes(application, config, logger, envelope)

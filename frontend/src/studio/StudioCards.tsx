@@ -6,6 +6,8 @@ import { safeError } from '../services/errors';
 import { formatMs } from './StudioTimeline';
 import { approvalLabel } from './StudioTimeline';
 import { cardExecution, cardReadiness, nextActionForScene, orderedShots, shotDisplayId } from './cards';
+import type { FloatingCardView } from './floating';
+import type { CardFocusArea } from '../services/productions';
 
 /**
  * Card-first Studio shell. Cards are canonical Scenes rendered as the primary
@@ -81,18 +83,23 @@ function ReadinessDot({ readiness }: { readiness: ReturnType<typeof cardReadines
   return <span className="cs-readiness"><span className={`cs-dot ${dot}`} aria-hidden="true" />{readiness}</span>;
 }
 
-export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSelectShot, onPrimary, menu }: {
+export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSelectShot, onPrimary, menu,
+  floating, onOpenCard, onFocusArea }: {
   scene: StudioScene; index: number; active: boolean; selectedShotId: string | null;
   onFocus: () => void; onSelectShot: (shotId: string) => void;
   onPrimary: (scene: StudioScene) => void; menu: ReactNode;
+  /** Canonical floating Card view: summarized values of the SAME Card fields the expanded view shows. */
+  floating?: FloatingCardView; onOpenCard?: () => void; onFocusArea?: (area: CardFocusArea) => void;
 }) {
   const readiness = cardReadiness(scene);
   const execution = cardExecution(scene);
   const action = nextActionForScene(scene);
   const results = scene.shots.reduce((total, shot) => total + shot.result_count, 0);
   const shots = orderedShots(scene);
+  // Clicking the centered Card opens the same Card expanded; clicking a neighbour centres it first.
+  const openOrFocus = () => { if (active && onOpenCard) onOpenCard(); else onFocus(); };
   return <article className={`cs-hero${active ? ' active' : ''}`} data-scene={scene.id}
-    aria-label={`Card ${scene.order}: ${scene.title}`} onClick={onFocus}>
+    aria-label={`Card ${scene.order}: ${scene.title}`} onClick={openOrFocus}>
     <div className={`cs-visual cs-v${(scene.order % 6) + 1}`} aria-hidden="true">
       <span className="cs-scene-number">CARD {String(scene.order).padStart(2, '0')}</span>
       <span className="cs-exec">{execution}</span>
@@ -106,10 +113,32 @@ export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSele
         <p className="cs-summary">{scene.purpose || scene.description || 'This moment still needs direction.'}</p>
         <p className="cs-label">WHAT HAPPENS</p>
         <p className="cs-copy">{scene.description || 'Tell TONDE what should happen here, or ask TONDE to develop the moment.'}</p>
+        {floating && floating.audience && <>
+          <p className="cs-label">AUDIENCE SHOULD FEEL</p>
+          <p className="cs-copy">{floating.audience}</p>
+        </>}
         <p className="cs-label">SHOTS · {shots.length}</p>
         <p className="cs-copy">{shots.length === 0
           ? 'No coverage planned yet.'
           : shots.map(item => item.displayId).join(' · ')}</p>
+        {floating && <div className="cs-quick" role="group" aria-label={`Card ${scene.order} areas`}>
+          {floating.areas.map(area => <button key={area.area} type="button" className="cs-quick-btn"
+            aria-label={`Open ${area.label.toLowerCase()} direction`} disabled={!onFocusArea}
+            onClick={event => { event.stopPropagation(); onFocusArea?.(area.area); }}>
+            <span className="cs-quick-key">{area.label}</span>
+            <strong>{area.summary || (area.written ? 'Written in the expanded Card' : 'Building…')}</strong>
+          </button>)}
+        </div>}
+        {floating && <div className="cs-quick-shots">
+          {floating.shots.slice(0, 5).map(item => <button key={item.shot.id} type="button"
+            className="cs-quick-shot" aria-label={`Open Shot ${item.displayId} ${item.shot.title}`}
+            onClick={event => { event.stopPropagation(); onSelectShot(item.shot.id); }}>
+            <span className="cs-quick-key">{item.displayId} · {item.method}</span>
+            <strong>{item.shot.title}</strong>
+          </button>)}
+        </div>}
+        {floating && floating.withinBudget === false && <p className="cs-label" role="status">
+          THIS CARD IS ABOVE THE FLOATING WORD BUDGET — OPEN IT FOR THE FULL DIRECTION.</p>}
       </div>
       <div className="cs-direction">
         <p className="cs-label">TONDE DIRECTION</p>
@@ -121,9 +150,11 @@ export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSele
         </div>
         <div className="cs-next">
           <p className="eyebrow">NEXT ACTION</p>
-          <p className="cs-next-title">{action.detail}</p>
+          <p className="cs-next-title">{floating?.nextAction || action.detail}</p>
           <button type="button" className="cs-primary" onClick={event => { event.stopPropagation(); onPrimary(scene); }}>
             {action.label} →</button>
+          {onOpenCard && <button type="button" className="cs-btn" aria-label={`Open Card ${scene.order} expanded`}
+            onClick={event => { event.stopPropagation(); onOpenCard(); }}>OPEN CARD →</button>}
         </div>
         <div className="cs-foot">
           <ReadinessDot readiness={readiness} />
@@ -135,10 +166,13 @@ export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSele
   </article>;
 }
 
-export function HeroCarousel({ scenes, activeId, selectedShotId, onFocusScene, onSelectShot, onPrimary, renderMenu }: {
+export function HeroCarousel({ scenes, activeId, selectedShotId, onFocusScene, onSelectShot, onPrimary, renderMenu,
+  onOpenCard, onFocusArea, floatingForScene }: {
   scenes: StudioScene[]; activeId: string | null; selectedShotId: string | null;
   onFocusScene: (sceneId: string) => void; onSelectShot: (sceneId: string, shotId: string) => void;
   onPrimary: (scene: StudioScene) => void; renderMenu: (scene: StudioScene) => ReactNode;
+  onOpenCard?: (sceneId: string) => void; onFocusArea?: (sceneId: string, area: CardFocusArea) => void;
+  floatingForScene?: (scene: StudioScene) => FloatingCardView;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const programmatic = useRef(0);
@@ -191,7 +225,10 @@ export function HeroCarousel({ scenes, activeId, selectedShotId, onFocusScene, o
         active={scene.id === scenes[activeIndex]?.id} selectedShotId={selectedShotId}
         onFocus={() => { if (scene.id !== scenes[activeIndex]?.id) onFocusScene(scene.id); }}
         onSelectShot={shotId => onSelectShot(scene.id, shotId)}
-        onPrimary={onPrimary} menu={renderMenu(scene)} />)}
+        onPrimary={onPrimary} menu={renderMenu(scene)}
+        floating={floatingForScene?.(scene)}
+        onOpenCard={onOpenCard ? () => onOpenCard(scene.id) : undefined}
+        onFocusArea={onFocusArea ? area => onFocusArea(scene.id, area) : undefined} />)}
     </div>
     <button type="button" className="cs-nav" aria-label="Next card" onClick={() => go(1)}>→</button>
   </div>;
