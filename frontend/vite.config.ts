@@ -12,10 +12,11 @@ export default defineConfig({
     // much cheaper startup on Windows (dominates suite wall time).
     pool: 'threads',
     // The Studio integration tests mount a whole Production read model and walk several
-    // canvases in one case. Under full-suite thread contention that legitimately runs past
-    // the 5s default, so the budget is explicit here instead of flaking. Assertions are
-    // unchanged; only the ceiling is.
-    testTimeout: 15000,
-    hookTimeout: 15000,
+    // canvases in one case. Under full-suite thread contention — and on the slower
+    // shared GitHub Actions runners — individual cases legitimately run 15-25s, so the
+    // 15s ceiling flaked there (all failures were timeouts, never assertion failures).
+    // Assertions are unchanged; only the ceiling is.
+    testTimeout: 60000,
+    hookTimeout: 30000,
   },
 });

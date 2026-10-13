@@ -1,9 +1,17 @@
 import { defineConfig } from '@playwright/test';
+
+// On CI the step log is not readable without repository access, so a failing run has to say
+// what failed through an artifact: the HTML report carries the spec name, the assertion and
+// the stack without needing repo admin to read the log. One CI retry turns a genuine red into
+// a visibly flaky result; every attempt still appears in the report.
+const onCi = process.env.CI === 'true' || process.env.CI === '1';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
-  reporter: 'list',
+  reporter: onCi ? [['list'], ['html', { open: 'never' }]] : 'list',
+  retries: onCi ? 1 : 0,
   use: { baseURL: 'http://127.0.0.1:5174', trace: 'retain-on-failure' },
   webServer: {
     command: 'npm run start -- --port 5174',
