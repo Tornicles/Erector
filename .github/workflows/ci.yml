@@ -37,8 +37,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
       # Absolute workspace paths, so the upload cannot depend on the step's working directory.
-      # The HTML report makes a failing spec readable without repository access.
-      - if: failure()
+      # Uploaded even on a green run: a test that only passed on the retry still has to be
+      # visible as flaky, and that is the only way to see it without reading the gated log.
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
