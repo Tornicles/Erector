@@ -352,8 +352,22 @@ test('the floating Card opens into the same Card expanded and every focus stays 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('region', { name: 'Card 1 expanded' })).toBeVisible();
   await expect(page.getByLabel('Message to the Director')).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
+  // The measurement reports which element left the viewport, not only how far: this assertion is
+  // metric-dependent, so a platform with different text rendering can fail it while the working
+  // copy passes, and the run's own output is then the only evidence of what moved.
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    const amount = root.scrollWidth - root.clientWidth;
+    if (amount <= 1) return { amount, offenders: [] as string[] };
+    const offenders = [...document.querySelectorAll<HTMLElement>('body *')]
+      .map(node => ({ node, rect: node.getBoundingClientRect() }))
+      .filter(item => item.rect.right > root.clientWidth + 1)
+      .sort((a, b) => b.rect.right - a.rect.right)
+      .slice(0, 5)
+      .map(item => `${item.node.tagName.toLowerCase()}.${(item.node.getAttribute('class') ?? '').split(/\s+/).filter(Boolean).join('.') || 'unnamed'} right=${Math.round(item.rect.right)} width=${Math.round(item.rect.width)}`);
+    return { amount, offenders };
+  });
+  expect(overflow.amount, `horizontal page overflow at 390px; past the viewport: ${overflow.offenders.join(' | ') || 'nothing measurable'}`).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'test-results/cards/expanded-mobile.png' });
 
   expect(errors).toEqual([]);

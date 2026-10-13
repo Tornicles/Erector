@@ -1036,11 +1036,18 @@ button.library-row:hover{border-color:#3c5b4d}
 .cs-shell{display:grid;grid-template-rows:auto minmax(0,1fr);min-height:100dvh}
 .cs-topbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:rgba(7,16,14,.92);position:sticky;top:0;z-index:30;flex-wrap:wrap}
 .cs-brandmark{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;display:inline-grid;place-items:center;color:var(--accent);font-weight:800}
-.cs-identity{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.cs-identity input{margin-top:0;max-width:320px}
+.cs-identity{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden}
+.cs-identity input{margin-top:0;max-width:320px;min-width:0}
 .cs-badge{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 8px;white-space:nowrap}
 .cs-badge.warn{color:var(--amber,#f2c76e)}
 .cs-saved{font-size:11px;color:var(--muted)}
+/* The top bar is a wrapping flex row, so this group can be handed a box of any width depending on
+   how the controls beside it measure — and the platform's text metrics decide that packing. Nothing
+   inside may therefore keep an intrinsic width: the type badge and the save status shrink with an
+   ellipsis and the title field is elastic. While they could not shrink, the row's content measured
+   ~145px inside a 47px box once wrapped and left the top bar instead of fitting it; that is the
+   shape of the horizontal page overflow the 390px Studio assertion reports on the CI runners. */
+.cs-identity>.cs-badge,.cs-identity>.cs-saved{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-icon{min-width:36px}
 .cs-mode{display:flex;border:1px solid var(--line);border-radius:10px;padding:3px}
 .cs-mode button{border:0;background:transparent;color:var(--muted);font-size:11px;padding:7px 10px;border-radius:7px;cursor:pointer}
