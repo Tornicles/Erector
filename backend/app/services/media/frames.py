@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import shutil
+import time
 import tempfile
 from pathlib import Path
 from typing import Protocol
@@ -125,6 +126,12 @@ class FfmpegFrameExtractor:
 
     def __init__(self, *, ffmpeg_path: str | None = None, timeout_seconds: float = 120) -> None:
         self.ffmpeg_path = ffmpeg_path or shutil.which('ffmpeg')
+        if not self.ffmpeg_path and ffmpeg_path is None:
+            try:
+                from imageio_ffmpeg import get_ffmpeg_exe
+                self.ffmpeg_path = get_ffmpeg_exe()
+            except (ImportError, RuntimeError, OSError):
+                self.ffmpeg_path = None
         self.timeout_seconds = timeout_seconds
 
     def available(self) -> bool:
@@ -143,7 +150,11 @@ class FfmpegFrameExtractor:
             suffix = Path(filename).suffix or '.mp4'
             source = Path(directory) / f'source{suffix}'
             source.write_bytes(data)
+            deadline = time.monotonic() + self.timeout_seconds
             for item in plan.items:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
                 target = Path(directory) / f'frame-{item.index:03d}.jpg'
                 process = await asyncio.create_subprocess_exec(
                     str(self.ffmpeg_path), '-hide_banner', '-loglevel', 'error', '-ss', f'{item.timecode_ms / 1000:.3f}',
@@ -151,10 +162,13 @@ class FfmpegFrameExtractor:
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
                 )
                 try:
-                    await asyncio.wait_for(process.communicate(), timeout=self.timeout_seconds)
-                except TimeoutError:
+                    await asyncio.wait_for(process.communicate(), timeout=remaining)
+                except (TimeoutError, asyncio.CancelledError) as exc:
                     process.kill()
-                    continue
+                    await process.communicate()
+                    if isinstance(exc, asyncio.CancelledError):
+                        raise
+                    break
                 if process.returncode != 0 or not target.exists():
                     continue
                 payload = target.read_bytes()

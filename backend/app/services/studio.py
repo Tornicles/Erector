@@ -166,6 +166,34 @@ def script_payload(bundle: CreativeBundle) -> dict[str, Any] | None:
     }
 
 
+def timed_scenes_without_target(bundle: Any) -> bool:
+    """True when a bundle claims Scene durations while the Production has no runtime target.
+
+    ``apply_director_operation`` refuses exactly that combination ('Scene durations require a
+    Production runtime target'), and an untimed Scene therefore has to carry a null duration instead of
+    claiming zero milliseconds (``apply_payload`` does that below). The database stays the authority;
+    this only lets the API answer with the decision that is actually missing rather than forwarding a
+    raw database refusal as an HTTP 503 the creator cannot act on.
+    """
+
+    if not isinstance(bundle, dict):
+        return False
+    scenes = bundle.get('scenes')
+    if not isinstance(scenes, list) or not any(
+        isinstance(scene, dict) and scene.get('duration_ms') is not None for scene in scenes
+    ):
+        return False
+    production = bundle.get('production')
+    target = production.get('planned_duration_ms') if isinstance(production, dict) else None
+    return not is_runtime_target(target)
+
+
+def is_runtime_target(value: Any) -> bool:
+    """A runtime target is a positive integer count of milliseconds; nothing else counts."""
+
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def apply_payload(
     plan: ProductionPlan,
     *,
@@ -195,7 +223,14 @@ def apply_payload(
         },
         'brief': brief_json,
         'story': bundle.story.model_dump(mode='json') if bundle.story else None,
-        'scenes': [scene_payload(scene) for scene in bundle.scenes[:40]],
+        # An unresolved runtime target has no durations to fit, so every Scene is untimed: the bundle
+        # sends duration_ms=null rather than claiming 0 ms (the Studio read
+        # model shows 'untimed' with a runtime-fit status of 'unresolved').
+        'scenes': (
+            [scene_payload(scene) for scene in bundle.scenes[:40]]
+            if plan.brief.runtime.planning_ms is not None
+            else [{**scene_payload(scene), 'duration_ms': None} for scene in bundle.scenes[:40]]
+        ),
         'script': script_payload(bundle),
         'characters': [character.model_dump(mode='json') for character in bundle.characters[:20]],
         'environments': [environment.model_dump(mode='json') for environment in bundle.environments[:20]],

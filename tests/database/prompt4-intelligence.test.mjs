@@ -310,6 +310,46 @@ test('Director Brief, decision ledger and operation log persist through their gu
   ));
   assert.equal(outcome.status, 'succeeded');
   assert.equal(await scalar('select count(*) from tonde.director_operations where production_id=$1', [production]), 1);
+  // Forward 053: a repeat request carries a stable key (operation type, revisions, payload digest) but a
+  // fresh process-local id. That is the same operation, so it must reconcile rather than fail the unique
+  // (workspace_id, idempotency_key) constraint the way migration 012 did.
+  const repeat = await asUser(A, () => scalar(
+    'select tonde.record_director_operation($1,$2,$3::jsonb)',
+    [wa, production, asLiteral({
+      operation_id: '00000000-0000-4000-8000-000000000081', operation_type: 'story_generation', scope: 'story',
+      source_revision: 1, status: 'succeeded', producer: 'deterministic', provider: 'deterministic-domain',
+      model: 'tonde-domain-engine', model_profile: 'default', attempts: 1, repaired: false,
+      idempotency_key: 'story:demo', collaboration_mode: 'stop_at_major_decisions',
+      rationale: 'Deterministic Story.', limitations: [],
+    })],
+  ));
+  assert.equal(repeat.idempotent, true, 'a repeated key reconciles instead of inserting');
+  assert.equal(repeat.operation_id, '00000000-0000-4000-8000-000000000080', 'the recorded operation is returned');
+  assert.equal(await scalar('select count(*) from tonde.director_operations where production_id=$1', [production]), 1);
+  // Reusing a recorded operation id under a different key stays a mapped conflict, never a raw 503.
+  const keyReuse = await asUser(A, () => scalar(
+    'select tonde.record_director_operation($1,$2,$3::jsonb)',
+    [wa, production, asLiteral({
+      operation_id: '00000000-0000-4000-8000-000000000080', operation_type: 'story_generation', scope: 'story',
+      source_revision: 1, status: 'succeeded', producer: 'deterministic', idempotency_key: 'story:rewritten',
+    })],
+  ).catch(error => error));
+  assert.equal(keyReuse.code, 'PT409', 'an operation id reused with a different key is a mapped conflict');
+  const otherProduction = await asUser(A, () => scalar(
+    "select tonde.create_project_with_production($1, 'Another film', 'short_film')", [wa],
+  ));
+  const crossProduction = await asUser(A, () => scalar(
+    'select tonde.record_director_operation($1,$2,$3::jsonb)',
+    [wa, otherProduction, asLiteral({ operation_id: crypto.randomUUID(), operation_type: 'story_generation',
+      status: 'succeeded', idempotency_key: 'story:demo', source_revision: 1 })],
+  ).catch(error => error));
+  assert.equal(crossProduction.code, 'PT409', 'workspace-wide keys cannot reconcile another Production');
+  const wrongType = await asUser(A, () => scalar(
+    'select tonde.record_director_operation($1,$2,$3::jsonb)',
+    [wa, production, asLiteral({ operation_id: crypto.randomUUID(), operation_type: 'reference_analysis',
+      status: 'succeeded', idempotency_key: 'story:demo', source_revision: 1 })],
+  ).catch(error => error));
+  assert.equal(wrongType.code, 'PT409', 'the operation type is part of the recorded identity');
   // The operation log itself is readable by the owner and invisible to another workspace.
   assert.equal(await asUser(B, () => scalar('select count(*) from tonde.director_operations where production_id=$1', [production])), 0);
 });

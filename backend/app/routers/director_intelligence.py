@@ -57,12 +57,20 @@ from app.services.studio import (
     plan_influence_summary,
     question_payload,
     studio_surface,
+    timed_scenes_without_target,
 )
 from app.services.studio_repository import StudioRepository
 
 Envelope = Callable[..., dict[str, Any]]
 
 REFERENCE_ROLE_VALUES = {role.value for role in ReferenceRole}
+
+# The database refuses Scene durations without a Production runtime target, so the API names the
+# creator decision that is missing instead of forwarding that refusal as an opaque 503.
+RUNTIME_TARGET_REQUIRED = (
+    'This Production has no runtime target yet, so its Cards cannot carry durations. '
+    'Answer the runtime decision in the Director brief (or let TONDE decide) and build again.'
+)
 
 EvidenceKind = Literal['description', 'url', 'audio', 'video', 'image', 'asset', 'document', 'upload']
 _EVIDENCE_KINDS: dict[str, EvidenceKind] = {
@@ -308,6 +316,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         repository = StudioRepository(gateway)
         production = await repository.production(workspace_id, production_id, request.state.access_token)
         revision_guard(int(production['revision']), payload.expected_production_revision)
+        if timed_scenes_without_target(payload.bundle):
+            raise AppError('DIRECTOR_RUNTIME_REQUIRED', 'validation', RUNTIME_TARGET_REQUIRED, 409)
         result = await repository.apply_operation(
             workspace_id, production_id, request.state.access_token,
             operation_id=payload.operation_id, operation_type='apply_production_plan',
@@ -348,6 +358,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                 'idempotency_key': f'command:{production_id}:{operation_id}',
                 'collaboration_mode': intent.collaboration_mode.value,
             })
+            if timed_scenes_without_target(bundle):
+                raise AppError('DIRECTOR_RUNTIME_REQUIRED', 'validation', RUNTIME_TARGET_REQUIRED, 409)
             applied = await repository.apply_operation(
                 workspace_id, production_id, request.state.access_token,
                 operation_id=operation_id, operation_type='director_command',
@@ -437,10 +449,17 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             reference_record = next(reference for reference in context['references'] if str(reference.get('id')) == str(reference_id))
         if not reference_is_shaping_ready(reference_record):
             raise AppError('REFERENCE_IDENTITY_REQUIRED', 'validation', 'Complete and verify this Reference identity and creator purpose before TONDE analyses it.', 409)
-        await repository.begin_reference_analysis(
-            workspace_id, production_id, reference_id, request.state.access_token,
-            identity_revision=int(reference_record['identity_revision']),
-        )
+        # The persisted Reference owns its media identity. Studio sends only reference_id; never
+        # require the browser to rediscover its media, or let it substitute another upload.
+        linked_media_id = reference_record.get('media_id')
+        if payload.reference_id is not None and payload.media_id is not None and str(payload.media_id) != str(linked_media_id):
+            raise AppError('REFERENCE_MEDIA_MISMATCH', 'validation', 'Analyse the media linked to this Reference, not a different upload.', 409)
+        payload = payload.model_copy(update={
+            'media_id': UUID(str(linked_media_id)) if linked_media_id else payload.media_id,
+            'source_type': str(reference_record.get('source_type') or payload.source_type),
+        })
+        if linked_media_id and payload.data_base64:
+            raise AppError('REFERENCE_MEDIA_MISMATCH', 'validation', 'Analyse the stored media linked to this Reference.', 409)
         data: bytes | None = None
         if payload.data_base64:
             data = decode_base64_payload(payload.data_base64)
@@ -454,6 +473,10 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                     status='failed', stages=['queued'], progress=0, note=str(exc)[:600],
                 )
                 raise AppError('REFERENCE_MEDIA_UNAVAILABLE', 'unavailable', f'{exc} Nothing was analysed.', 503) from exc
+        await repository.begin_reference_analysis(
+            workspace_id, production_id, reference_id, request.state.access_token,
+            identity_revision=int(reference_record['identity_revision']),
+        )
         analyzer = reference_analyzer(
             get_ai_provider(request), get_frame_extractor(request),
             max_repair_attempts=config.director_max_repair_attempts,
@@ -488,7 +511,8 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             'target_workspace': str(workspace_id), 'target_production': str(production_id),
             'operation_record': {
                 'operation_id': str(uuid4()), 'operation_type': 'reference_analysis', 'scope': 'reference',
-                'source_revision': int(context['production']['revision']), 'status': analysis.status.value,
+                'source_revision': int(context['production']['revision']),
+                'status': 'succeeded' if analysis.status == AnalysisStatus.complete else analysis.status.value,
                 'producer': analysis.producer, 'provider': provider_status(get_ai_provider(request))['provider'],
                 'model': analysis.model_profile or provider_status(get_ai_provider(request))['model_profile'],
                 'model_profile': provider_status(get_ai_provider(request))['model_profile'],

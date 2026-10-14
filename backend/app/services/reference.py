@@ -183,7 +183,7 @@ class ReferenceAnalyzer:
             if frames:
                 modalities = modalities.model_copy(update={'video_frames': CapabilityState.available, 'video': CapabilityState.available})
                 capability = ReferenceCapability.full_media
-                note = f'{len(frames)} representative frames were extracted, so visual findings are observed.'
+                note = f'{len(frames)} representative frames were extracted. Extraction makes pixels available; visual interpretation requires a configured vision provider.'
             elif metadata.duration_ms is not None or metadata.width:
                 modalities = modalities.model_copy(update={'video': CapabilityState.partial})
                 capability = ReferenceCapability.partial_media
@@ -246,6 +246,9 @@ class ReferenceAnalyzer:
             if self.extractor.available():
                 try:
                     frames = await self.extractor.extract(data, frame_plan, mime=mime, filename=filename)
+                    if not frames:
+                        failed.append('frame_extraction')
+                        limitations.append('No frames could be decoded from this video; only readable metadata is available.')
                 except (RuntimeError, OSError) as exc:
                     failed.append('frame_extraction')
                     limitations.append(f'Frame extraction failed ({type(exc).__name__}); visual findings stay estimated.')

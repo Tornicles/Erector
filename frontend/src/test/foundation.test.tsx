@@ -9,7 +9,7 @@ import { AppError } from '../services/errors';
 import { productionService, type DirectorBrief, type DirectorPlanResponse, type DirectorStudio, type StudioReadModel } from '../services/productions';
 import { authService } from '../services/auth';
 import { durationMs, formatRuntime, type Production } from '../types/domain';
-import { validateFile } from '../services/media';
+import { mediaService, validateFile } from '../services/media';
 import { validatePublicConfiguration } from '../lib/supabase';
 
 const mocks = vi.hoisted(() => ({
@@ -221,6 +221,44 @@ beforeEach(() => {
   for (const action of ['signInWithPassword','signUp','signInWithOAuth','resetPasswordForEmail','updateUser','signOut'] as const) mocks.auth[action].mockResolvedValue({ data: { session }, error: null });
 });
 describe('canonical application routes', () => {
+  it('uploads, captures explicit reference context, analyses before planning, and retries without duplicating uploads', async () => {
+    vi.spyOn(mediaService, 'upload').mockResolvedValue({ id: 'media-id' } as Awaited<ReturnType<typeof mediaService.upload>>);
+    vi.mocked(productionService.create).mockResolvedValue(productionId);
+    vi.mocked(productionService.directorPlan).mockResolvedValue(planFixture(true));
+    vi.mocked(productionService.analyzeDirectorReference)
+      .mockRejectedValueOnce(new AppError('unavailable', 'Storage temporarily unavailable'))
+      .mockResolvedValueOnce({ analysis_id: 'analysis-id', reference_id: 'reference-id', status: 'partial',
+        summary: 'Measured reference duration.', producer: 'deterministic',
+        capability: { capability: 'partial_media_available', modalities: {}, media_bytes: 'available', producer: 'verified', note: 'Container metadata only.' },
+        findings: [], techniques: [], style: { palette: [], sections: [] }, causal: [], adaptation_notes: [],
+        limitations: ['No AI provider is configured.'], stages: ['partial'], findings_saved: 0, techniques_saved: 0 });
+    route('/home');
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Describe what you want to make' }), { target: { value: 'A coffee film' } });
+    const file = new File(['video'], 'reference.mp4', { type: 'video/mp4' });
+    fireEvent.change(screen.getByLabelText('Upload references'), { target: { files: [file] } });
+    expect(await screen.findByText('Uploaded · ready for reference context')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'DIRECT THIS →' }));
+    expect(await screen.findByText(/Tell TONDE what each Reference is/)).toBeVisible();
+    expect(productionService.create).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Reference identity for reference.mp4'), { target: { value: 'My coffee campaign' } });
+    fireEvent.change(screen.getByLabelText('Reference purpose for reference.mp4'), { target: { value: 'Learn its pacing' } });
+    fireEvent.click(screen.getByLabelText('Confirm reference identity for reference.mp4'));
+    fireEvent.click(screen.getByRole('button', { name: 'DIRECT THIS →' }));
+    expect(await screen.findByText(/Reference analysis failed: Storage temporarily unavailable/)).toBeVisible();
+    expect(productionService.directorPlan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry DIRECT THIS' }));
+    expect(await screen.findByText('Measured reference duration.')).toBeVisible();
+    expect(screen.getByText('No AI provider is configured.')).toBeVisible();
+    expect(productionService.analyzeDirectorReference).toHaveBeenCalledWith(workspaceId, productionId, { reference_id: 'reference-id' });
+    expect(mediaService.upload).toHaveBeenCalledTimes(1);
+    expect(productionService.addReference).toHaveBeenCalledTimes(2); // description + one upload
+    expect(productionService.addReference).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({
+      media_id: 'media-id', source_identity: 'My coffee campaign', creator_purpose: 'Learn its pacing', source_identity_verified: true,
+    }));
+    expect(productionService.directorPlan).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Background expansion/)).toBeNull();
+    vi.mocked(mediaService.upload).mockRestore();
+  });
   it.each([['/home','Bring the idea'],['/studio','Open a production'],['/projects','Your productions'],['/discover','Discover'],['/assets','Your creative memory'],['/setup','Everything you create with'],['/settings','Control center']])('%s renders inside the authenticated seven-area shell', async (path, title) => {
     route(path);
     expect(await screen.findByRole('heading', { level: 1, name: new RegExp(title) })).toBeVisible();

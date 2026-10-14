@@ -245,7 +245,6 @@ function BuildView({ build, answeredCount, busy, onBuild, onOpenStudio }: {
     { label: 'Master Production created', detail: build.productionId ? `Production ${build.productionId.slice(0, 8)}…` : 'Authenticated production record', state: build.state === 'failed' ? 'failed' : 'done' },
     { label: 'Creative direction saved', detail: answeredCount > 0 ? `${answeredCount} confirmed decision${answeredCount === 1 ? '' : 's'} plus intake` : 'Intake goal plus attached sources', state: build.state === 'failed' ? 'failed' : 'done' },
     { label: 'First production cards', detail: cardsReady ? `${build.cardCount} card${build.cardCount === 1 ? '' : 's'} ready — enough to enter Studio` : 'Waiting for the first meaningful card', state: cardsReady ? 'done' : build.state === 'building' ? 'working' : 'waiting' },
-    { label: 'Background expansion', detail: cardsReady ? 'Later cards, shots and resources continue in the background' : 'Starts once the first cards exist', state: cardsReady ? 'working' : 'waiting' },
   ];
   const done = steps.filter(step => step.state === 'done').length;
   return <article className="in-build" aria-label="Production build progress" aria-live="polite">
@@ -262,7 +261,7 @@ function BuildView({ build, answeredCount, busy, onBuild, onOpenStudio }: {
       <button type="button" className="hm-primary" disabled={busy} onClick={onBuild}>Retry build</button>
     </>}
     {build.state !== 'failed' && cardsReady && <div className="in-early" role="status">
-      <div><strong>Your first cards are ready.</strong><small>You can enter Studio now while TONDE continues building in the background.</small></div>
+      <div><strong>Your first cards are ready.</strong><small>The saved Cards are available in Studio. No background expansion is claimed.</small></div>
       <button type="button" className="hm-primary" onClick={onOpenStudio}>OPEN STUDIO NOW →</button>
     </div>}
     {build.state === 'building' && !cardsReady && <p className="subtle" role="status">Checking for the first cards… Studio opens as soon as one meaningful card exists.</p>}

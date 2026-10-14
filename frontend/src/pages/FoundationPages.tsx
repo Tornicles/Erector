@@ -8,7 +8,7 @@ import { requireSupabase } from '../lib/supabase';
 import { mediaService } from '../services/media';
 import { useAuth } from '../contexts/AuthContext';
 import { productionService, PAGE_SIZE } from '../services/productions';
-import { safeError } from '../services/errors';
+import { AppError, safeError } from '../services/errors';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateComponents';
 import { IntegrationsCanvas } from '../prompt10/Integrations';
 import { BillingCanvas } from '../prompt10/Billing';
@@ -16,12 +16,12 @@ import { formatRuntime, type Production } from '../types/domain';
 import { PRODUCT } from '../types/product';
 import { JobsPage } from './Prompt11Pages';
 import { prompt11Service, type Job } from '../services/prompt11';
-import { type DirectorCollaborationMode, type DirectorPlanResponse, type StudioReadModel } from '../services/productions';
+import { type DirectorCollaborationMode, type DirectorPlanResponse, type DirectorReferenceAnalysis, type StudioReadModel } from '../services/productions';
 import { IntakeFlow, type BuildPhase } from '../home/IntakeFlow';
 import { continueHref, deriveHomeMode, failedJobs, homeHeroCopy, type HomeMode } from '../home/commandCenter';
 import { contextStripItem, rankLiveItems } from '../home/liveEngine';
 import { HomeContextStrip, HomeStartBox, ProductionCarousel, TondeLive, type CarouselProduction } from '../home/TondeLive';
-type IntakeAttachment = { clientId: string; file: File; state: 'uploading' | 'uploaded' | 'failed'; error?: string; mediaId?: string };
+type IntakeAttachment = { clientId: string; file: File; state: 'uploading' | 'uploaded' | 'failed'; error?: string; mediaId?: string; identity: string; purpose: string; verified: boolean; referenceId?: string; analysisState?: 'analyzing' | 'done' | 'failed'; analysis?: DirectorReferenceAnalysis };
 type IntakeOrigin = { source_type: Database['tonde']['Enums']['reference_source']; source_url?: string; source_description?: string; media_id?: string; provenance?: Row<'production_references'>['provenance'] };
 export function HomePage() {
   const { workspaceId } = useAuth();
@@ -80,7 +80,7 @@ export function HomePage() {
     if (!workspaceId) { setError('Your workspace is not ready. Retry after signing in again.'); return; }
     const selectedFiles = Array.from(files);
     if (selectedFiles.length + attachments.length > 8) { setError('A Production intake can contain up to 8 files. Remove a file before adding more.'); return; }
-    const additions = selectedFiles.slice(0, 8 - attachments.length).map(file => ({ clientId: crypto.randomUUID(), file, state: 'uploading' as const }));
+    const additions = selectedFiles.slice(0, 8 - attachments.length).map(file => ({ clientId: crypto.randomUUID(), file, state: 'uploading' as const, identity: '', purpose: '', verified: false }));
     setAttachments(current => [...current, ...additions]); setError(null);
     await Promise.all(additions.map(async ({ clientId, file }) => {
       try {
@@ -90,6 +90,16 @@ export function HomePage() {
         setAttachments(current => current.map(item => item.clientId === clientId ? { ...item, state: 'failed', error: safeError(failure).message } : item));
       }
     }));
+  };
+  const retryUpload = async (item: IntakeAttachment) => {
+    if (!workspaceId) return;
+    setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, state: 'uploading', error: undefined } : candidate));
+    try {
+      const media = await mediaService.upload(workspaceId, item.file, 'reference');
+      setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, state: 'uploaded', mediaId: media.id } : candidate));
+    } catch (failure) {
+      setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, state: 'failed', error: safeError(failure).message } : candidate));
+    }
   };
   const pendingIntake = useRef<{ productionId: string; references: IntakeOrigin[]; nextReference: number } | null>(null);
   const intakeStorageKey = workspaceId ? `tonde:director-plan:${workspaceId}` : null;
@@ -132,13 +142,14 @@ export function HomePage() {
   }, [workspaceId, intakeStorageKey]);
   const beginDirector = async (event: FormEvent) => {
     event.preventDefault(); if (!workspaceId || !readyToDirect || busy || planBusy) return;
+    if (attachments.some(item => item.state !== 'uploaded')) { setPlanError('Wait for all uploads to finish, or remove failed uploads before directing.'); return; }
+    if (attachments.some(item => !item.identity.trim() || !item.purpose.trim() || !item.verified)) { setPlanError('Tell TONDE what each Reference is, why you supplied it, and confirm its identity before analysis.'); return; }
     setPlanBusy(true); setPlanError(null);
     try {
       let pending = pendingIntake.current;
       if (!pending) {
         const productionId = createdProductionId ?? await productionService.create(workspaceId, intent.trim().slice(0,160)||'Untitled Production');
         pending = { productionId, references: [
-          ...attachments.filter(item=>item.state==='uploaded'&&item.mediaId).map(item=>({source_type:'upload' as const,media_id:item.mediaId!})),
           ...(isReferenceUrl(url)?[{source_type:'url' as const,source_url:url.trim()}]:[]),
           ...(intent.trim()?[{source_type:'description' as const,source_description:intent.trim(),...(intakeProvenance()?{provenance:intakeProvenance()!}:{})}]:[]),
         ], nextReference: 0 };
@@ -149,8 +160,36 @@ export function HomePage() {
         await productionService.addReference(workspaceId, pending.productionId, pending.references[pending.nextReference]);
         pending.nextReference += 1;
       }
+      for (const item of attachments) {
+        if (!item.mediaId || item.analysisState === 'done') continue;
+        let referenceId = item.referenceId;
+        if (!referenceId) {
+          referenceId = await productionService.addReference(workspaceId, pending.productionId, {
+            source_type: 'upload', media_id: item.mediaId, source_identity: item.identity.trim(),
+            creator_purpose: item.purpose.trim(), source_identity_verified: true,
+          });
+          setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, referenceId } : candidate));
+        }
+        setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, analysisState: 'analyzing', error: undefined } : candidate));
+        try {
+          const analysis = await productionService.analyzeDirectorReference(workspaceId, pending.productionId, { reference_id: referenceId });
+          if (analysis.status === 'failed') throw new Error(analysis.limitations.join(' ') || analysis.summary);
+          setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, analysisState: 'done', analysis } : candidate));
+        } catch (failure) {
+          const message = failure instanceof Error ? failure.message : safeError(failure).message;
+          setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, analysisState: 'failed', error: message } : candidate));
+          throw new AppError('unavailable', `Reference analysis failed: ${message} Retry DIRECT THIS; your upload is retained.`);
+        }
+      }
       await runPlan(pending.productionId, collaboration, answers);
     } catch(failure) { setPlanError(safeError(failure).message); }
+    finally { setPlanBusy(false); }
+  };
+  const replan = async (mode: DirectorCollaborationMode) => {
+    if (!createdProductionId || planBusy || commitBusy) return;
+    setPlanBusy(true); setPlanError(null);
+    try { await runPlan(createdProductionId, mode, answers); }
+    catch (failure) { setPlanError(safeError(failure).message); }
     finally { setPlanBusy(false); }
   };
   const submitDecision = async (id:string,value:string) => {
@@ -167,13 +206,20 @@ export function HomePage() {
     }catch(failure){setPlanError(safeError(failure).message);}finally{setPlanBusy(false);}
   };
   const [build, setBuild] = useState<BuildPhase>({ state: 'idle', productionId: null, cardCount: null, error: null });
+  const pollGeneration = useRef(0);
+  useEffect(() => () => { pollGeneration.current += 1; }, []);
   const pollFirstCards = async (targetId: string) => {
     if (!workspaceId) return;
     // Real backend state only: Studio opens as soon as the first meaningful
     // card (scene) exists. No simulated progress, bounded polling.
+    const generation = ++pollGeneration.current;
+    let lastReadError: string | null = null;
     for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (generation !== pollGeneration.current) return;
       try {
         const surface = await productionService.studioSurface(workspaceId, targetId);
+        if (generation !== pollGeneration.current) return;
+        lastReadError = null;
         const cards = surface.scenes.length;
         if (cards > 0) {
           setBuild({ state: 'ready', productionId: targetId, cardCount: cards, error: null });
@@ -181,9 +227,12 @@ export function HomePage() {
         }
         setBuild(current => current.productionId === targetId
           ? { ...current, cardCount: 0 } : current);
-      } catch { /* keep polling on transient read failures */ }
+      } catch (failure) { lastReadError = safeError(failure).message; }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
+    if (generation !== pollGeneration.current) return;
+    setBuild({ state: 'failed', productionId: targetId, cardCount: null,
+      error: lastReadError ? `The plan was saved, but Cards could not be read: ${lastReadError}` : 'The plan was saved, but no Cards appeared within 60 seconds. Open Studio to inspect it or retry.' });
   };
   const buildProduction = async () => {
     if(!workspaceId||!createdProductionId||!plan)return;
@@ -206,6 +255,7 @@ export function HomePage() {
     }finally{setCommitBusy(false);}
   };
   const openStudioNow = () => {
+    pollGeneration.current += 1;
     const target = build.productionId ?? createdProductionId;
     if (!target) return;
     if(intakeStorageKey)localStorage.removeItem(intakeStorageKey);
@@ -284,7 +334,7 @@ export function HomePage() {
             {homeMode === 'active' && <Link className="hm-btn" to="/projects">All productions</Link>}
           </div>
           <HomeStartBox intent={intent} onChange={setIntent} onSubmit={beginDirector}
-            disabled={!workspaceId || intakeLocked} busy={planBusy} source={source}
+            disabled={!workspaceId || intakeLocked} readyToSubmit={readyToDirect && attachments.every(item => item.state === 'uploaded')} busy={planBusy} source={source}
             onSource={value => { setSource(value); if (value === 'upload') inputRef.current?.click(); }}>
             <div className="hl-intake-secondary">
               <div className="home-examples" aria-label="Example intakes">{['Plan my wedding shoot', 'Make a story from this song', 'I want something inspired by this movie'].map(example => <button key={example} type="button" onClick={() => setIntent(example)}>“{example}”</button>)}</div>
@@ -293,12 +343,25 @@ export function HomePage() {
               {source === 'upload' && !workspaceId && <div className="capability-note" role="status">Private uploads need a connected Supabase workspace.</div>}
               {source === 'import' && <div className="capability-note" role="status">No external import source is connected yet. Upload a file or paste a reference URL instead.</div>}
               {source === 'record' && <div className="capability-note" role="status">Recording is not configured in this workspace yet. You can upload an audio file when ready.</div>}
-              <input ref={inputRef} className="sr-only" type="file" multiple disabled={!workspaceId} accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,application/pdf,text/plain" onChange={event => { void addFiles(event.target.files); event.currentTarget.value = ''; }} aria-label="Upload references" />
-              {attachments.length > 0 && <><ul className="attachment-list" aria-label="Reference uploads">{attachments.map(item => <li key={item.clientId}><span className="attachment-type">{item.file.type.split('/')[0] || 'file'}</span><span>{item.file.name}<small>{item.state === 'uploaded' ? 'Uploaded · not analyzed' : item.state === 'uploading' ? 'Uploading…' : item.error}</small></span>{item.state === 'failed' && <button type="button" disabled={intakeLocked} onClick={() => void addFiles([item.file])}>Retry upload</button>}<button type="button" aria-label={`Remove ${item.file.name} from intake only; uploaded media is retained`} disabled={intakeLocked} onClick={() => setAttachments(current => current.filter(candidate => candidate.clientId !== item.clientId))}><X size={15} /></button></li>)}</ul><p className="intake-truth">Up to 8 files, 50 MB each. Removing a file here only removes it from intake; uploaded private media is retained.</p></>}
-              {planError && !plan && <div role="alert" className="intake-error"><p className="error-text">{planError}</p><p className="subtle">Nothing was generated yet — no Brief, Story, or Scenes. Your text is kept above; DIRECT THIS again to retry the plan.</p>{createdProductionId && <Link className="text-link" to={`/studio/${createdProductionId}`}>Or open the saved Production and plan from Studio <ArrowUpRight size={14} /></Link>}</div>}
+              <input ref={inputRef} className="sr-only" type="file" multiple disabled={!workspaceId || intakeLocked || planBusy} accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,application/pdf,text/plain" onChange={event => { void addFiles(event.target.files); event.currentTarget.value = ''; }} aria-label="Upload references" />
+              {attachments.length > 0 && <><ul className="attachment-list" aria-label="Reference uploads">{attachments.map(item => <li key={item.clientId}>
+                <span className="attachment-type">{item.file.type.split('/')[0] || 'file'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>{item.file.name}
+                  <small role="status">{item.analysisState === 'analyzing' ? 'Analysing available media…' : item.analysisState === 'done' ? `Analysis ${item.analysis?.status} · ${item.analysis?.findings.length ?? 0} findings` : item.analysisState === 'failed' ? item.error : item.state === 'uploaded' ? 'Uploaded · ready for reference context' : item.state === 'uploading' ? 'Uploading…' : item.error}</small>
+                  {!item.analysis && <>
+                    <label>What is this Reference?<input aria-label={`Reference identity for ${item.file.name}`} maxLength={500} placeholder="A campaign, film, or my own footage…" value={item.identity} disabled={intakeLocked || planBusy} onChange={event => setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, identity: event.target.value } : candidate))} /></label>
+                    <label>What should TONDE learn from it?<input aria-label={`Reference purpose for ${item.file.name}`} maxLength={2000} placeholder="Lighting, pacing, composition, story…" value={item.purpose} disabled={intakeLocked || planBusy} onChange={event => setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, purpose: event.target.value } : candidate))} /></label>
+                    <label className="settings-toggle"><input type="checkbox" aria-label={`Confirm reference identity for ${item.file.name}`} checked={item.verified} disabled={intakeLocked || planBusy} onChange={event => setAttachments(current => current.map(candidate => candidate.clientId === item.clientId ? { ...candidate, verified: event.target.checked } : candidate))} />I confirm this identity describes the uploaded Reference (not a rights or consent claim).</label>
+                  </>}
+                  {item.analysis && <details open><summary>Reference analysis · {item.analysis.producer}</summary><p>{item.analysis.summary}</p><p>{item.analysis.capability.note}</p><ul>{item.analysis.findings.map(finding => <li key={`${finding.category}:${finding.statement}`}>{finding.epistemic}: {finding.statement}</li>)}</ul>{item.analysis.limitations.map(note => <p key={note} className="subtle">{note}</p>)}</details>}
+                </div>
+                {item.state === 'failed' && <button type="button" disabled={intakeLocked || planBusy} onClick={() => void retryUpload(item)}>Retry upload</button>}
+                <button type="button" aria-label={`Remove ${item.file.name} from intake only; uploaded media is retained`} disabled={intakeLocked || planBusy} onClick={() => setAttachments(current => current.filter(candidate => candidate.clientId !== item.clientId))}><X size={15} /></button>
+              </li>)}</ul><p className="intake-truth">Up to 8 files, 50 MB each. Removing a file here only removes it from intake; uploaded private media is retained.</p></>}
+              {planError && !plan && <div role="alert" className="intake-error"><p className="error-text">{planError}</p><p className="subtle">Nothing was generated yet — no Brief, Story, or Scenes. Your input and uploads are retained. Retry the unfinished analysis or plan.</p><button type="submit" disabled={planBusy}>Retry DIRECT THIS</button>{createdProductionId && <Link className="text-link" to={`/studio/${createdProductionId}`}>Or open the saved Production and plan from Studio <ArrowUpRight size={14} /></Link>}</div>}
               {error && <div role="alert" className="intake-error"><p className="error-text">{error}</p>{createdProductionId && <><p className="subtle">Your Production is saved. Direct This again to retry the remaining intake links, or open the Production now.</p><Link className="text-link" to={`/studio/${createdProductionId}`}>Open the Production started from this intake <ArrowUpRight size={14} /></Link></>}</div>}
               <label className="collaboration-select">How should TONDE work?<select value={collaboration} onChange={event => setCollaboration(event.target.value as typeof collaboration)}><option value="guide_step_by_step">Guide Me Step-by-Step</option><option value="stop_at_major_decisions">Build It, Stop at Major Decisions</option><option value="complete_first_draft">Build Complete First Draft</option></select></label>
-              <p className="intake-truth">References are saved to this production. Uploading does not mean TONDE has analyzed them.</p>
+              <p className="intake-truth">DIRECT THIS analyses identified uploads before planning. Results show exactly what was inspected and any missing decoder or AI capability.</p>
             </div>
           </HomeStartBox>
         </div>
@@ -309,10 +372,10 @@ export function HomePage() {
     {plan&&createdProductionId && <section className="director-intake-panel" aria-label="Director intake"><header className="intake-progress"><p className="eyebrow">{requiredOpen.length?'KEY DECISIONS':plan.operation.status?'DIRECTOR BRIEF · PLAN READY':'DIRECTOR BRIEF'}</p><h2>TONDE is shaping one Master Production</h2><p>{plan.intent.primary_type.replaceAll('_',' ')}{plan.intent.runtime_ms!==null?` · ${formatRuntime(plan.intent.runtime_ms)}`:''}{plan.intent.platform?` · ${plan.intent.platform}`:''}</p></header>
       <p className="subtle">{plan.producer==='model'?'A configured model refined this plan through the validated provider contract.':'No model provider is configured, so this plan is deterministic. Nothing here is presented as model reasoning.'}</p>
       {plan.limitations.length>0&&<ul className="capability-notes">{plan.limitations.map(note=><li key={note}>{note}</li>)}</ul>}
-      {plan.provider.ffmpeg_available===false&&<p className="capability-note" role="status">Frame extraction is unavailable in this environment, so video References are measured from metadata and audio only.</p>}
+      {plan.provider.ffmpeg_available===false&&<p className="capability-note" role="status">Frame extraction is unavailable in this environment. Video pixels cannot be analysed; metadata or audio is used only when accessible.</p>}
       {plan.reference_influence.length>0&&<ul className="capability-notes">{plan.reference_influence.map(note=><li key={note}>{note}</li>)}</ul>}
       <dl className="director-brief"><div><dt>Production type</dt><dd>{plan.intent.primary_type.replaceAll('_',' ')}</dd></div><div><dt>Runtime</dt><dd>{plan.intent.runtime_ms===null?'Not required / unresolved':formatRuntime(plan.intent.runtime_ms)}</dd></div><div><dt>Platform</dt><dd>{plan.intent.platform||'Not specified'}</dd></div><div><dt>Execution</dt><dd>{plan.intent.execution}</dd></div><div><dt>Dialogue</dt><dd>{plan.intent.dialogue_mode?plan.intent.dialogue_mode.replaceAll('_',' '):'Not specified'}</dd></div></dl>
-      <label className="collaboration-select">How should TONDE work?<select value={collaboration} disabled={planBusy||commitBusy} onChange={event=>{const value=event.target.value as DirectorCollaborationMode;setCollaboration(value);if(createdProductionId)void runPlan(createdProductionId,value,answers);}}><option value="guide_step_by_step">Guide Me Step-by-Step</option><option value="stop_at_major_decisions">Build It, Stop at Major Decisions</option><option value="complete_first_draft">Build Complete First Draft</option></select></label>
+      <label className="collaboration-select">How should TONDE work?<select value={collaboration} disabled={planBusy||commitBusy} onChange={event=>{const value=event.target.value as DirectorCollaborationMode;setCollaboration(value);if(createdProductionId)void replan(value);}}><option value="guide_step_by_step">Guide Me Step-by-Step</option><option value="stop_at_major_decisions">Build It, Stop at Major Decisions</option><option value="complete_first_draft">Build Complete First Draft</option></select></label>
       {plan.intake_analysis && plan.decisions ? <IntakeFlow
         analysis={plan.intake_analysis}
         decisions={plan.decisions}
@@ -339,7 +402,7 @@ export function HomePage() {
       {plan.products.length>0&&<p className="subtle">Products: {plan.products.map(product=>`${product.name} (${product.required_visibility})`).join(', ')}</p>}
       {plan.style_bible&&<p className="subtle">Style: {plan.style_bible.sections.map(section=>section.section).join(', ')||'no Style sections yet'}</p>}
       {planError&&<p role="alert" className="intake-error">{planError}</p>}
-      {!(plan.intake_analysis && plan.decisions) && <><div className="director-submit"><button type="button" className="primary" disabled={planBusy||commitBusy||requiredOpen.length>0||plan.reality.feasibility==='blocked'} title={requiredOpen.length?'Answer the required production decisions before building':'Write this plan to the Production'} onClick={()=>void buildProduction()}>{commitBusy?'Building…':'BUILD PRODUCTION'}</button><button type="button" disabled={planBusy||commitBusy} onClick={()=>{if(createdProductionId)void runPlan(createdProductionId,collaboration,answers);}}>{planBusy?'Re-planning…':'Re-plan with these decisions'}</button></div>
+      {!(plan.intake_analysis && plan.decisions) && <><div className="director-submit"><button type="button" className="primary" disabled={planBusy||commitBusy||requiredOpen.length>0||plan.reality.feasibility==='blocked'} title={requiredOpen.length?'Answer the required production decisions before building':'Write this plan to the Production'} onClick={()=>void buildProduction()}>{commitBusy?'Building…':'BUILD PRODUCTION'}</button><button type="button" disabled={planBusy||commitBusy} onClick={()=>{if(createdProductionId)void replan(collaboration);}}>{planBusy?'Re-planning…':'Re-plan with these decisions'}</button></div>
       <Link className="text-link" to={`/studio/${createdProductionId}`}>Open this Production in Studio <ArrowUpRight size={14}/></Link></>}
     </section>}
     {workLoading ? <LoadingState label="Loading your work…" /> : workError ? <ErrorState message={workError} retry={() => { if(!workspaceId)return;setWorkLoading(true); productionService.list(workspaceId).then(items => setWork(orderWork(items).slice(0, 8))).catch(failure => setWorkError(safeError(failure).message)).finally(() => setWorkLoading(false)); }} /> : !workspaceId ? <EmptyState title="Connect a workspace to see Your Work">Your Productions and private uploads appear here when Supabase is configured.</EmptyState> : spotlight ? <>

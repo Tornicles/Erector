@@ -5,3 +5,5 @@ uvicorn==0.34.3
 pydantic==2.11.7
 pydantic-settings==2.10.1
 httpx==0.28.1
+# Wheel includes a decoder; no system install or runtime download is required.
+imageio-ffmpeg==0.6.0

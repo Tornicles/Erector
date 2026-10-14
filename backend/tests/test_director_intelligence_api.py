@@ -262,8 +262,11 @@ def persist_bundle(state: dict, bundle: dict) -> None:
 
 
 def test_provider_status_is_honest_about_absence_and_ffmpeg():
+    from app.services.media.frames import UnavailableFrameExtractor
+
     client, _ = make_client()
     with client:
+        client.app.state.frame_extractor = UnavailableFrameExtractor()
         response = client.get(f'{root()}/provider', headers=HEADERS)
     assert response.status_code == 200, response.text
     data = response.json()['data']
@@ -403,6 +406,38 @@ def test_replaying_a_commit_does_not_duplicate_production_content():
     assert len(state['scenes']) == scene_count
     assert len(state['dialogue']) == line_count
     assert len(state['stories']) == 1
+
+
+def test_commit_builds_untimed_cards_until_the_runtime_is_decided_and_refuses_timed_cards_without_one():
+    """An unresolved runtime target is a legitimate planning state: the Cards are written untimed. A
+    bundle that claims durations while the Production has no target would be refused by the database,
+    so the API answers with the decision that is missing instead of forwarding a raw 503."""
+
+    client, state = make_client()
+    with client:
+        planned = client.post(f'{root()}/plan', headers=HEADERS, json={
+            'goal': 'Create a documentary about my grandmother.',
+        })
+        assert planned.status_code == 200, planned.text
+        bundle = planned.json()['data']['bundle']
+        assert bundle['production']['planned_duration_ms'] is None, 'this plan deliberately states no runtime'
+        assert bundle['scenes'] and all(scene['duration_ms'] is None for scene in bundle['scenes'])
+        applied = client.post(f'{root()}/commit', headers=HEADERS, json={
+            'operation_id': OPERATION, 'bundle': bundle, 'expected_production_revision': 1,
+            'explicit_confirmation': True,
+        })
+        timed = deepcopy(bundle)
+        for index, scene in enumerate(timed['scenes']):
+            scene['duration_ms'] = 6000 + index
+        refused = client.post(f'{root()}/commit', headers=HEADERS, json={
+            'operation_id': SECOND_OPERATION, 'bundle': timed, 'expected_production_revision': 2,
+            'explicit_confirmation': True,
+        })
+    assert applied.status_code == 200, applied.text
+    assert state['applied'][0]['bundle']['scenes'][0]['duration_ms'] is None
+    assert refused.status_code == 409, refused.text
+    assert refused.json()['errors'][0]['code'] == 'DIRECTOR_RUNTIME_REQUIRED'
+    assert len(state['applied']) == 1, 'a refused commit must not write anything'
 
 
 # --------------------------------------------------------------------------------------
@@ -583,6 +618,58 @@ def test_uploaded_audio_reference_is_preprocessed_analysed_and_persisted():
     assert [claim['stage_status'] for claim in state['claims']][:2] == ['preprocessing', 'analyzing']
     assert state['analyses'][0]['status'] in {'complete', 'partial'}
     assert state['techniques'] == [] or state['techniques'][0]['technique_source'] == 'reference'
+
+
+def test_complete_analysis_records_a_supported_operation_status(monkeypatch):
+    from app.domain.analysis import AnalysisStatus
+    from app.services.reference import ReferenceAnalyzer
+
+    original = ReferenceAnalyzer.analyze
+
+    async def complete(self, *args, **kwargs):
+        result = await original(self, *args, **kwargs)
+        return result.model_copy(update={'status': AnalysisStatus.complete, 'limitations': []})
+
+    monkeypatch.setattr(ReferenceAnalyzer, 'analyze', complete)
+    client, state = make_client(references=[dict(SEEDED_REFERENCE)])
+    with client:
+        attest_reference(client)
+        response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
+            'reference_id': REFERENCE, 'data_base64': base64.b64encode(build_wav([0.4] * 1600)).decode(),
+            'mime': 'audio/wav', 'filename': 'voice.wav',
+        })
+    assert response.status_code == 200, response.text
+    assert response.json()['data']['status'] == 'complete'
+    assert state['operations'][-1]['status'] == 'succeeded', 'analysis COMPLETE maps to operation SUCCEEDED'
+
+
+def test_reference_id_alone_fetches_its_persisted_media_and_rejects_substitution(monkeypatch):
+    from app.services.media.storage import SupabaseMediaFetcher
+
+    media_id = '00000000-0000-4000-8000-000000000090'
+    client, state = make_client(references=[{**SEEDED_REFERENCE, 'media_id': media_id}])
+    calls = []
+
+    async def fetch(self, workspace_id, target_media_id, token):
+        calls.append((str(workspace_id), str(target_media_id), token))
+        return build_wav([0.4] * 1600), 'audio/wav', 'stored.wav'
+
+    monkeypatch.setattr(SupabaseMediaFetcher, 'fetch', fetch)
+    with client:
+        attest_reference(client)
+        response = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={'reference_id': REFERENCE})
+        mismatch = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
+            'reference_id': REFERENCE, 'media_id': OTHER_WORKSPACE,
+        })
+        substituted = client.post(f'{root()}/reference/analyze', headers=HEADERS, json={
+            'reference_id': REFERENCE, 'data_base64': base64.b64encode(b'other media').decode(),
+        })
+    assert response.status_code == 200, response.text
+    assert calls == [(WORKSPACE, media_id, 'verified-test-session')]
+    assert any(finding['id'] == 'level' for finding in response.json()['data']['findings'])
+    assert mismatch.status_code == substituted.status_code == 409
+    assert mismatch.json()['errors'][0]['code'] == 'REFERENCE_MEDIA_MISMATCH'
+    assert len(state['analyses']) == 1
 
 
 def test_reference_analysis_of_unavailable_media_fails_without_fabricating_analysis():

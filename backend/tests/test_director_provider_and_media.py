@@ -528,6 +528,28 @@ def test_documents_extract_text_and_flag_injected_instructions():
     assert benign.injection_flagged is False
 
 
+def test_bundled_decoder_extracts_real_mp4_frames_without_a_system_binary(tmp_path, monkeypatch):
+    import base64
+    import subprocess
+    from imageio_ffmpeg import get_ffmpeg_exe
+
+    monkeypatch.setattr(frames.shutil, 'which', lambda name: None)
+    extractor = frames.build_frame_extractor()
+    assert extractor.available(), 'the installed wheel must provide a working decoder'
+    target = tmp_path / 'clip.mp4'
+    subprocess.run([get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
+                    '-i', 'testsrc=size=160x90:rate=10', '-t', '1', '-pix_fmt', 'yuv420p', str(target)],
+                   check=True, timeout=20, capture_output=True)
+    data = target.read_bytes()
+    metadata = probe.probe(data, filename='clip.mp4', mime='video/mp4')
+    assert metadata.duration_ms == 1000
+    plan = frames.plan_frames(metadata, max_frames=4)
+    decoded = asyncio.run(extractor.extract(data, plan, mime='video/mp4', filename='clip.mp4'))
+    assert len(decoded) == len(plan.items)
+    assert all(base64.b64decode(frame.data_base64).startswith(b'\xff\xd8') for frame in decoded)
+    assert [frame.timecode_ms for frame in decoded] == plan.timecodes
+
+
 def test_frame_plan_is_deterministic_and_never_invents_a_frame():
     metadata = probe.probe(build_wav([0.2] * 32000, sample_rate=16000), filename='voice.wav', mime='audio/wav')
     plan = frames.plan_frames(metadata, max_frames=8)
@@ -535,7 +557,7 @@ def test_frame_plan_is_deterministic_and_never_invents_a_frame():
     assert all(item.timecode_ms >= 0 for item in plan.items)
     assert frames.plan_frames(metadata, max_frames=8).items == plan.items
 
-    unavailable = frames.build_frame_extractor(None)
+    unavailable = frames.build_frame_extractor('missing-explicit-decoder')
     assert unavailable.available() is False
     assert unavailable.reason()
     with pytest.raises(RuntimeError) as failure:

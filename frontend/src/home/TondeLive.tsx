@@ -166,10 +166,10 @@ export function HomeContextStrip({ item }: { item: LiveItem | null }) {
   </div>;
 }
 
-export function HomeStartBox({ intent, onChange, onSubmit, disabled, busy, source, onSource, children }: {
+export function HomeStartBox({ intent, onChange, onSubmit, disabled, busy, source, onSource, readyToSubmit, children }: {
   intent: string; onChange: (value: string) => void; onSubmit: (event: FormEvent) => void;
   disabled: boolean; busy: boolean; source: string; onSource: (source: 'describe' | 'upload' | 'url' | 'import' | 'record') => void;
-  children?: ReactNode;
+  children?: ReactNode; readyToSubmit?: boolean;
 }) {
   const sources = [['upload', '＋ Upload'], ['url', '↗ Reference'], ['describe', '◉ Describe'], ['import', '▤ Script'], ['record', '◉ Record']] as const;
   return <form className="hl-start" onSubmit={onSubmit} aria-label="Director intake">
@@ -181,7 +181,7 @@ export function HomeStartBox({ intent, onChange, onSubmit, disabled, busy, sourc
       <div className="hl-sources" role="group" aria-label="Intake source">
         {sources.map(([key, label]) => <button key={key} type="button" aria-pressed={source === key} onClick={() => onSource(key)}>{label}</button>)}
       </div>
-      <button type="submit" className="hm-primary" disabled={disabled || !intent.trim() || busy}>{busy ? 'Planning…' : <>DIRECT THIS →</>}</button>
+      <button type="submit" className="hm-primary" disabled={disabled || !(readyToSubmit ?? !!intent.trim()) || busy}>{busy ? 'Planning…' : <>DIRECT THIS →</>}</button>
     </div>
     {children}
   </form>;

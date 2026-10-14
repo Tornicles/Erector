@@ -136,6 +136,49 @@ function intakeAnalysisFixture(answered: boolean) {
 function directorPlanFixture(answered: boolean) {
   return { operation: { operation_id: '00000000-0000-4000-8000-0000000000aa', status: 'succeeded', producer: 'deterministic' }, provider: studioSurfaceFixture.provider, intent: { goal: 'A 30-second premium coffee commercial', collaboration_mode: 'stop_at_major_decisions', primary_type: 'commercial', secondary_types: [], subject: 'premium coffee', audience: null, platform: null, runtime_ms: 30000, aspect_ratio: null, execution: 'real', execution_authority: 'creator', tonde_decided: [], answered_decisions: answered ? { product: 'North Bean' } : {}, dialogue_mode: 'minimal', constraints: {}, tone: [], deliverables: [], provenance: [], confidence: 'medium' }, questions: answered ? [] : [{ id: 'product', question: 'Which premium coffee brand is this for?', why: 'The product shapes direction.', priority: 'blocking', impact: 'critical', confidence: 'medium', depends_on: [], options: [], allow_tonde_decides: true, blocking: true, answered: false, answer: null, would_change: [] }], intake_analysis: intakeAnalysisFixture(answered), decisions: [intakeDecisionFixture(answered)], brief: { production_goal: 'A 30-second premium coffee commercial', production_type: 'commercial', producer: 'deterministic', revision: answered ? 2 : 1, tone: [], style_direction: [], resources: [], cast: [], environments: [], deliverables: [], hard_constraints: [], soft_preferences: [], assumptions: [], open_decisions: [], conflicts: [], runtime: { kind: 'exact', exact_ms: 30000, min_ms: null, max_ms: null, note: '' } }, story: null, script: null, scenes: [], characters: [], environments: [], products: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready with what you have, using one camera and available light.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, producer: 'deterministic', rationale: [], limitations: [], reference_influence: [], bundle: { production: { title: 'Browser test production', production_type: 'commercial', execution_method: 'real', planned_duration_ms: 30000 }, brief: {}, story: null, scenes: [], script: null, characters: [], environments: [], products: [], wardrobe_props: [], style_bible: null, reality: { feasibility: 'ready', complexity: 'simple', items: [], domains: {}, conflicts: [], adaptations: [], summary: 'Ready.', inventory_used: [], notes: [] }, runtime_fit: { target_ms: 30000, assigned_ms: 0, dialogue_ms: 0, action_ms: 0, slack_ms: 30000, status: 'under' }, techniques: [], decisions: [], producer: 'deterministic', operation: {} } };
 }
+test('Home uses signed uploads and analyses the identified Reference before planning', async ({ page }) => {
+  await platform(page);
+  const writes: string[] = [];
+  const mediaId = '00000000-0000-4000-8000-000000000090';
+  const intentId = '00000000-0000-4000-8000-000000000091';
+  const referenceId = '00000000-0000-4000-8000-0000000000ff';
+  const objectKey = `${workspace}/${mediaId}/reference.mp4`;
+  await page.route('https://tonde-test.supabase.co/storage/v1/**', route => route.fulfill({ json: { Key: `tonde-references/${objectKey}` } }));
+  await page.route('http://127.0.0.1:8001/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'POST') writes.push(path);
+    if (path.endsWith('/upload-limits')) return route.fulfill({ json: apiEnvelope({ purposes: [{ purpose: 'reference', max_bytes: 52428800, supported_mime_types: ['video/mp4'] }] }) });
+    if (path.endsWith('/upload-intents')) return route.fulfill({ json: apiEnvelope({ intent_id: intentId, media_id: mediaId, bucket: 'tonde-references', object_key: objectKey }) });
+    if (path.endsWith('/signed-upload')) return route.fulfill({ json: apiEnvelope({ intent_id: intentId, media_id: mediaId, bucket: 'tonde-references', object_key: objectKey, token: 'test-only', mime_type: 'video/mp4', max_bytes: 52428800, upload_url: `https://tonde-test.supabase.co/storage/v1/object/upload/sign/tonde-references/${objectKey}?token=test-only` }) });
+    if (path.endsWith('/complete')) return route.fulfill({ json: apiEnvelope({ media_id: mediaId, state: 'verified' }) });
+    if (path.endsWith(`/references/${referenceId}`)) {
+      expect(route.request().postDataJSON()).toMatchObject({ source_identity: 'My coffee campaign', creator_purpose: 'Learn its pacing', source_identity_verified: true });
+      return route.fulfill({ json: apiEnvelope({ revision: 2 }) });
+    }
+    if (path.endsWith('/reference/analyze')) {
+      expect(route.request().postDataJSON()).toEqual({ reference_id: referenceId });
+      return route.fulfill({ json: apiEnvelope({ status: 'partial', producer: 'deterministic', summary: 'Measured the uploaded video.', capability: { note: 'Decoded representative video frames.' }, findings: [], limitations: ['No vision provider is configured.'] }) });
+    }
+    if (path.endsWith('/director/plan')) return route.fulfill({ json: apiEnvelope(directorPlanFixture(true)) });
+    if (path.endsWith('/jobs')) return route.fulfill({ json: apiEnvelope({ jobs: [] }) });
+    return route.fulfill({ json: apiEnvelope(null) });
+  });
+  await page.goto('/home');
+  await page.getByLabel('Describe what you want to make').fill('An original coffee film');
+  await page.getByLabel('Upload references').setInputFiles({ name: 'reference.mp4', mimeType: 'video/mp4', buffer: Buffer.from('browser transport fixture') });
+  await expect(page.getByText('Uploaded · ready for reference context')).toBeVisible();
+  await page.getByLabel('Reference identity for reference.mp4', { exact: true }).fill('My coffee campaign');
+  await page.getByLabel('Reference purpose for reference.mp4').fill('Learn its pacing');
+  await page.getByLabel('Confirm reference identity for reference.mp4').check();
+  await page.getByRole('button', { name: 'DIRECT THIS →', exact: true }).click();
+  await expect(page.getByText('Measured the uploaded video.')).toBeVisible();
+  await expect(page.getByText('No vision provider is configured.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'I have enough to direct this.' })).toBeVisible();
+  expect(writes.findIndex(path => path.endsWith('/reference/analyze'))).toBeLessThan(writes.findIndex(path => path.endsWith('/director/plan')));
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('Home plans one Production, applies the answered decisions and opens that same Production in Studio',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await platform(page);

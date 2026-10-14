@@ -27,6 +27,7 @@ from app.domain.vocabulary import CollaborationMode, ProductionType
 from app.services.director_commands import execute_command
 from app.services.studio import (
     ProductionPlan,
+    apply_payload,
     build_production_plan,
     deterministic_story_alternatives,
 )
@@ -193,6 +194,28 @@ def test_long_form_production_does_not_generate_hundreds_of_shots():
 # --------------------------------------------------------------------------------------
 # Runtime: exact / range / approximate (prompt §61)
 # --------------------------------------------------------------------------------------
+
+
+def test_an_unresolved_runtime_target_applies_untimed_cards_then_times_them_once_answered():
+    """A plan may be built before its runtime is decided. The database refuses Scene durations without
+    a Production target, so an untimed Scene omits its duration instead of claiming 0 ms, and the
+    runtime stays an open decision the creator can answer later."""
+
+    unresolved = _intent('Create a documentary about my grandmother')
+    assert unresolved.runtime_ms is None
+    payload = apply_payload(build_production_plan(unresolved))
+    assert payload['production']['planned_duration_ms'] is None
+    assert payload['scenes'] and all(scene['duration_ms'] is None for scene in payload['scenes'])
+    runtime_decision = next(decision for decision in plan_questions(unresolved) if decision.id == 'runtime')
+    assert runtime_decision.answered is False and runtime_decision.priority == 'high_impact'
+
+    resolved = interpret_intent('Create a documentary about my grandmother',
+                                known_context={'answered_decisions': {'runtime': '30 seconds'}}).intent
+    assert resolved.runtime_ms == 30000
+    timed = apply_payload(build_production_plan(resolved))
+    assert timed['production']['planned_duration_ms'] == 30000
+    assert timed['scenes'] and sum(scene['duration_ms'] for scene in timed['scenes']) == 30000
+    assert not any(decision.id == 'runtime' for decision in plan_questions(resolved))
 
 
 def test_runtime_range_and_approximate_are_supported_without_false_precision():

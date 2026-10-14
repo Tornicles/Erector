@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/database/*.test.mjs tests/product/*.test.mjs",
-    "test:constitution": "node --test tests/database/constitution.test.mjs tests/product/*.test.mjs",
-    "test:database": "node --test tests/database/*.test.mjs",
+    "test": "node --test --test-concurrency=2 tests/database/*.test.mjs tests/product/*.test.mjs",
+    "test:constitution": "node --test --test-concurrency=2 tests/database/constitution.test.mjs tests/product/*.test.mjs",
+    "test:database": "node --test --test-concurrency=2 tests/database/*.test.mjs",
     "verify:legacy": "node scripts/verify-boundaries.mjs",
     "verify:hosted": "node scripts/hosted-acceptance.mjs"
   },

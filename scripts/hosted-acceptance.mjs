@@ -24,6 +24,34 @@ const be = loadEnv(resolve(root, 'backend/.env'));
 const URL = (fe.VITE_SUPABASE_URL || be.SUPABASE_URL || '').replace(/\/$/, '');
 const ANON = fe.VITE_SUPABASE_PUBLISHABLE_KEY || be.SUPABASE_PUBLISHABLE_KEY;
 const SR = be.SUPABASE_SERVICE_ROLE_KEY;
+const apiBase = (process.env.TONDE_BACKEND_URL || fe.VITE_API_URL || 'http://127.0.0.1:8001').replace(/\/$/, '');
+
+async function apiRequest(path, token, body) {
+  const response = await fetch(`${apiBase}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(60000),
+  });
+  const envelope = await response.json();
+  if (!response.ok || !envelope.success || !envelope.data) throw new Error(`API ${path}: HTTP ${response.status}`);
+  return envelope.data;
+}
+
+async function uploadPrivateReference(workspace, token) {
+  const intent = await apiRequest(`/api/v1/workspaces/${workspace}/media/upload-intents`, token,
+    { purpose: 'reference', original_filename: 'acceptance.txt', mime_type: 'text/plain', expected_bytes: 5, resumable: false });
+  const signed = await apiRequest(`/api/v1/workspaces/${workspace}/media/upload-intents/${intent.intent_id}/signed-upload`, token, {});
+  if (signed.intent_id !== intent.intent_id || signed.media_id !== intent.media_id
+    || signed.object_key !== intent.object_key || signed.bucket !== intent.bucket) throw new Error('Signed upload scope mismatch');
+  const up = await req(`/storage/v1/object/upload/sign/${signed.bucket}/${signed.object_key}?token=${encodeURIComponent(signed.token)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'text/plain', 'x-upsert': 'false' }, raw: 'hello',
+  });
+  if (up.ok) createdStorageObjects.push({ bucket: signed.bucket, key: signed.object_key });
+  if (!up.ok) throw new Error(`Signed Storage upload: HTTP ${up.status}`);
+  const verified = await apiRequest(`/api/v1/workspaces/${workspace}/media/upload-intents/${intent.intent_id}/complete`, token, {});
+  return { ...intent, verified, up };
+}
 
 if (!URL || !ANON) {
   console.error('Missing SUPABASE URL / publishable key in env files.');
@@ -75,34 +103,32 @@ let wsCleanupB = null;
 const created = [];
 const createdStorageObjects = [];
 
-// Service-role cleanup: the product's RLS forbids hard deletes for normal clients,
-// so test data must be removed with the server-only key in dependency order.
-async function srDelete(path, schema) {
-  const h = { apikey: SR, Authorization: `Bearer ${SR}` };
-  if (schema) h['Content-Profile'] = schema;
-  try { await fetch(`${URL}${path}`, { method: 'DELETE', headers: h }); } catch { /* best effort */ }
-}
-
+// Follow the expanded certification runner's retention model. Immutable application records and
+// upload intents cannot be hard-deleted by a test runner; archive fixtures, remove only created
+// Storage objects, and soft-delete only controlled Auth users. Report cleanup failures, never hide them.
 async function cleanup() {
-  // profiles.default_workspace_id and audit_events.workspace_id block workspace deletion.
-  for (const u of [userA, userB]) {
-    if (u?.id) await srDelete(`/rest/v1/profiles?user_id=eq.${u.id}`, 'tonde');
-    if (u?.id) await srDelete(`/rest/v1/user_preferences?user_id=eq.${u.id}`, 'tonde');
-  }
+  const failures = [];
   for (const item of createdStorageObjects) {
-    try { await admin(`/storage/v1/object/${item.bucket}/${item.key}`, { method: 'DELETE' }); } catch { /* best effort */ }
+    try {
+      const removed = await admin(`/storage/v1/object/${item.bucket}`, { method: 'DELETE', body: { prefixes: [item.key] } });
+      if (!removed.ok) failures.push(`Storage cleanup HTTP ${removed.status}`);
+    } catch { failures.push('Storage cleanup could not reach the provider'); }
   }
   for (const ws of [wsCleanup, wsCleanupB]) {
     if (!ws) continue;
-    for (const t of ['director_messages', 'director_threads', 'object_dependencies', 'object_versions', 'scope_bindings', 'creative_documents', 'objects', 'productions', 'projects', 'media_files', 'workspace_members']) {
-      await srDelete(`/rest/v1/${t}?workspace_id=eq.${ws}`, 'tonde');
-    }
-    await srDelete(`/rest/v1/audit_events?workspace_id=eq.${ws}`, 'tonde');
-    await srDelete(`/rest/v1/workspaces?id=eq.${ws}`, 'tonde');
+    try {
+      const archived = await admin(`/rest/v1/productions?workspace_id=eq.${ws}`, { method: 'PATCH', schema: 'tonde', body: { lifecycle: 'archived' } });
+      if (!archived.ok) failures.push(`Fixture archive HTTP ${archived.status}`);
+    } catch { failures.push('Fixture archive could not reach the provider'); }
   }
   for (const id of created) {
-    try { await admin(`/auth/v1/admin/users/${id}`, { method: 'DELETE' }); } catch { /* best effort */ }
+    try {
+      const removed = await admin(`/auth/v1/admin/users/${id}`, { method: 'DELETE', body: { should_soft_delete: true } });
+      if (!removed.ok) failures.push(`Controlled Auth cleanup HTTP ${removed.status}`);
+    } catch { failures.push('Controlled Auth cleanup could not reach the provider'); }
   }
+  if (failures.length) { console.error('Cleanup failed:', failures.join('; ')); process.exitCode = 1; }
+  else console.log('Controlled Storage objects removed; Productions archived; Auth users soft-deleted. Retention-protected fixture history remains.');
 }
 
 async function makeUser(u) {
@@ -242,28 +268,25 @@ async function main() {
     rec('service-role cannot manufacture human approval', resetApproval.ok && forgedApproval.status >= 400 && afterServiceApproval.data?.[0]?.approval === 'draft' ? 'PASS' : 'FAIL', `reset HTTP ${resetApproval.status}, service HTTP ${forgedApproval.status}, state=${afterServiceApproval.data?.[0]?.approval}`);
   }
 
-  // 8. Storage: metadata-gated direct upload + cross-user denial
-  // object_key must equal <workspace_id>/<media_id>/... per media_files_check2.
-  const mediaId = crypto.randomUUID();
-  const key = `${workspaceId}/${mediaId}/acceptance.txt`;
-  const meta = await req('/rest/v1/media_files', {
-    method: 'POST', token: tokenA, schema: 'tonde', headers: { Prefer: 'return=representation' },
-    body: { id: mediaId, workspace_id: workspaceId, bucket: 'tonde-production-media', object_key: key, original_filename: 'acceptance.txt', mime_type: 'text/plain', file_category: 'document', bytes: 5 },
+  // 8. Exercise the same server-authorized, signed and independently verified upload as the UI.
+  // A normal authenticated direct Storage write is deliberately forbidden since 044–046.
+  const uploadA = await uploadPrivateReference(workspaceId, tokenA);
+  const key = uploadA.object_key;
+  const bucket = uploadA.bucket;
+  rec('A opens a creator-scoped upload intent', uploadA.media_id && key.startsWith(`${workspaceId}/`) ? 'PASS' : 'FAIL');
+  rec('A signed private upload is independently verified', uploadA.verified.state === 'verified' && uploadA.verified.media_id === uploadA.media_id ? 'PASS' : 'FAIL');
+  const directA = await req(`/storage/v1/object/${bucket}/${key}`, {
+    method: 'POST', token: tokenA, headers: { 'Content-Type': 'text/plain', 'x-upsert': 'true' }, raw: 'intrude',
   });
-  rec('A registers media metadata', meta.ok ? 'PASS' : 'FAIL', `HTTP ${meta.status}`);
-  const up = await req(`/storage/v1/object/tonde-production-media/${key}`, {
-    method: 'POST', token: tokenA, headers: { 'Content-Type': 'text/plain', 'x-upsert': 'false' }, raw: 'hello',
-  });
-  rec('A uploads directly to private Storage', up.ok ? 'PASS' : 'FAIL', `HTTP ${up.status}`);
-  if (up.ok) createdStorageObjects.push({ bucket: 'tonde-production-media', key });
+  rec('A cannot bypass signed-upload authorization', directA.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${directA.status}`);
   for (const [functionName, args] of [
-    ['can_read_storage_object', { target_bucket: 'tonde-production-media', target_name: key }],
-    ['can_upload_storage_object', { target_bucket: 'tonde-production-media', target_name: key }],
+    ['can_read_storage_object', { target_bucket: bucket, target_name: key }],
+    ['can_upload_storage_object', { target_bucket: bucket, target_name: key }],
   ]) {
     const probe = await req(`/rest/v1/rpc/${functionName}`, { method: 'POST', token: tokenB, schema: 'tonde', body: args });
     rec(`B ${functionName} helper is hidden from PostgREST`, probe.status === 404 ? 'PASS' : 'FAIL', `HTTP ${probe.status}`);
   }
-  const bSign = await req(`/storage/v1/object/sign/tonde-production-media/${key}`, {
+  const bSign = await req(`/storage/v1/object/sign/${bucket}/${key}`, {
     method: 'POST', token: tokenB, body: { expiresIn: 60 },
   });
   // B's sign request must not yield a usable URL; verify the download too if one came back.
@@ -274,52 +297,44 @@ async function main() {
     const res = await fetch(full);
     bDownload = { status: res.status };
   }
-  const anonDirectRead = await req(`/storage/v1/object/authenticated/tonde-production-media/${key}`);
-  const anonList = await req('/storage/v1/object/list/tonde-production-media', {
+  const anonDirectRead = await req(`/storage/v1/object/authenticated/${bucket}/${key}`);
+  const anonList = await req(`/storage/v1/object/list/${bucket}`, {
     method: 'POST', body: { prefix: workspaceId, limit: 100, offset: 0 },
   });
   const anonListRows = Array.isArray(anonList.data) ? anonList.data : [];
   const anonCanSeeAcceptanceObject = anonListRows.some(row => row.name === key || `${workspaceId}/${row.name}` === key);
   rec('anonymous cannot read/list private Storage objects', anonDirectRead.status >= 400 && !anonCanSeeAcceptanceObject ? 'PASS' : 'FAIL', `read HTTP ${anonDirectRead.status}, list HTTP ${anonList.status}, target visible=${anonCanSeeAcceptanceObject}`);
-  const bDirectRead = await req(`/storage/v1/object/authenticated/tonde-production-media/${key}`, { token: tokenB });
+  const bDirectRead = await req(`/storage/v1/object/authenticated/${bucket}/${key}`, { token: tokenB });
   rec("B cannot read A's private Storage object", bDirectRead.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${bDirectRead.status}`);
   rec("B cannot sign A's Storage path", bDownload.status >= 400 || !bSignUrl ? 'PASS' : 'FAIL', `sign HTTP ${bSign.status}, signed download HTTP ${bDownload.status}`);
-  const bUp = await req(`/storage/v1/object/tonde-production-media/${key}`, {
+  const bUp = await req(`/storage/v1/object/${bucket}/${key}`, {
     method: 'POST', token: tokenB, headers: { 'Content-Type': 'text/plain', 'x-upsert': 'true' }, raw: 'intrude',
   });
   rec("B cannot upsert A's Storage object", bUp.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${bUp.status}`);
-  const bDelete = await req(`/storage/v1/object/tonde-production-media/${key}`, { method: 'DELETE', token: tokenB });
-  const ownerRead = await req(`/storage/v1/object/authenticated/tonde-production-media/${key}`, { token: tokenA });
+  const bDelete = await req(`/storage/v1/object/${bucket}/${key}`, { method: 'DELETE', token: tokenB });
+  const ownerRead = await req(`/storage/v1/object/authenticated/${bucket}/${key}`, { token: tokenA });
   rec("B cannot delete A's Storage object", bDelete.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${bDelete.status}`);
   rec('A retains access after denied cross-user mutations', ownerRead.ok ? 'PASS' : 'FAIL', `HTTP ${ownerRead.status}`);
 
-  const mediaIdB = crypto.randomUUID();
-  const keyB = `${wsCleanupB}/${mediaIdB}/acceptance.txt`;
-  const metaB = await req('/rest/v1/media_files', {
-    method: 'POST', token: tokenB, schema: 'tonde', headers: { Prefer: 'return=representation' },
-    body: { id: mediaIdB, workspace_id: wsCleanupB, bucket: 'tonde-production-media', object_key: keyB, original_filename: 'acceptance.txt', mime_type: 'text/plain', file_category: 'document', bytes: 5 },
-  });
-  rec('B registers own media metadata', metaB.ok ? 'PASS' : 'FAIL', `HTTP ${metaB.status}`);
-  const upB = await req(`/storage/v1/object/tonde-production-media/${keyB}`, {
-    method: 'POST', token: tokenB, headers: { 'Content-Type': 'text/plain', 'x-upsert': 'false' }, raw: 'hello',
-  });
-  rec('B uploads to own private Storage path', upB.ok ? 'PASS' : 'FAIL', `HTTP ${upB.status}`);
-  if (upB.ok) createdStorageObjects.push({ bucket: 'tonde-production-media', key: keyB });
-  const aDirectReadB = await req(`/storage/v1/object/authenticated/tonde-production-media/${keyB}`, { token: tokenA });
+  const uploadB = await uploadPrivateReference(wsCleanupB, tokenB);
+  const keyB = uploadB.object_key;
+  const bucketB = uploadB.bucket;
+  rec('B opens own creator-scoped upload intent', uploadB.media_id && keyB.startsWith(`${wsCleanupB}/`) ? 'PASS' : 'FAIL');
+  rec('B signed private upload is independently verified', uploadB.verified.state === 'verified' && uploadB.verified.media_id === uploadB.media_id ? 'PASS' : 'FAIL');
+  const aDirectReadB = await req(`/storage/v1/object/authenticated/${bucketB}/${keyB}`, { token: tokenA });
   rec("A cannot read B's private Storage object", aDirectReadB.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${aDirectReadB.status}`);
-  const aSignB = await req(`/storage/v1/object/sign/tonde-production-media/${keyB}`, { method: 'POST', token: tokenA, body: { expiresIn: 60 } });
+  const aSignB = await req(`/storage/v1/object/sign/${bucketB}/${keyB}`, { method: 'POST', token: tokenA, body: { expiresIn: 60 } });
   rec("A cannot sign B's Storage path", aSignB.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${aSignB.status}`);
-  const aUpsertB = await req(`/storage/v1/object/tonde-production-media/${keyB}`, {
+  const aUpsertB = await req(`/storage/v1/object/${bucketB}/${keyB}`, {
     method: 'POST', token: tokenA, headers: { 'Content-Type': 'text/plain', 'x-upsert': 'true' }, raw: 'intrude',
   });
   rec("A cannot upsert B's Storage object", aUpsertB.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${aUpsertB.status}`);
-  const aDeleteB = await req(`/storage/v1/object/tonde-production-media/${keyB}`, { method: 'DELETE', token: tokenA });
+  const aDeleteB = await req(`/storage/v1/object/${bucketB}/${keyB}`, { method: 'DELETE', token: tokenA });
   rec("A cannot delete B's Storage object", aDeleteB.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${aDeleteB.status}`);
-  const ownerReadB = await req(`/storage/v1/object/authenticated/tonde-production-media/${keyB}`, { token: tokenB });
+  const ownerReadB = await req(`/storage/v1/object/authenticated/${bucketB}/${keyB}`, { token: tokenB });
   rec('B retains access after denied cross-user mutations', ownerReadB.ok ? 'PASS' : 'FAIL', `HTTP ${ownerReadB.status}`);
 
   // 8b. Backend readiness and cross-workspace access (requires the local API running)
-  const apiBase = (process.env.TONDE_BACKEND_URL || fe.VITE_API_URL || 'http://127.0.0.1:8001').replace(/\/$/, '');
   let apiUp = false;
   try {
     const h = await fetch(`${apiBase}/api/health`);
