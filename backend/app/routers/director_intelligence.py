@@ -252,15 +252,15 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                     503,
                 )
             if story is not None and story.producer == 'model':
+                # A model Story is authoritative for this proposal, so every dependent
+                # artifact must be derived from that exact Story. Swapping it into a
+                # deterministic bundle would leave Scenes and Script describing a
+                # different Story.
                 plan = build_production_plan(
                     intent, analyses=analyses, setup=context['setup'], answered=engine_answers,
-                    variation=payload.variation, include_optional_questions=payload.include_optional_questions, producer='model',
+                    variation=payload.variation, include_optional_questions=payload.include_optional_questions,
+                    producer='model', story_override=story,
                 )
-                plan.bundle = build_production_plan(
-                    intent, analyses=analyses, setup=context['setup'], answered=engine_answers,
-                    variation=payload.variation, producer='model',
-                ).bundle.model_copy(update={'story': story})
-                plan.bundle = plan.bundle.model_copy(update={'script': plan.bundle.script})
         if story_outcome is not None:
             await repository.record_operation(
                 workspace_id, production_id, request.state.access_token, story_outcome,
