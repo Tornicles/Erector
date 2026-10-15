@@ -50,6 +50,20 @@ class OpenAICompatibleProvider:
         self._client = http_client
         self._owns_client = http_client is None
 
+    def with_api_key(self, api_key: SecretStr) -> "OpenAICompatibleProvider":
+        """Return a request-scoped credential view that shares the existing HTTP client."""
+        return OpenAICompatibleProvider(
+            base_url=self.base_url,
+            api_key=api_key,
+            model=self.model,
+            transcription_model=self.transcription_model,
+            timeout_seconds=self.timeout_seconds,
+            max_timeout_seconds=self.max_timeout_seconds,
+            model_profile=self.model_profile,
+            long_context_model=self.long_context_model,
+            http_client=self._client_or_create(),
+        )
+
     def capabilities(self) -> ProviderCapabilities:
         available = [
             ProviderCapability.structured_text,
