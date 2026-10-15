@@ -578,3 +578,40 @@ def test_answered_decisions_are_not_asked_again():
     plan = build_production_plan(_intent(goal), answered=answered)
     assert plan.brief.product_brand == 'Ridgeway coffee'
     assert plan.brief.platform == 'YouTube'
+
+
+def test_story_substance_gate_scales_for_short_valid_story():
+    from app.domain.creative import StoryBeat, StoryPlan
+
+    story = StoryPlan(
+        title='Two moments',
+        logline='A concise two-stage live-event coverage arc.',
+        premise='Capture the event before and after the decisive moment.',
+        central_question='What changed here?',
+        beats=[
+            StoryBeat(
+                id='beat-1', order=1, name='Arrival energy',
+                story_function='Establish the room and anticipation.',
+                content='Attendees enter, orient themselves, greet one another and reveal the scale of the gathering before the programme starts.',
+                visual_idea='Wide room geography followed by human-scale arrivals.',
+            ),
+            StoryBeat(
+                id='beat-2', order=2, name='Closing outcome',
+                story_function='Land what the gathering achieved.',
+                content='Speakers and attendees leave the programme with specific reactions, connections and next actions that show the event mattered.',
+                visual_idea='Reaction details and a final wide frame as the room clears.',
+            ),
+        ],
+    )
+    assert story.substance_score() >= story.minimum_substance_score()
+    assert story.minimum_substance_score() == 5
+
+
+def test_custom_conference_uses_event_coverage_grammar():
+    plan = _plan('I want to host a business conference in Dallas Texas and 3500 people are attending')
+    assert plan.bundle.story is not None
+    assert plan.bundle.story.grammar == 'conference_event'
+    names = [beat.name for beat in plan.bundle.story.beats]
+    assert names[0] == 'Arrival and orientation'
+    assert 'Core programme' in names
+    assert names[-1] == 'Closing and outcome'
