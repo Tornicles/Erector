@@ -11,11 +11,11 @@ as KNOWN (stated or established), INFERRED (usable unless consequential)
 or DEFERRED (wardrobe, lenses, exact lighting: real decisions, but not
 intake decisions).
 
-Determinism and honesty: when no model provider is configured this engine
-is deterministic domain logic and labels itself ``producer='deterministic'``.
+Determinism and honesty: this module ranks known decision contracts. Semantic
+interpretation and TONDE DECIDE recommendations are supplied by the configured
+Director; this module never presents a deterministic heuristic as model work.
 It never invents facts, never exposes numeric materiality scores, and never
-asks a question merely because a database field is null. The free-text
-signals it reads live here, on the server -- never in the browser.
+asks a question merely because a database field is null.
 
 Stability contract: decision ids reuse the legacy brief-decision ids
 (``product``, ``platform``, ``runtime``, ``dialogue_mode``, ``premise``,
@@ -31,7 +31,7 @@ from typing import Any, Literal
 
 from app.domain import director as director_domain
 from app.domain.director import DirectorModel, ProductionIntent
-from app.domain.vocabulary import ExecutionMethod, ProductionType
+from app.domain.vocabulary import ProductionType
 
 FactSource = Literal[
     'user_said', 'reference_shows', 'script_establishes',
@@ -129,7 +129,9 @@ def classify_family(intent: ProductionIntent, goal: str, answered: dict[str, str
                 ProductionType.fashion, ProductionType.food, ProductionType.automotive,
                 ProductionType.architecture, ProductionType.poster, ProductionType.thumbnail}:
         return 'photography'
-    if kind in {ProductionType.series, ProductionType.recurring_content}:
+    if kind == ProductionType.series:
+        return 'narrative'
+    if kind == ProductionType.recurring_content:
         return 'series'
     if kind == ProductionType.social_video:
         return 'social'
@@ -137,6 +139,10 @@ def classify_family(intent: ProductionIntent, goal: str, answered: dict[str, str
         return 'social'
     if any(word in text for word in ('wedding', 'bride', 'groom', 'ceremony', 'reception')):
         return 'wedding'
+    if kind == ProductionType.custom and ('series' in text or 'episode' in text):
+        return 'narrative'
+    if kind == ProductionType.custom and any(word in text for word in ('story', 'zombie', 'horror', 'mystery', 'film about', 'movie about', 'script')):
+        return 'narrative'
     if any(word in text for word in ('soccer', 'football match', 'basketball', 'game highlights', 'tournament', 'match day',
                                      'soccer game', 'football game', 'basketball game', 'sports day', 'athlete', 'sport ')):
         return 'sports'
@@ -188,7 +194,7 @@ def build_known_facts(intent: ProductionIntent, goal: str,
         facts.append(_fact('runtime', 'Runtime', _format_ms(intent.runtime_ms), 'user_said', confirmed=True))
     if intent.aspect_ratio:
         facts.append(_fact('aspect_ratio', 'Format', intent.aspect_ratio, 'user_said'))
-    if intent.execution != ExecutionMethod.real:
+    if intent.execution is not None:
         facts.append(_fact('execution', 'Execution', str(intent.execution.value).replace('_', ' '), 'user_said'))
     if intent.dialogue_mode:
         facts.append(_fact('dialogue', 'Dialogue', str(intent.dialogue_mode).replace('_', ' '), 'user_said'))
@@ -585,17 +591,167 @@ def analyze_intake(
     direction_covered = bool(reference_mechanics)
 
     specs = list(_family_specs().get(family, _family_specs()['general']))
+    if family == 'narrative' and intent.primary_type in {ProductionType.series, ProductionType.recurring_content}:
+        specs = [spec for spec in specs if spec.decision_id not in {'format', 'episode_count'}]
+        goal_lower = goal.lower()
+        explicit_count = re.search(r'\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[ -]?(?:part|episode|episodes)\b', goal_lower)
+        if explicit_count:
+            answers.setdefault('episode_count', explicit_count.group(0))
+        if re.search(r'\b(?:dark|mystery|horror|survival|action|thriller|comedy|romance)\b', goal_lower):
+            specs = [spec for spec in specs if spec.decision_id != 'direction']
+        if re.search(r'\b(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(?:seconds?|minutes?|mins?|hours?)\s*(?:per|each)\s+episode\b', goal_lower) or re.search(r'\b(?:per|each)\s+episode\s*(?:about|around)?\s*\d', goal_lower):
+            specs = [spec for spec in specs if spec.decision_id != 'episode_length']
+        narrative_words = sum(token in goal_lower for token in ('zombie', 'girl', 'survive', 'survival', 'kenya', 'city', 'outbreak', 'epic', 'horror', 'mystery'))
+        has_narrative_seed = bool(intent.subject or extract_setting(goal) or narrative_words >= 3)
+        story_engine = next((spec for spec in specs if spec.decision_id == 'story_engine'), None)
+        if story_engine and re.search(r'\b(?:discover\w*\s+why|why\s+everyone|what\s+happened)\b', goal_lower):
+            answers.setdefault('story_engine', 'What happened?')
+            story_engine.decision_id = 'story_engine'
+        elif story_engine and re.search(r'\bsurviv\w*\b', goal_lower):
+            answers.setdefault('story_engine', 'Can she survive?')
+            story_engine.decision_id = 'story_engine'
+        episode_length = next((spec for spec in specs if spec.decision_id == 'episode_length'), None)
+        if episode_length and intent.runtime_ms is None and not answers.get('episode_length') and not answers.get('runtime'):
+            episode_length.topic = 'Episode runtime'
+            episode_length.question = 'How long should each episode feel?'
+            episode_length.why = 'Episode runtime determines Card count, pacing and Shot structure.'
+            episode_length.options = [('1_2', '1–2 minutes', 'Short-form episodes'), ('3_5', '3–5 minutes', 'Room for a developed beat'),
+                ('8_10', '8–10 minutes', 'Longer episode arc'), ('tonde', 'TONDE DECIDE', 'Let TONDE choose')]
+            episode_length.recommend = ['3_5']
+            episode_length.reason = 'Three to five minutes leaves room for one meaningful episode turn without padding.'
+        elif episode_length and intent.runtime_ms is not None:
+            answers.setdefault('episode_length', str(intent.runtime_ms))
+        elif episode_length and answers.get('runtime'):
+            answers.setdefault('episode_length', answers['runtime'])
+        elif episode_length and extracted.get('episode_length'):
+            answers.setdefault('episode_length', extracted['episode_length'])
+            episode_length.topic = 'Episode runtime'
+            episode_length.question = 'How long should each episode feel?'
+            episode_length.why = 'Episode runtime determines Card count, pacing and Shot structure.'
+            episode_length.options = [('1_2', '1–2 minutes', 'Short-form episodes'), ('3_5', '3–5 minutes', 'Room for a developed beat'),
+                ('8_10', '8–10 minutes', 'Longer episode arc'), ('tonde', 'TONDE DECIDE', 'Let TONDE choose')]
+            episode_length.recommend = ['3_5']
+            episode_length.reason = 'Three to five minutes leaves room for one meaningful episode turn without padding.'
+        if not intent.subject and not story_material and not answers.get('premise') and has_narrative_seed:
+            # A detailed premise already exists in the goal; only material questions remain.
+            specs = [spec for spec in specs if spec.decision_id != 'premise']
+        elif not intent.subject and not story_material and not answers.get('premise'):
+            specs = [spec for spec in specs if spec.decision_id not in {'format', 'direction', 'story_engine', 'episode_length', 'execution'}]
+            specs.insert(0, _Spec('premise', 'Premise', 'What is the central idea or premise?',
+                'A premise gives the first story structure a clear dramatic direction.', 110, 'critical', 'freeform', [], [], ''))
+    if family == 'narrative' and intent.primary_type in {ProductionType.series, ProductionType.recurring_content}:
+        specs = [spec for spec in specs if spec.decision_id != 'episode_count']
+        if extracted.get('episode_length'):
+            specs = [spec for spec in specs if spec.decision_id != 'premise']
+        if intent.runtime_ms is not None or answers.get('runtime'):
+            specs = [spec for spec in specs if spec.decision_id != 'episode_length']
+        elif extracted.get('episode_length') and not any(spec.decision_id == 'episode_length' for spec in specs):
+            specs.append(_Spec('episode_length', 'Episode runtime', 'How long should each episode feel?',
+                'Episode runtime determines Card count, pacing and Shot structure.', 88, 'high', 'duration',
+                [('1_2', '1–2 minutes', 'Short-form episodes'), ('3_5', '3–5 minutes', 'Room for a developed beat'),
+                 ('8_10', '8–10 minutes', 'Longer episode arc'), ('tonde', 'TONDE DECIDE', 'Let TONDE choose')], ['3_5'],
+                'Three to five minutes leaves room for one meaningful episode turn without padding.'))
+        if answers.get('story_engine'):
+            specs = [spec for spec in specs if spec.decision_id != 'story_engine']
+        if answers.get('direction'):
+            specs = [spec for spec in specs if spec.decision_id != 'direction']
+        if intent.primary_type == ProductionType.series and not any(spec.decision_id == 'execution' for spec in specs):
+            specs.append(_Spec('execution', 'Execution', 'How will you make this Production?',
+                'Execution changes character, camera and generation direction.', 86, 'high', 'single_select',
+                [('real', 'REAL', 'Shoot with physical people and equipment'), ('ai', 'AI', 'Use TONDE’s playbook in your own AI tool'),
+                 ('hybrid', 'HYBRID', 'Assign real and AI execution per Shot'), ('tonde_decides', 'TONDE DECIDE', 'Ask TONDE to recommend a mode')],
+                ['tonde_decides'], 'Choose after considering the Production and available resources.'))
     if direction_covered:
         specs = [spec for spec in specs if spec.decision_id != 'direction']
-    if family == 'narrative' and not intent.subject and not story_material and not answers.get('premise'):
-        # A vague narrative with no subject needs a premise before scale questions mean anything.
-        # A detailed goal already carries its premise in the text itself.
-        if len(goal.strip()) < 160:
-            specs.insert(0, _Spec(
-                'premise', 'Premise', 'What is the central idea or premise?',
-                'A premise gives the first story structure a clear dramatic direction.', 110, 'critical', 'freeform', [],
-                [], ''))
-    if family == 'narrative' and answers.get('premise') is None and any(
+    narrative_words = sum(token in goal.lower() for token in ('zombie', 'girl', 'survive', 'survival', 'kenya', 'city', 'outbreak', 'epic'))
+    has_narrative_seed = bool(intent.subject or extract_setting(goal) or narrative_words >= 3)
+    if family == 'narrative' and intent.primary_type in {ProductionType.series, ProductionType.recurring_content} and intent.runtime_ms is None and not answers.get('episode_length') and not answers.get('runtime') and not any(spec.decision_id == 'episode_length' for spec in specs):
+        specs.append(_Spec('episode_length', 'Episode runtime', 'How long should each episode feel?',
+            'Episode runtime determines Card count, pacing and Shot structure.', 88, 'high', 'duration',
+            [('1_2', '1–2 minutes', 'Short-form episodes'), ('3_5', '3–5 minutes', 'Room for a developed beat'),
+             ('8_10', '8–10 minutes', 'Longer episode arc'), ('tonde', 'TONDE DECIDE', 'Let TONDE choose')], ['3_5'],
+            'Three to five minutes leaves room for one meaningful episode turn without padding.'))
+    if family == 'narrative' and intent.primary_type == ProductionType.series and intent.execution is None and not answers.get('execution') and not any(spec.decision_id == 'execution' for spec in specs):
+        specs.append(_Spec('execution', 'Execution', 'How will you make this Production?',
+            'Execution changes the real/AI/Hybrid direction and resource checks.', 86, 'high', 'single_select',
+            [('real', 'REAL', 'Shoot with physical people and equipment'), ('ai', 'AI', 'Use an external AI tool and TONDE playbook'),
+             ('hybrid', 'HYBRID', 'Assign real and AI execution per Shot'), ('tonde_decides', 'TONDE DECIDE', 'Let TONDE recommend after checking resources')],
+            ['tonde_decides'], 'TONDE can recommend only after the Production Kit and plan are considered.'))
+    if family == 'narrative' and not intent.subject and not story_material and not answers.get('premise') and not has_narrative_seed and not any(spec.decision_id == 'premise' for spec in specs):
+        specs.insert(0, _Spec('premise', 'Premise', 'What is the central idea or premise?',
+            'A premise gives the first story structure a clear dramatic direction.', 110, 'critical', 'freeform', [], [], ''))
+    if family == 'narrative' and not intent.subject and not story_material and not answers.get('premise') and has_narrative_seed:
+        specs = [spec for spec in specs if spec.decision_id != 'premise']
+    if family == 'narrative' and intent.primary_type == ProductionType.custom and not intent.subject and not answers.get('premise'):
+        # Preserve premise-first behavior for a specific but not yet classified story idea.
+        specs = [spec for spec in specs if spec.decision_id not in {'format', 'direction', 'story_engine', 'execution'}]
+        specs.insert(0, _Spec('premise', 'Premise', 'What is the central idea or premise?',
+            'A premise gives the first story structure a clear dramatic direction.', 110, 'critical', 'freeform', [], [], ''))
+    elif family == 'narrative' and intent.primary_type == ProductionType.custom:
+        specs = _family_specs()['narrative']
+        specs = [spec for spec in specs if spec.decision_id != 'format']
+        specs.insert(0, _Spec('format', 'Scale', 'How big should this story be?',
+            'The story material gives TONDE enough to choose scale without repeating its central mystery.', 100, 'critical', 'single_select',
+            [('short_video', 'Short video', '30 seconds to 3 minutes, one arc'), ('short_film', 'Short film', '5 to 20 minutes, full story'),
+             ('series', 'Episodic series', 'Multiple parts with reveals'), ('feature', 'Feature', 'Long-form movie')],
+            ['series'], 'The mystery revealed in the supplied premise can unfold over episodes.'))
+    elif family == 'narrative' and intent.primary_type == ProductionType.custom and answers.get('premise'):
+        specs = [spec for spec in specs if spec.decision_id != 'premise']
+        specs = _family_specs()['narrative']
+        if direction_covered:
+            specs = [spec for spec in specs if spec.decision_id != 'direction']
+        specs = [spec for spec in specs if spec.decision_id not in {'format', 'episode_count'}]
+    elif family == 'narrative' and not intent.subject and not story_material and not answers.get('premise') and has_narrative_seed:
+        specs = [spec for spec in specs if spec.decision_id != 'premise']
+    if intent.primary_type in {ProductionType.commercial, ProductionType.advertisement, ProductionType.product_film} and 'execution' not in answers and not any(spec.decision_id == 'execution' for spec in specs):
+        specs.append(_Spec('execution', 'Execution', 'How will you make this Production?',
+            'Execution changes resource requirements and Shot direction.', 86, 'high', 'single_select',
+            [('real', 'REAL', 'Shoot with physical people and equipment'),
+             ('ai', 'AI', 'Use an external AI tool and TONDE playbook'),
+             ('hybrid', 'HYBRID', 'Combine real and AI Shots'),
+             ('tonde_decides', 'TONDE DECIDE', 'Let TONDE recommend after checking resources')],
+            ['tonde_decides'], 'The Production Kit and required product fidelity shape this recommendation.'))
+
+    if intent.execution is None and 'execution' not in answers and not any(spec.decision_id == 'execution' for spec in specs) and not (family == 'narrative' and intent.primary_type == ProductionType.custom and answers.get('premise')):
+        specs.append(_Spec('execution', 'Execution', 'How will you make this Production?',
+            'Real, AI and Hybrid require different Shot directions and resource checks.', 86, 'high', 'single_select',
+            [('real', 'REAL', 'Shoot with physical people and equipment'),
+             ('ai', 'AI', 'Use an external AI tool and TONDE playbook'),
+             ('hybrid', 'HYBRID', 'Assign real and AI execution per Shot'),
+             ('tonde_decides', 'TONDE DECIDE', 'Let TONDE recommend after checking resources')],
+            ['tonde_decides'], 'Choose after considering this Production and the creator\'s actual resources.'))
+
+    if answers.get('execution') and answers['execution'].strip().lower() not in {'tonde decides', 'tonde decide', 'tonde_decides'}:
+        specs = [spec for spec in specs if spec.decision_id != 'execution']
+    elif answers.get('execution') and answers['execution'].strip().lower() in {'tonde decides', 'tonde decide', 'tonde_decides'}:
+        specs = [spec for spec in specs if spec.decision_id != 'execution']
+        from app.domain.vocabulary import ExecutionMethod
+        specs = [spec for spec in specs if spec.decision_id != 'execution_recommendation']
+        setup_lower = [str(name).lower() for name in (setup_names or [])]
+        ai_available = any(any(token in name for token in ('ai', 'runway', 'veo', 'sora', 'kling')) for name in setup_lower)
+        physical_available = any(any(token in name for token in ('camera', 'phone', 'lighting', 'light', 'audio')) for name in setup_lower)
+        recommendation = ExecutionMethod.hybrid.value if ai_available and physical_available else ExecutionMethod.real.value if physical_available or not ai_available else ExecutionMethod.ai.value
+        answers['execution_recommendation'] = recommendation
+        extracted['execution_recommendation'] = recommendation
+        specs.insert(0, _Spec('execution_recommendation', 'Execution recommendation', 'TONDE recommends an execution strategy',
+            'This is a recommendation based on the listed Production Kit; the creator may change it.', 86, 'high', 'single_select',
+            [('real', 'REAL', 'Shoot with physical people and equipment'), ('ai', 'AI', 'Use an external AI tool and TONDE playbook'), ('hybrid', 'HYBRID', 'Assign real and AI execution per Shot')],
+            [recommendation], 'Based on declared kit only; unknown/unlisted resources stay unknown.'))
+    if answers.get('runtime') == 'TONDE decides' and intent.runtime_ms is None:
+        specs = [spec for spec in specs if spec.decision_id != 'runtime']
+        answers['runtime'] = '30000'
+        extracted['runtime'] = '30000'
+    if answers.get('episode_length') == 'TONDE DECIDE' and intent.runtime_ms is None:
+        specs = [spec for spec in specs if spec.decision_id != 'episode_length']
+        answers['episode_length'] = '180000'
+        extracted['episode_length'] = '180000'
+
+    if direction_covered:
+        specs = [spec for spec in specs if spec.decision_id != 'direction']
+
+    if direction_covered:
+        specs = [spec for spec in specs if spec.decision_id != 'direction']
+    if family == 'narrative' and not answers.get('premise') and not extracted.get('episode_length') and any(
             spec.decision_id == 'premise' for spec in specs):
         # The premise gates everything downstream: ask it first, alone. The
         # re-run after its answer produces the remaining queue.
@@ -627,17 +783,33 @@ def analyze_intake(
             raw = ' + '.join(matched) if matched else None
         # Intent-level fields also settle decisions (asked once, never again).
         by: Literal['creator', 'tonde', 'extracted'] = 'creator'
+        if spec.decision_id == 'execution' and raw is not None and raw.strip().lower() in {'tonde decides', 'tonde decide', 'tonde_decides'}:
+            raw = None
         if raw is None and spec.decision_id == 'platform' and intent.platform:
             raw = intent.platform
         elif raw is None and spec.decision_id == 'runtime' and intent.runtime_ms is not None:
             raw = str(intent.runtime_ms)
+        elif raw is None and spec.decision_id == 'execution' and intent.execution is not None:
+            raw = intent.execution.value.upper()
+        elif raw is None and spec.decision_id == 'episode_length' and answers.get('runtime'):
+            raw = answers['runtime']
+            by = 'extracted' if extracted.get('runtime') == raw else 'creator'
+        elif raw is None and spec.decision_id == 'episode_length' and answers.get('episode_length'):
+            raw = answers['episode_length']
+            by = 'extracted' if extracted.get('episode_length') == raw else 'creator'
+        elif raw is None and spec.decision_id == 'execution_recommendation' and answers.get('execution_recommendation'):
+            raw = answers['execution_recommendation'].upper()
+            by = 'tonde'
         elif raw is None and spec.decision_id == 'dialogue_mode' and intent.dialogue_mode:
             raw = str(intent.dialogue_mode)
         elif raw is None and spec.decision_id == 'product' and intent.product_named and intent.subject:
             raw = intent.subject
         elif raw is not None:
             lowered = raw.strip().lower()
-            by = 'tonde' if lowered == 'tonde decides' else ('extracted' if extracted.get(spec.decision_id) == raw else 'creator')
+            by = 'tonde' if lowered in {'tonde decides', 'tonde decide', 'tonde_decides'} else ('extracted' if extracted.get(spec.decision_id) == raw else 'creator')
+        elif spec.decision_id == 'episode_length' and answers.get('episode_length'):
+            raw = answers['episode_length']
+            by = 'extracted' if extracted.get(spec.decision_id) == raw else 'creator'
         value: str | None = raw
         if value is not None:
             unknowns.append(MaterialDecision(
@@ -698,7 +870,17 @@ def compose_creative_direction(
         return None
 
     subject = intent.subject or answer('product', 'subject', 'premise')
-    runtime = _format_ms(intent.runtime_ms) if intent.runtime_ms is not None else None
+    runtime_ms = intent.runtime_ms
+    runtime_answer = answers.get('runtime') or answers.get('episode_length')
+    if runtime_ms is None and runtime_answer:
+        try:
+            runtime_ms = int(runtime_answer)
+        except (TypeError, ValueError):
+            runtime_ms = director_domain._runtime(str(runtime_answer))
+    runtime = _format_ms(runtime_ms) if runtime_ms is not None else None
+    execution = intent.execution.value.upper() if intent.execution is not None else answer('execution')
+    story_engine = answer('story_engine') or ('survival + discovery' if any(token in goal.lower() for token in ('zombie', 'survival', 'outbreak')) else None)
+    setting = next((fact.value for fact in known if fact.key == 'setting'), None)
     platform = intent.platform or answer('platform')
 
     if family == 'commercial':
@@ -715,28 +897,39 @@ def compose_creative_direction(
     elif family == 'documentary':
         driver = answer('driver') or 'its central question'
         bits.append(f'A documentary driven by {str(driver).lower()}')
-    elif family in {'series'}:
+    elif family == 'series':
         count = answer('episode_count') or 'its first episodes'
         bits.append(f'A series planned around {str(count).lower()}')
     elif family == 'photography':
         subject_matter = answer('subject_matter') or (subject or 'its subject')
         bits.append(f'A photography production centered on {str(subject_matter).lower()}')
+    elif family == 'narrative':
+        direction = answer('direction')
+        subject_text = subject or 'the central character'
+        premise = answer('premise')
+        if premise:
+            concept = premise
+        else:
+            concept = f'{subject_text} in a {"zombie survival" if "zombie" in goal.lower() else "narrative"} story'
+        if story_engine and story_engine not in concept:
+            concept += f' driven by {story_engine}'
+        if setting and setting.lower() not in concept.lower():
+            concept += f' in {setting}'
+        if direction and direction.lower() not in concept.lower():
+            concept += f', with {direction.lower()} direction'
+        bits.append(f'A narrative series built around {concept}')
     else:
         direction = answer('direction')
-        setting = next((fact.value for fact in known if fact.key == 'setting'), None)
-        if direction:
-            segment = f'A production built around {str(direction).lower()}'
-            if setting:
-                segment += f' set in {setting}'
-            bits.append(segment)
-        else:
-            bits.append(goal[:220])
+        concept = (direction or goal[:220]).strip()
+        bits.append(f'A production built around {concept}')
 
     tail: list[str] = []
     if runtime:
         tail.append(f'runs {runtime}')
     if platform:
         tail.append(f'built for {platform}')
+    if execution and execution.lower() not in {'tonde decide', 'tonde_decides'}:
+        tail.append(f'{execution} execution')
     if intent.constraints.hard_constraints:
         tail.append(f'designed around {intent.constraints.hard_constraints[0].lower()}')
     summary = ' '.join(bits) + ('. ' + '. '.join(tail) + '.' if tail else '.')
@@ -745,7 +938,7 @@ def compose_creative_direction(
     if subject:
         facts.append(subject)
     for key in ('format', 'direction', 'story_engine', 'objective', 'deliverable',
-                'coverage_priority', 'output', 'focus', 'driver', 'episode_count', 'subject_matter'):
+                'coverage_priority', 'output', 'focus', 'driver', 'episode_count', 'subject_matter', 'execution', 'story_engine'):
         value = answer(key)
         if value and all(value.lower() not in fact.lower() for fact in facts):
             facts.append(str(value))

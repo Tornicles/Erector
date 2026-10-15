@@ -42,6 +42,7 @@ export const appRoutes = [
   { element: <ProtectedRoute />, children: [{ element: <AppLayout />, children: [
     { path: '/home', element: <HomePage /> },
     { path: '/studio', element: <ProjectsPage studio /> },
+    { path: '/production/:productionId/studio', element: <StudioPage /> },
     { path: '/studio/:productionId', element: <StudioPage /> },
     { path: '/on-set/:productionId', element: <OnSetPage /> },
     { path: '/projects', element: <ProjectsPage /> },

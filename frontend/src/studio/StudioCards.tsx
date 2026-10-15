@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent,
+  type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { StudioScene, StudioShot } from '../services/productions';
 import { productionVersioningService } from '../services/productionVersioning';
@@ -99,7 +100,7 @@ export function HeroCard({ scene, index, active, selectedShotId, onFocus, onSele
   // Clicking the centered Card opens the same Card expanded; clicking a neighbour centres it first.
   const openOrFocus = () => { if (active && onOpenCard) onOpenCard(); else onFocus(); };
   return <article className={`cs-hero${active ? ' active' : ''}`} data-scene={scene.id}
-    aria-label={`Card ${scene.order}: ${scene.title}`} onClick={openOrFocus}>
+    aria-label={`Card ${scene.order}: ${scene.title}`} aria-hidden={!active} onClick={openOrFocus}>
     <div className={`cs-visual cs-v${(scene.order % 6) + 1}`} aria-hidden="true">
       <span className="cs-scene-number">CARD {String(scene.order).padStart(2, '0')}</span>
       <span className="cs-exec">{execution}</span>
@@ -177,50 +178,100 @@ export function HeroCarousel({ scenes, activeId, selectedShotId, onFocusScene, o
   const trackRef = useRef<HTMLDivElement>(null);
   const programmatic = useRef(0);
   const activeIndex = Math.max(0, scenes.findIndex(scene => scene.id === activeId));
-  useEffect(() => {
-    const track = trackRef.current;
-    const el = track?.querySelector<HTMLElement>(`[data-scene="${scenes[activeIndex]?.id}"]`);
-    if (track && el) {
-      programmatic.current = Date.now();
-      el.scrollIntoView?.({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }
-  }, [activeId, scenes]);
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    let timer = 0;
-    const onScroll = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (Date.now() - programmatic.current < 600) return;
-        const center = track.getBoundingClientRect().left + track.clientWidth / 2;
-        let best: string | null = null;
-        let bestDist = Infinity;
-        track.querySelectorAll<HTMLElement>('[data-scene]').forEach(el => {
-          const rect = el.getBoundingClientRect();
-          const dist = Math.abs(rect.left + rect.width / 2 - center);
-          if (dist < bestDist) { bestDist = dist; best = el.dataset.scene ?? null; }
-        });
-        if (best && best !== scenes[activeIndex]?.id) onFocusScene(best);
-      }, 120);
-    };
-    track.addEventListener('scroll', onScroll, { passive: true });
-    return () => { track.removeEventListener('scroll', onScroll); window.clearTimeout(timer); };
-  }, [activeIndex, onFocusScene, scenes]);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
   const go = (delta: -1 | 1) => {
     const next = scenes[Math.min(Math.max(activeIndex + delta, 0), scenes.length - 1)];
     if (next && next.id !== scenes[activeIndex]?.id) onFocusScene(next.id);
   };
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onScroll = () => {
+      if (Date.now() - programmatic.current < 650) return;
+      const cards = [...track.querySelectorAll<HTMLElement>('[data-scene]')];
+      if (!cards.length) return;
+      const bounds = track.getBoundingClientRect();
+      const center = bounds.left + bounds.width / 2;
+      const visible = cards.filter(card => {
+        const rect = card.getBoundingClientRect();
+        return rect.right > bounds.left + 1 && rect.left < bounds.right - 1;
+      });
+      if (!visible.length) return;
+      const best = visible.reduce((closest, card) => {
+        const rect = card.getBoundingClientRect();
+        const bestRect = closest.getBoundingClientRect();
+        return Math.abs(rect.left + rect.width / 2 - center) < Math.abs(bestRect.left + bestRect.width / 2 - center)
+          ? card : closest;
+      });
+      if (best.dataset.scene && best.dataset.scene !== scenes[activeIndex]?.id) {
+        programmatic.current = Date.now();
+        onFocusScene(best.dataset.scene);
+      }
+    };
+    track.addEventListener('scroll', onScroll, { passive: true });
+    return () => track.removeEventListener('scroll', onScroll);
+  }, [activeIndex, onFocusScene, scenes]);
+  useEffect(() => {
+    const track = trackRef.current;
+    const card = track?.querySelector<HTMLElement>(`[data-scene="${scenes[activeIndex]?.id}"]`);
+    if (!track || !card) return;
+    programmatic.current = Date.now();
+    // scrollTo is not implemented by jsdom and can be missing in older embedded
+    // browsers; assigning scrollLeft preserves the exact target without failing render.
+    if (typeof track.scrollTo === 'function') track.scrollTo({ left: card.offsetLeft, behavior: 'smooth' });
+    else track.scrollLeft = card.offsetLeft;
+  }, [activeId, scenes]);
+  const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const onTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const start = touchStart.current;
+    const touch = event.changedTouches[0];
+    touchStart.current = null;
+    if (!start || !touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 48 || Math.abs(dx) <= Math.abs(dy)) return;
+    suppressClick.current = true;
+    go(dx < 0 ? 1 : -1);
+  };
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || (event.target as HTMLElement).closest('button,input,textarea,select,a')) return;
+    touchStart.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || !touchStart.current) return;
+    const { x, y } = touchStart.current;
+    const dx = event.clientX - x;
+    const dy = event.clientY - y;
+    touchStart.current = null;
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy)) {
+      suppressClick.current = true;
+      go(dx < 0 ? 1 : -1);
+    }
+  };
+  const onCarouselKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+      || target.isContentEditable || target.closest('[role="textbox"]')) return;
+    event.preventDefault();
+    go(event.key === 'ArrowRight' ? 1 : -1);
+  };
+  const onCarouselClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressClick.current) return;
+    suppressClick.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
   return <div className="cs-carousel-shell">
-    <button type="button" className="cs-nav" aria-label="Previous card" onClick={() => go(-1)}>←</button>
     <div className="cs-carousel" ref={trackRef} role="region" aria-roledescription="carousel" aria-label="Production cards"
-      onKeyDown={event => {
-        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-        const target = event.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
-        event.preventDefault();
-        go(event.key === 'ArrowRight' ? 1 : -1);
-      }}>
+      tabIndex={0} onKeyDown={onCarouselKeyDown} onClickCapture={onCarouselClickCapture}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchCancel={() => { touchStart.current = null; }}
+      onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { touchStart.current = null; }}>
       {scenes.map((scene, index) => <HeroCard key={scene.id} scene={scene} index={index}
         active={scene.id === scenes[activeIndex]?.id} selectedShotId={selectedShotId}
         onFocus={() => { if (scene.id !== scenes[activeIndex]?.id) onFocusScene(scene.id); }}
@@ -230,7 +281,6 @@ export function HeroCarousel({ scenes, activeId, selectedShotId, onFocusScene, o
         onOpenCard={onOpenCard ? () => onOpenCard(scene.id) : undefined}
         onFocusArea={onFocusArea ? area => onFocusArea(scene.id, area) : undefined} />)}
     </div>
-    <button type="button" className="cs-nav" aria-label="Next card" onClick={() => go(1)}>→</button>
   </div>;
 }
 
@@ -276,6 +326,7 @@ export function FilmStrip({ scenes, activeId, onFocusScene, onInsert, onDrop, bu
           className={`cs-mini${scene.id === activeId ? ' active' : ''}`}
           aria-pressed={scene.id === activeId}
           aria-label={`Card ${scene.order}: ${scene.title}`}
+          style={{ flexGrow: Math.max(scene.duration_ms ?? scene.planned_duration_ms ?? 1, 1) }}
           onClick={() => onFocusScene(scene.id)}
           onDragStart={event => { dragId.current = scene.id; event.dataTransfer.effectAllowed = 'move'; }}
           onDragOver={event => event.preventDefault()}

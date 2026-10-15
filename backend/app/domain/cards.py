@@ -25,6 +25,8 @@ import math
 import re
 from typing import Any, Literal
 
+from pydantic import Field
+
 from app.domain.director import DirectorModel
 
 CardMode = Literal['REAL', 'AI', 'HYBRID']
@@ -405,10 +407,11 @@ class BeatPlan(DirectorModel):
 
     title: str
     purpose: str = ''
-    weight: float = 1.0
+    weight: float = Field(default=1.0, allow_inf_nan=False)
     mode: CardMode = 'REAL'
     starts_from: str = ''
     ends_with: str = ''
+    story_change: str = ''
 
 
 class PlannedShell(DirectorModel):
@@ -419,6 +422,7 @@ class PlannedShell(DirectorModel):
     purpose: str = ''
     starts_from: str = ''
     ends_with: str = ''
+    story_change: str = ''
 
 
 class CardPlanRule(DirectorModel):
@@ -456,7 +460,98 @@ def card_cap_for_runtime(target_runtime_ms: int) -> int:
     return max(1, min(MAX_CARDS, math.ceil(minutes * CARDS_PER_MINUTE)))
 
 
-def plan_card_shells(target_runtime_ms: int, beats: list[BeatPlan]) -> CardPlan:
+def allocate_runtime_ms(target_runtime_ms: int, weights: list[float]) -> list[int]:
+    """Allocate an exact nonnegative millisecond total in proportion to positive weights."""
+
+    count = len(weights)
+    if target_runtime_ms < 0 or not count or any(not math.isfinite(weight) or weight <= 0 for weight in weights):
+        raise ValueError('Runtime and beat weights are outside supported bounds.')
+    total_weight = math.fsum(weights)
+    if not math.isfinite(total_weight) or total_weight <= 0:
+        raise ValueError('Beat weights exceed the supported numeric range.')
+    exact = [target_runtime_ms * weight / total_weight for weight in weights]
+    durations = [int(value) for value in exact]
+    remainder = target_runtime_ms - sum(durations)
+    order = sorted(range(count), key=lambda index: (-(exact[index] - durations[index]), index))
+    for index in order[:remainder]:
+        durations[index] += 1
+    return durations
+
+
+def normalized_plan_weights(beats: list[BeatPlan]) -> list[float]:
+    """Convert validated beat weights to bounded deterministic proportions."""
+
+    positive = [float(beat.weight) if beat.weight > 0 else 0.1 for beat in beats]
+    scale = max(positive, default=0.1)
+    return [weight / scale for weight in positive]
+
+
+def card_plan_rule(code: str, detail: str) -> CardPlanRule:
+    return CardPlanRule(code=code, severity='blocking', detail=detail)
+
+
+def plan_rejection(target_runtime_ms: int, beats: list[BeatPlan]) -> CardPlanRule | None:
+    """Return the first non-overrideable structure/timing constraint for a Card plan."""
+
+    if target_runtime_ms <= 0:
+        return card_plan_rule('invalid_runtime', 'A Card plan needs a positive finished-runtime target.')
+    if not beats:
+        return card_plan_rule('no_beats', 'No production beats were supplied, so no Cards can be planned. TONDE plans the Production structure before writing any Card.')
+    cap = card_cap_for_runtime(target_runtime_ms)
+    if len(beats) > cap:
+        return card_plan_rule('card_count_exceeds_cap',
+            f'{len(beats)} Cards were requested for a finished runtime of {target_runtime_ms // 1000} seconds, which supports at most {cap}. '
+            'Cards represent meaningful production beats, not camera cuts: merge the beats that share one objective, place or story change.')
+    return None
+
+
+def _rules_for_card_plan(target_runtime_ms: int, beats: list[BeatPlan], durations: list[int], cap: int) -> list[CardPlanRule]:
+    rules: list[CardPlanRule] = []
+    short = sum(duration < MIN_CARD_DURATION_MS for duration in durations)
+    if short:
+        rules.append(CardPlanRule(code='card_below_20s', severity='warning',
+            detail=f'{short} Card(s) are planned below the {MIN_CARD_DURATION_MS // 1000}-second guidance. '
+                   'Confirm each is a coherent production beat, not a camera cut.'))
+    if len(beats) < cap:
+        rules.append(CardPlanRule(code='fewer_cards_than_cap', severity='warning',
+            detail=f'{len(beats)} Cards planned; this runtime allows up to {cap}. Using fewer is '
+                   'correct when each Card still directs one coherent beat.'))
+    return rules
+
+
+def build_card_plan(target_runtime_ms: int, beats: list[BeatPlan], *, max_beats: int = MAX_CARDS) -> CardPlan:
+    """Build the accepted Card shells for the bounded creator-facing plan contract."""
+
+    cap = card_cap_for_runtime(target_runtime_ms)
+    if target_runtime_ms <= 0:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=0,
+            rules=[card_plan_rule('invalid_runtime', 'A Card plan needs a positive finished-runtime target.')])
+    if not beats:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=0,
+            rules=[card_plan_rule('no_beats', 'No production beats were supplied, so no Cards can be planned. TONDE plans the Production structure before writing any Card.')])
+    if not 1 <= max_beats <= MAX_CARDS:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(beats),
+            rules=[card_plan_rule('invalid_card_limit', 'The Card planner limit is outside supported bounds.')])
+    if len(beats) > MAX_CARDS:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(beats),
+            rules=[card_plan_rule('beat_count_exceeds_limit', f'A plan can contain at most {MAX_CARDS} beats.')])
+    rejection = plan_rejection(target_runtime_ms, beats)
+    if rejection is not None:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(beats), rules=[rejection])
+    considered = beats
+    weights = normalized_plan_weights(considered)
+    durations = allocate_runtime_ms(target_runtime_ms, weights)
+    shells = [PlannedShell(order=index + 1, title=beat.title, mode=beat.mode,
+        target_duration_ms=durations[index], purpose=beat.purpose,
+        starts_from=beat.starts_from, ends_with=beat.ends_with,
+        story_change=beat.story_change or beat.ends_with)
+        for index, beat in enumerate(considered)]
+    rules = _rules_for_card_plan(target_runtime_ms, considered, durations, cap)
+    return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(shells),
+        shells=shells, rules=rules, accepted=True)
+
+
+def plan_card_shells(target_runtime_ms: int, beats: list[BeatPlan], *, acknowledge_card_cap: bool = False) -> CardPlan:
     """Plan the Production structure: one shell per meaningful beat, bounded by the runtime.
 
     The planner never silently merges beats into fewer Cards: when the requested beats exceed the
@@ -465,47 +560,74 @@ def plan_card_shells(target_runtime_ms: int, beats: list[BeatPlan]) -> CardPlan:
     """
 
     cap = card_cap_for_runtime(target_runtime_ms)
-    rules: list[CardPlanRule] = []
+    if target_runtime_ms <= 0:
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=0,
+            rules=[card_plan_rule('invalid_runtime', 'A Card plan needs a positive finished-runtime target.')])
     if not beats:
-        rules.append(CardPlanRule(code='no_beats', severity='blocking',
-            detail='No production beats were supplied, so no Cards can be planned. '
-                   'TONDE plans the Production structure before writing any Card.'))
-        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=0, rules=rules)
-    if len(beats) > cap:
-        rules.append(CardPlanRule(code='card_count_exceeds_cap', severity='blocking',
-            detail=f'{len(beats)} Cards were requested for a finished runtime of '
-                   f'{target_runtime_ms // 1000} seconds, which supports at most {cap}. '
-                   'Cards represent meaningful production beats, not camera cuts: merge the beats '
-                   'that share one objective, place or story change.'))
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=0,
+            rules=[card_plan_rule('no_beats', 'No production beats were supplied, so no Cards can be planned. TONDE plans the Production structure before writing any Card.')])
+    if len(beats) > MAX_CARDS:
         return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(beats),
-            rules=rules)
+            rules=[card_plan_rule('beat_count_exceeds_limit', f'A plan can contain at most {MAX_CARDS} beats.')])
+    over_cap = len(beats) > cap
+    if over_cap and not acknowledge_card_cap:
+        rejection = plan_rejection(target_runtime_ms, beats)
+        return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(beats), rules=[rejection] if rejection else [])
 
-    weights = [max(0.1, float(beat.weight)) for beat in beats]
-    total_weight = sum(weights)
-    raw = [target_runtime_ms * weight / total_weight for weight in weights]
-    durations = [max(1000, int(value // 1000) * 1000) for value in raw]
-    remainder = target_runtime_ms - sum(durations)
-    index = 0
-    while remainder >= 1000 and index < len(durations) * 4:
-        durations[index % len(durations)] += 1000
-        remainder -= 1000
-        index += 1
-    shells = [PlannedShell(order=position + 1, title=beat.title, mode=beat.mode,
-        target_duration_ms=durations[position], purpose=beat.purpose,
-        starts_from=beat.starts_from, ends_with=beat.ends_with)
-        for position, beat in enumerate(beats)]
-    short = [shell for shell in shells if shell.target_duration_ms < MIN_CARD_DURATION_MS]
-    if short and target_runtime_ms >= MIN_CARD_DURATION_MS:
-        rules.append(CardPlanRule(code='card_below_20s', severity='warning',
-            detail=f'{len(short)} Card(s) are planned below the {MIN_CARD_DURATION_MS // 1000}-second '
-                   'guidance. Fewer, stronger Cards are preferred over short structural Cards.'))
-    if len(shells) < cap:
-        rules.append(CardPlanRule(code='fewer_cards_than_cap', severity='warning',
-            detail=f'{len(shells)} Cards planned; this runtime allows up to {cap}. Using fewer is '
-                   'correct when each Card still directs one coherent beat.'))
-    blocking = [rule for rule in rules if rule.severity == 'blocking']
+    # The 20-second rule is guidance rather than a minimum-runtime law. Allocate exact
+    # integer milliseconds by largest remainder, so no Card goes negative and the sum
+    # always equals the Production target even for sub-second runtimes or skewed weights.
+    weights = normalized_plan_weights(beats)
+    durations = allocate_runtime_ms(target_runtime_ms, weights)
+    shells = [PlannedShell(order=index + 1, title=beat.title, mode=beat.mode,
+        target_duration_ms=durations[index], purpose=beat.purpose,
+        starts_from=beat.starts_from, ends_with=beat.ends_with,
+        story_change=beat.story_change or beat.ends_with)
+        for index, beat in enumerate(beats)]
+    rules = _rules_for_card_plan(target_runtime_ms, beats, durations, cap)
+    if over_cap:
+        rules.append(CardPlanRule(code='card_count_cap_acknowledged', severity='warning',
+            detail=f'The creator explicitly acknowledged {len(beats)} Cards for a runtime that normally supports at most {cap}.'))
     return CardPlan(target_runtime_ms=target_runtime_ms, card_cap=cap, card_count=len(shells),
-        shells=shells, rules=rules, accepted=not blocking)
+        shells=shells, rules=rules, accepted=True)
+
+
+class PlanningSequence(DirectorModel):
+    """One directed story turn used to plan coherent Cards."""
+
+    id: str = Field(min_length=1, max_length=80)
+    order: int = Field(ge=1, le=40)
+    title: str = Field(min_length=2, max_length=160)
+    story_change: str = Field(min_length=2, max_length=400)
+    starts_from: str = Field(default='', max_length=400)
+    ends_with: str = Field(default='', max_length=400)
+    causality: str = Field(min_length=2, max_length=400)
+
+
+class SequencePlan(DirectorModel):
+    """Runtime allocation over the creator's chosen sequence of story turns."""
+
+    target_runtime_ms: int = Field(ge=1, le=9007199254740991)
+    sequences: list[PlanningSequence] = Field(min_length=1, max_length=MAX_CARDS)
+    accepted: bool = True
+    reason: str = ''
+    expected_production_revision: int | None = Field(default=None, ge=1)
+
+
+def plan_sequence_runtime(body: SequencePlan) -> SequencePlan:
+    weights = [max(0.1, float(item.order)) for item in body.sequences]
+    durations = allocate_runtime_ms(body.target_runtime_ms, weights)
+    return body.model_copy(update={'sequences': [item.model_copy(update={'duration_ms': duration})
+        for item, duration in zip(body.sequences, durations)]})
+
+
+class ResultStateList(DirectorModel):
+    result_ids: list[str] = Field(min_length=1, max_length=200)
+    state: str
+
+
+class ExecutionReference(DirectorModel):
+    mode: Literal['real', 'ai', 'hybrid']
 
 
 # ---------------------------------------------------------------- provenance and authority

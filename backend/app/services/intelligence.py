@@ -155,14 +155,15 @@ async def interpret_goal(
     )
     capabilities = provider.capabilities()
     if not capabilities.configured or not capabilities.supports(ProviderCapability.structured_text):
-        return baseline, OperationOutcome(
+        unavailable = OperationOutcome(
             operation_id=envelope.operation_id, operation_type='intent_interpretation', scope=OperationScope.production,
-            status='succeeded', producer='deterministic', provider='deterministic-domain', model='tonde-domain-engine',
+            status='unavailable', producer='deterministic', provider='unconfigured', model='unconfigured',
             source_revision=envelope.source_revision, idempotency_key=envelope.with_idempotency_key({'goal': goal[:400]}).idempotency_key,
-            rationale='No AI provider is configured, so the Production intent was interpreted with TONDE deterministic extraction.',
-            limitations=['Intent interpretation is deterministic domain logic; configure a provider for model-backed interpretation.'],
+            rationale='The baseline intent can inform adaptive questions only; Director creative interpretation is unavailable.',
+            limitations=['A deterministic extraction is not a substitute for TONDE Director interpretation. No production plan was built or applied.'],
             payload=baseline.model_dump(mode='json'),
         )
+        return baseline, unavailable
 
     def deterministic() -> ModelIntentPayload:
         interpreted = baseline.intent
@@ -216,14 +217,21 @@ async def generate_story(
     variation: str = 'original',
     max_repair_attempts: int = 1,
 ) -> tuple[StoryPlan | None, OperationOutcome | None]:
-    """Model-backed Story, schema validated and substance checked. Falls back to the domain grammar."""
+    """Model-backed Story, schema validated and substance checked; no creative fallback is exposed."""
 
     capabilities = provider.capabilities()
     if deterministic_story is None:
         return None, None
-    fallback = deterministic_story
     if not capabilities.configured or not capabilities.supports(ProviderCapability.structured_text):
-        return fallback, None
+        return None, OperationOutcome(
+            operation_id=envelope.operation_id, operation_type='story_generation', scope=OperationScope.story,
+            status='unavailable', producer='deterministic', provider='unconfigured', model='unconfigured',
+            source_revision=envelope.source_revision,
+            idempotency_key=envelope.with_idempotency_key({'story': variation}).idempotency_key,
+            rationale='The deterministic grammar is internal structure only; no creative Story was returned without Director reasoning.',
+            limitations=['Director creative reasoning is unavailable. No Story proposal was returned.'],
+            payload={},
+        )
     reference_notes = [
         {
             'role': analysis.role.value,
@@ -257,10 +265,26 @@ async def generate_story(
             StoryPlan, max_repair_attempts=max_repair_attempts,
         )
     except (ProviderUnavailable, ProviderFailed):
-        return fallback, None
+        return None, OperationOutcome(
+            operation_id=envelope.operation_id, operation_type='story_generation', scope=OperationScope.story,
+            status='unavailable', producer='deterministic', provider='unconfigured', model='unconfigured',
+            source_revision=envelope.source_revision,
+            idempotency_key=envelope.with_idempotency_key({'story': variation}).idempotency_key,
+            rationale='The Director could not produce a validated Story. The deterministic grammar remains internal and was not presented as creative work.',
+            limitations=['No Story proposal was returned or applied because the required Director operation failed.'],
+            payload={},
+        )
     if story.substance_score() < 8:
         logger.warning('story_substance_rejected', extra={'context': {'event': 'story_substance_rejected'}})
-        return fallback, None
+        return None, OperationOutcome(
+            operation_id=envelope.operation_id, operation_type='story_generation', scope=OperationScope.story,
+            status='failed', producer='model', provider=result.provider, model=result.model,
+            attempts=result.attempts, repaired=result.repaired, source_revision=envelope.source_revision,
+            idempotency_key=envelope.with_idempotency_key({'story': variation}).idempotency_key,
+            rationale='The model Story did not pass the substantive-content threshold and was not returned.',
+            limitations=['No Story proposal was returned or applied because the validated structure remained too generic.'],
+            payload={},
+        )
     story = story.model_copy(update={'runtime_ms': target_ms, 'variation': variation, 'producer': 'model'})
     outcome = OperationOutcome(
         operation_id=envelope.operation_id, operation_type='story_generation', scope=OperationScope.story,

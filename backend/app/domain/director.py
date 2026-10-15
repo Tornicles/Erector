@@ -43,7 +43,7 @@ class ProductionIntent(DirectorModel):
     platform: str | None = Field(default=None, max_length=100)
     runtime_ms: int | None = Field(default=None, ge=0, le=9007199254740991)
     aspect_ratio: str | None = Field(default=None, max_length=20)
-    execution: ExecutionMethod = ExecutionMethod.real
+    execution: ExecutionMethod | None = None
     execution_authority: Literal['creator', 'tonde_decides'] = 'creator'
     answered_decisions: dict[str, str] = Field(default_factory=dict, max_length=12)
     tonde_decided: list[str] = Field(default_factory=list, max_length=12)
@@ -102,7 +102,7 @@ class StoryDraft(DirectorModel):
 class ProductionDraft(DirectorModel):
     title: str = Field(min_length=1, max_length=160)
     production_type: ProductionType
-    execution_method: ExecutionMethod
+    execution_method: ExecutionMethod | None
     planned_duration_ms: int | None = Field(default=None, ge=0, le=9007199254740991)
     creative_objective: str = Field(min_length=1, max_length=10000)
     scenes: list[SceneDraft] = Field(default_factory=list, max_length=40)
@@ -238,9 +238,11 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
         kind = ProductionType.interview
     elif 'trailer' in lower:
         kind = ProductionType.trailer
+    elif 'series' in lower and not re.search(r'\b(?:every day|every weekday|each weekday|daily|weekly|\d+\s+(?:finance\s+)?tiktoks?|90 tiktok|90 finance)\b', lower):
+        kind = ProductionType.series
     elif 'movie' in lower or 'film' in lower:
         kind = ProductionType.long_form_film if (_runtime(lower) or 0) >= 15 * 60 * 1000 else ProductionType.short_film
-    elif any(word in lower for word in ('series', 'every day', 'every weekday', 'each weekday', 'daily', 'weekly', '90 tiktok', '90 finance')):
+    elif any(word in lower for word in ('every day', 'every weekday', 'each weekday', 'daily', 'weekly', '90 tiktok', '90 finance')):
         kind = ProductionType.recurring_content
     if re.search(r'\d+\s+(?:finance\s+)?tiktoks?', lower) or 'videos every day' in lower or re.search(r'(?:video|videos|content|episode|episodes).{0,35}(?:every|each)\s+(?:weekday|week|day|monday|tuesday|wednesday|thursday|friday)', lower) or re.search(r'(?:every|each)\s+(?:weekday|week|day|monday|tuesday|wednesday|thursday|friday).{0,35}(?:video|videos|content|episode|episodes)', lower):
         kind = ProductionType.recurring_content
@@ -266,11 +268,17 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
     platform = next((name for name in ('TikTok', 'Instagram Reels', 'YouTube Shorts', 'YouTube', 'cinema') if name.lower() in lower), None)
     runtime = _runtime(text)
     ratio = '9:16' if platform and platform.lower() in ('tiktok', 'instagram reels', 'youtube shorts') else None
-    execution = ExecutionMethod.ai if re.search(r'\b(ai creation|generate with ai|ai only)\b', lower) else ExecutionMethod.real
-    if 'hybrid' in lower:
-        execution = ExecutionMethod.hybrid
-    elif 'tonde decides' in lower:
-        execution = ExecutionMethod.real
+    explicit_execution = known.get('execution')
+    if explicit_execution not in {method.value for method in ExecutionMethod}:
+        explicit_execution = None
+    if explicit_execution is None:
+        if re.search(r'\b(ai creation|generate with ai|ai only|ai execution)\b', lower):
+            explicit_execution = ExecutionMethod.ai
+        elif re.search(r'\bhybrid\b', lower):
+            explicit_execution = ExecutionMethod.hybrid
+        elif re.search(r'\b(real production|shoot this|film this myself|i will shoot|i can shoot|filmed on my (?:iphone|phone|camera)|shot on my (?:iphone|phone|camera)|using my (?:iphone|phone|camera))\b', lower):
+            explicit_execution = ExecutionMethod.real
+    execution = ExecutionMethod(explicit_execution) if explicit_execution else None
     subject = None
     if any(word in lower for word in ('ad', 'advertisement', 'commercial')) and not re.search(r'\b(?:ad|advertisement|commercial)\s+for\b', lower):
         kind = ProductionType.commercial if kind != ProductionType.social_video else kind
@@ -305,6 +313,19 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
         answered = {}
     if answered.get('dialogue_mode'):
         known = known | {'dialogue_mode': answered['dialogue_mode']}
+    if answered.get('execution'):
+        mode = str(answered['execution']).strip().lower()
+        execution_choices = {'real': ExecutionMethod.real, 'ai': ExecutionMethod.ai,
+            'hybrid': ExecutionMethod.hybrid}
+        if mode in execution_choices:
+            explicit_execution = execution_choices[mode]
+        elif mode in {'tonde decides', 'tonde decide', 'tonde_decides'}:
+            explicit_execution = None
+            known = known | {'execution_authority': 'tonde_decides'}
+        if explicit_execution is not None:
+            execution = explicit_execution
+        else:
+            execution = None
     if answered.get('runtime') and known.get('runtime_ms') is None:
         answer_runtime = _runtime(str(answered['runtime']))
         if answer_runtime is not None:
@@ -320,8 +341,15 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
     runtime_value = known.get('runtime_ms', runtime)
     runtime = runtime_value if isinstance(runtime_value, int) and not isinstance(runtime_value, bool) else runtime
     tonde_chosen_runtime = answered.get('runtime') == 'TONDE decides'
-    if runtime is None and kind != ProductionType.photography and (tonde_chosen_runtime or collaboration_mode == CollaborationMode.complete_first_draft):
+    if runtime is None and kind not in {ProductionType.photography, ProductionType.series} and (tonde_chosen_runtime or collaboration_mode == CollaborationMode.complete_first_draft):
         runtime = 30000
+    if kind == ProductionType.series and runtime is None and answered.get('episode_length'):
+        try:
+            runtime = int(answered['episode_length'])
+        except (TypeError, ValueError):
+            runtime = _runtime(str(answered['episode_length']))
+    if kind == ProductionType.series and runtime is None and answered.get('runtime'):
+        runtime = _runtime(str(answered['runtime']))
     platform = known.get('platform', platform)
     if platform is None and runtime is not None and kind != ProductionType.photography:
         # Still an assumption, never silently persist as creator fact.
@@ -341,8 +369,8 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
         product_named = False
     intent = ProductionIntent(goal=text, collaboration_mode=collaboration_mode, primary_type=kind, secondary_types=secondary_types, subject=resolved_subject,
         audience=known.get('audience'), platform=platform, runtime_ms=runtime,
-        aspect_ratio=known.get('aspect_ratio', ratio), execution=ExecutionMethod(known.get('execution', execution)),
-        execution_authority='tonde_decides' if re.search(r'\btonde decides\b', lower) else 'creator',
+        aspect_ratio=known.get('aspect_ratio', ratio), execution=execution,
+        execution_authority='tonde_decides' if (known.get('execution_authority') == 'tonde_decides' or str(answered.get('execution') or '').lower() == 'tonde decides') else 'creator',
         answered_decisions={str(key): str(value)[:500] for key, value in answered.items() if isinstance(key, str) and isinstance(value, (str, int, float, bool))},
         tonde_decided=[str(key) for key, value in answered.items() if isinstance(key, str) and str(value).lower() == 'tonde decides'],
         dialogue_mode=known.get('dialogue_mode') or ('visual' if kind == ProductionType.photography else ('interview' if kind == ProductionType.interview else None)),
@@ -362,10 +390,14 @@ def interpret_intent(goal: str, *, known_context: dict[str, Any] | None = None,
         questions.append(BriefDecision(id='premise', question='What is the central idea or premise?', why='A premise gives the first story structure a clear dramatic direction.', impact='critical', options=[], blocking=True))
     if kind == ProductionType.recurring_content and not (isinstance(answered,dict) and answered.get('series_horizon')):
         questions.append(BriefDecision(id='series_horizon', question='Should TONDE outline the full 90-day Series or prepare a smaller first batch?', why='The initial structure should establish the cadence without generating dozens of complete Productions.', impact='high', options=['Outline the 90-day Series','Prepare the first 7','TONDE decides']))
-    if kind in {ProductionType.short_film, ProductionType.long_form_film, ProductionType.trailer} and intent.dialogue_mode is None and not (isinstance(answered,dict) and answered.get('dialogue_mode')):
+    if kind in {ProductionType.short_film, ProductionType.long_form_film, ProductionType.trailer, ProductionType.series} and intent.dialogue_mode is None and not (isinstance(answered,dict) and answered.get('dialogue_mode')):
         questions.append(BriefDecision(id='dialogue_mode', question='Should this rely on dialogue, minimal dialogue, or mostly visual storytelling?', why='Dialogue changes script, scene timing and audio requirements.', impact='high', options=['Full dialogue','Minimal dialogue','Mostly visual','TONDE decides']))
-    if runtime is None and kind != ProductionType.photography and not (isinstance(answered,dict) and answered.get('runtime')) and not (collaboration_mode == CollaborationMode.complete_first_draft and tonde_chosen_runtime):
+    if kind in {ProductionType.series, ProductionType.recurring_content} and runtime is None and not answered.get('runtime'):
+        questions.append(BriefDecision(id='runtime', question='How long should each episode feel?', why='Episode runtime determines Card count, pacing and Shot structure.', impact='high', options=['1–2 minutes', '3–5 minutes', '8–10 minutes', 'TONDE decides'], blocking=False))
+    elif runtime is None and kind != ProductionType.photography and not (isinstance(answered,dict) and answered.get('runtime')) and not (collaboration_mode == CollaborationMode.complete_first_draft and tonde_chosen_runtime):
         questions.append(BriefDecision(id='runtime', question='What target runtime should this fit?', why='Runtime determines how much structure can fit.', impact='high', options=['15 seconds','30 seconds','60 seconds','TONDE decides']))
+    if execution is None and not answered.get('execution'):
+        questions.append(BriefDecision(id='execution', question='How will you make this Production?', why='Execution changes the direction, resources and Shot plans.', impact='high', options=['REAL', 'AI', 'HYBRID', 'TONDE DECIDE', 'CUSTOM']))
     notes = []
     for item in evidence or []:
         if item.kind in {'url', 'video'} and item.access != 'available':
@@ -394,9 +426,12 @@ def build_draft(intent: ProductionIntent) -> ProductionDraft:
     title = re.sub(r'^(make|create|build|i want to make|i need)\s+', '', title, flags=re.I).strip(' .,:;-') or 'Untitled Production'
     title = title[:160]
     if intent.primary_type == ProductionType.photography:
-        return ProductionDraft(title=title, production_type=intent.primary_type, execution_method=intent.execution,
-            creative_objective=intent.goal, scenes=[], story=None, assumptions=['Still photography has no runtime; Studio can direct shot concepts without artificial Scenes.'],
-            requirements=['Reference image or written composition description','Subject and intended use'])
+        return ProductionDraft(
+            title=title, production_type=intent.primary_type, execution_method=intent.execution,
+            creative_objective=intent.goal, scenes=[], story=None,
+            assumptions=['Still photography has no runtime; Studio can direct shot concepts without artificial Scenes.'],
+            requirements=['Reference image or written composition description', 'Subject and intended use'],
+        )
     seconds = intent.runtime_ms // 1000 if intent.runtime_ms is not None else 30
     count = 1 if seconds < 20 else 3 if seconds < 120 else min(8, max(4, seconds // 240))
     if intent.primary_type in {ProductionType.commercial, ProductionType.advertisement, ProductionType.product_film}:

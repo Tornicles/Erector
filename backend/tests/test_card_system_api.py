@@ -150,6 +150,14 @@ def build(role: str | None = 'owner', provider: Any = None, scenes: list[dict] |
                 'calculated_duration_ms': 60000, 'revision': 4, 'lifecycle': 'active',
                 'approval': 'draft'}] if in_workspace else [])
         if path == '/rest/v1/scenes':
+            if request.method == 'PATCH':
+                payload = json.loads(request.content)
+                scene = next((row for row in state['scenes'] if row['id'] == request.url.params.get('id', '').removeprefix('eq.')), None)
+                if scene is None:
+                    return httpx.Response(404, json=[])
+                scene.update(payload)
+                scene['revision'] += 1
+                return httpx.Response(200, json=[{'id': scene['id'], 'revision': scene['revision']}])
             return httpx.Response(200, json=deepcopy(state['scenes']) if in_workspace else [])
         if path == '/rest/v1/shots':
             return httpx.Response(200, json=deepcopy(state['shots']) if in_workspace else [])
@@ -243,11 +251,38 @@ def test_cards_are_listed_with_server_derived_status():
 
 def test_planning_refuses_more_cards_than_the_finished_runtime_supports():
     client, state = build()
+    # Four beats exceed the one-minute guidance of three Cards, but a creator may
+    # explicitly acknowledge that runtime-based cap in a preview.
     response = client.post(url('/plan'), headers=HEADERS, json={'target_runtime_ms': 60000,
-        'beats': [{'title': f'Beat {index}'} for index in range(12)]})
+        'acknowledge_card_cap': True, 'beats': [{'title': f'Beat {index}'} for index in range(4)]})
+    assert response.status_code == 200
+    plan = response.json()['data']['plan']
+    assert plan['accepted'] is True
+    assert plan['card_count'] == 4
+    assert sum(shell['target_duration_ms'] for shell in plan['shells']) == 60000
+    assert 'card_count_cap_acknowledged' in [rule['code'] for rule in plan['rules']]
+    assert state['rpc_calls'] == []
+
+
+def test_planning_refuses_beats_above_the_service_limit_without_silent_truncation():
+    client, state = build()
+    response = client.post(url('/plan'), headers=HEADERS, json={'target_runtime_ms': 1800000,
+        'acknowledge_card_cap': True, 'beats': [{'title': f'Beat {index}'} for index in range(26)]})
     assert response.status_code == 422
-    assert response.json()['errors'][0]['code'] == 'CARD_COUNT_EXCEEDS_CAP'
-    assert 'at most 3' in response.json()['errors'][0]['message']
+    assert response.json()['errors'][0]['code'] == 'INVALID_CARD_INPUT'
+    assert state['rpc_calls'] == []
+
+
+def test_planning_reports_short_card_guidance_without_turning_it_into_a_hard_minimum():
+    client, state = build()
+    # Four explicitly acknowledged Cards for one minute fall below the 20-second guidance.
+    # The warning is visible without turning that guidance into a hard minimum.
+    response = client.post(url('/plan'), headers=HEADERS, json={'target_runtime_ms': 60000,
+        'acknowledge_card_cap': True, 'beats': [{'title': f'Beat {index}'} for index in range(4)]})
+    assert response.status_code == 200
+    plan = response.json()['data']['plan']
+    assert plan['accepted'] is True
+    assert 'card_below_20s' in [rule['code'] for rule in plan['rules']]
     assert state['rpc_calls'] == []
 
 
@@ -270,7 +305,8 @@ def test_planning_allocates_the_runtime_across_the_planned_cards():
 def test_persisting_a_plan_creates_the_card_shells():
     client, state = build()
     response = client.post(url('/plan'), headers=HEADERS, json={'target_runtime_ms': 60000,
-        'persist': True, 'beats': [{'title': 'Arrival'}, {'title': 'Discovery'}, {'title': 'Decision'}]})
+        'persist': True, 'expected_production_revision': 4,
+        'beats': [{'title': 'Arrival'}, {'title': 'Discovery'}, {'title': 'Decision'}]})
     assert response.status_code == 200
     # The plan reconciles with the Cards that already exist rather than duplicating them: the two
     # existing Cards become the first two planned shells and only the third is created.

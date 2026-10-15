@@ -166,13 +166,19 @@ export function HomeContextStrip({ item }: { item: LiveItem | null }) {
   </div>;
 }
 
-export function HomeStartBox({ intent, onChange, onSubmit, disabled, busy, source, onSource, readyToSubmit, children }: {
+export function HomeStartBox({ intent, onChange, onSubmit, disabled, busy, source, onSource, readyToSubmit, onStartNew, children }: {
   intent: string; onChange: (value: string) => void; onSubmit: (event: FormEvent) => void;
   disabled: boolean; busy: boolean; source: string; onSource: (source: 'describe' | 'upload' | 'url' | 'import' | 'record') => void;
-  children?: ReactNode; readyToSubmit?: boolean;
+  children?: ReactNode; readyToSubmit?: boolean; onStartNew?: () => void;
 }) {
   const sources = [['upload', '＋ Upload'], ['url', '↗ Reference'], ['describe', '◉ Describe'], ['import', '▤ Script'], ['record', '◉ Record']] as const;
   return <form className="hl-start" onSubmit={onSubmit} aria-label="Director intake">
+    {onStartNew && <div className="capability-note intake-locked-note" role="status">
+      <span>{disabled
+        ? 'This request is attached to a saved Production. Wait for its current operation to finish, or start a new intake; the saved Production remains in Projects.'
+        : 'Editing this request and choosing DIRECT THIS will re-plan the same saved Production. Start a new intake to keep it unchanged.'}</span>
+      <button type="button" className="hm-btn" disabled={busy} onClick={onStartNew}>Start a new intake</button>
+    </div>}
     <label className="sr-only" htmlFor="home-direct-idea">Tell TONDE what you want to make</label>
     <textarea id="home-direct-idea" aria-label="Describe what you want to make" value={intent}
       onChange={event => onChange(event.target.value)} placeholder="Tell TONDE what you want to make…"

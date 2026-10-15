@@ -1070,16 +1070,18 @@ button.library-row:hover{border-color:#3c5b4d}
 .cs-stage-head{display:flex;align-items:end;justify-content:space-between;gap:14px;padding:14px 18px 6px}
 .cs-stage-head h2{font-size:19px;margin:3px 0 0}
 .cs-stage-head p{font-size:11px;color:var(--muted);margin:3px 0 0}
-.cs-carousel-shell{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:4px;min-height:0;padding:6px 8px}
-.cs-nav{height:56px;border:1px solid var(--line);background:transparent;border-radius:12px;cursor:pointer;font-size:16px;z-index:5}
-.cs-carousel{display:flex;align-items:center;gap:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;padding:16px 12% 20px;min-height:0}
+.cs-carousel-shell{min-height:0;padding:6px 8px}
+.cs-nav{display:none}
+.cs-carousel{display:flex;align-items:stretch;gap:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;touch-action:pan-y;cursor:grab;min-height:0;padding:10px 0;outline-offset:-2px}
+.cs-carousel:active{cursor:grabbing}
 .cs-carousel::-webkit-scrollbar{display:none}
-/* Floating Cards: the centred Card is the largest and its neighbours recede and peek at the sides.
-   The card is a share of the stage (mirroring the canonical 780-in-950 proportion) and the track
-   carries matching inline padding, so the FIRST and LAST Card can still sit centred while the next
-   Card stays partly visible beside it. */
-.cs-hero{flex:0 0 100%;position:relative;z-index:1;height:min(62vh,600px);min-height:480px;scroll-snap-align:center;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#0a1512;transform:scale(.86);opacity:.55;transition:transform .3s ease,opacity .3s ease,border-color .3s ease;cursor:pointer}
-.cs-hero.active{transform:scale(1);opacity:1;border-color:#557a67;cursor:default;z-index:3}
+/* Exactly one Card occupies the Studio stage. The other canonical Cards stay in the scroll track,
+   clipped outside the viewport; swipes, keyboard and the timeline move the same focused Card. */
+.cs-hero{flex:0 0 100%;position:relative;z-index:1;height:min(62vh,600px);min-height:480px;scroll-snap-align:center;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#0a1512;transform:none;opacity:1;transition:border-color .2s ease;cursor:pointer}
+.cs-hero.active{transform:none;opacity:1;border-color:#557a67;cursor:default;z-index:3}
+.cs-hero:not(.active){pointer-events:none}
+.cs-prod-scroll .cs-mini-wrap{flex-grow:1;flex-basis:0}
+.cs-prod-scroll .cs-mini{width:100%;max-width:none}
 .cs-visual{height:40%;position:relative;border-bottom:1px solid var(--line)}
 .cs-v1{background:radial-gradient(circle at 72% 26%,rgba(248,181,91,.18),transparent 18%),linear-gradient(160deg,#243128,#0c1411 68%)}
 .cs-v2{background:linear-gradient(160deg,#1a2822,#0b1210)}
@@ -1126,7 +1128,8 @@ button.library-row:hover{border-color:#3c5b4d}
 .cs-shot-add{flex:0 0 auto;align-self:center}
 .cs-prod-scroll{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:8px 12px}
 .cs-mini-wrap{display:flex;align-items:center;gap:4px;flex:0 0 auto}
-.cs-mini{width:120px;border:1px solid var(--line);border-radius:9px;background:transparent;padding:8px;cursor:pointer;text-align:left}
+.cs-mini{flex:1 1 125px;min-width:125px;max-width:320px;border:1px solid var(--line);border-radius:9px;background:transparent;padding:8px;cursor:pointer;text-align:left}
+.cs-mini-wrap{flex:1 1 0;min-width:160px}
 .cs-mini.active{border-color:var(--accent)}
 .cs-mini strong{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cs-mini small{display:block;font-size:9px;color:var(--muted);margin-top:3px}
@@ -1204,8 +1207,9 @@ button.library-row:hover{border-color:#3c5b4d}
   .cs-cx-core,.cs-cx-bottom,.cs-cx-exec{grid-template-columns:minmax(0,1fr)}.cs-quick{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.cs-hero,.cs-quick-btn,.cs-cx-shot,.cs-cx-tab{transition:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
-@media(max-width:930px){.cs-workspace{grid-template-columns:minmax(0,1fr)}.cs-director{border-top:1px solid var(--line);min-height:560px}.cs-carousel{padding-inline:8%}.cs-hero{height:min(62vh,560px);min-height:440px}}
+@media(max-width:930px){.cs-workspace{grid-template-columns:minmax(0,1fr)}.cs-director{border-top:1px solid var(--line);min-height:560px}.cs-carousel{padding-inline:0}.cs-hero:not(.active){display:none}.cs-carousel{overflow:visible}.cs-hero{height:min(62vh,560px);min-height:440px}}
 @media(max-width:700px){.cs-content{grid-template-columns:minmax(0,1fr)}.cs-story{border-right:0;border-bottom:1px solid var(--line)}.cs-hero{height:72vh}.cs-strip{grid-template-columns:84px minmax(0,1fr)}.cs-topbar{position:static}}
+@media(max-width:930px){.cs-hero:not(.active){display:none}.cs-carousel{overflow:visible}.cs-carousel-shell{padding-inline:0}.cs-prod-scroll{scroll-snap-type:x proximity}.cs-mini{scroll-snap-align:center}}
 /* TONDE Live Home command center (canonical: tonde_home_live_final_v4.html).
    Hierarchy: HERO + TONDE LIVE, CONTINUE carousel, at most one context strip.
    Motion is state-driven (priority changes depth); the only ambient motion is

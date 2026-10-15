@@ -29,6 +29,7 @@ from app.domain.card_system import (
 )
 from app.domain.cards import (
     CARD_DIRECTION_FIELDS,
+    MAX_CARDS,
     FieldProvenance,
     card_status,
     card_summary_words,
@@ -198,10 +199,19 @@ class CardDirectionService:
             'lifecycle': 'eq.active', 'select': SHOT_DIRECTION_FIELDS, 'limit': str(MAX_SHOTS_READ)},
             MAX_SHOTS_READ)
         plans = await self._plans(workspace_id, production_id, token)
+        result_rows = await self._rows('/rest/v1/results', token, {
+            'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}',
+            'select': 'id,shot_id,state', 'limit': '400'}, 400)
+        active_results_by_shot: dict[str, int] = {}
+        for result in result_rows:
+            if result.get('state') in ('raw', 'needs_review') and result.get('shot_id'):
+                shot_id = str(result['shot_id'])
+                active_results_by_shot[shot_id] = active_results_by_shot.get(shot_id, 0) + 1
         view: list[dict[str, Any]] = []
         for index, card in enumerate(cards, start=1):
             card_shots = [shot for shot in shots if str(shot.get('scene_id')) == str(card.get('id'))]
-            status = card_status_for(card, shots=card_shots, plans=plans, results=0)
+            result_count = sum(active_results_by_shot.get(str(shot.get('id')), 0) for shot in card_shots)
+            status = card_status_for(card, shots=card_shots, plans=plans, results=result_count)
             validation = card.get('card_validation') or {}
             view.append({
                 'card_id': str(card.get('id')),
@@ -319,21 +329,57 @@ class CardDirectionService:
         body: PlanCardsRequest) -> dict[str, Any]:
         """Plan the Production structure, and only then let Cards be written."""
 
+        if len(body.beats) > MAX_CARDS:
+            raise AppError('INVALID_CARD_INPUT', 'validation',
+                f'A plan can contain at most {MAX_CARDS} beats. Nothing was truncated or written.', 422)
         plan = plan_card_shells(body.target_runtime_ms, body.beats)
         blocking = [rule for rule in plan.rules if rule.severity == 'blocking']
-        if blocking and not body.acknowledge_card_cap:
-            raise AppError('CARD_COUNT_EXCEEDS_CAP', 'validation', blocking[0].detail, 422)
+        if any(rule.code == 'card_count_exceeds_cap' for rule in blocking) and body.acknowledge_card_cap:
+            # Creator acknowledgement overrides only the runtime-based cap; the plan itself
+            # records that explicit exception as a warning and still reconciles exact timing.
+            plan = plan_card_shells(body.target_runtime_ms, body.beats, acknowledge_card_cap=True)
+            blocking = [rule for rule in plan.rules if rule.severity == 'blocking']
+        if blocking:
+            code = 'CARD_COUNT_EXCEEDS_CAP' if blocking[0].code == 'card_count_exceeds_cap' else 'CARD_PLAN_INVALID'
+            raise AppError(code, 'validation', blocking[0].detail, 422)
+        # Over-cap plans need a separate review/confirmation request before any Scene changes.
+        if body.persist and any(rule.code == 'card_count_cap_acknowledged' for rule in plan.rules):
+            raise AppError('CARD_CAP_PERSIST_CONFIRMATION_REQUIRED', 'authorization',
+                'Review the over-cap preview first. Applying this exception requires a separate, explicit confirmation.', 409)
+        # Explicit creator acknowledgement can accept the published cap exception, never invalid
+        # timing or a structure with no executable Cards.
         production = await self._production(workspace_id, production_id, token)
         persisted: list[dict[str, Any]] = []
         if body.persist:
+            if body.expected_production_revision is None:
+                raise AppError('CARD_PLAN_REVISION_REQUIRED', 'validation',
+                    'Persisting a Card plan requires the current Production revision. Reload Studio and try again.', 422)
+            production_revision = int(production.get('revision') or 1)
+            if body.expected_production_revision != production_revision:
+                raise AppError('STUDIO_CONFLICT', 'conflict',
+                    'The Production changed since you started this Card plan. Reload Studio before applying it.', 409)
             existing = await self._rows('/rest/v1/scenes', token, {
                 'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}',
-                'lifecycle': 'eq.active', 'select': 'id,title,sort_order,revision',
+                'lifecycle': 'eq.active', 'select': 'id,title,purpose,description,story_beat,opening_state,ending_state,visual_intent,dialogue_notes,sort_order,revision',
                 'order': 'sort_order,id', 'limit': str(MAX_CARDS_READ)}, MAX_CARDS_READ)
+            if len(existing) > len(plan.shells):
+                active_shots = await self._rows('/rest/v1/shots', token, {
+                    'workspace_id': f'eq.{workspace_id}', 'production_id': f'eq.{production_id}',
+                    'lifecycle': 'eq.active', 'select': 'id,scene_id', 'limit': str(MAX_SHOTS_READ)}, MAX_SHOTS_READ)
+                owned_scenes = {str(shot.get('scene_id')) for shot in active_shots}
+                proposed_archives = existing[len(plan.shells):]
+                if any(str(row.get('id')) in owned_scenes for row in proposed_archives):
+                    raise AppError('CARD_PLAN_HAS_COVERAGE', 'conflict',
+                        'This shorter plan would leave Shots behind. Move or archive those Shots explicitly before applying it.', 409)
             for position, shell in enumerate(plan.shells):
+                # Existing Scenes carry production material that should not disappear when the
+                # structure is replanned. Changing Card count is not authorization to archive a
+                # Card that still owns Shots, dialogue, Assets, Results or direction.
                 # `duration_ms` is the Studio Scene write contract for the planned runtime; the
                 # Card shell also records where it starts, where it ends and what it changes.
                 patch: dict[str, Any] = {'title': shell.title, 'purpose': shell.purpose,
+                    'story_beat': shell.story_change or shell.title,
+                    'description': shell.story_change or shell.purpose or shell.title,
                     'opening_state': shell.starts_from, 'ending_state': shell.ends_with,
                     'duration_ms': shell.target_duration_ms}
                 if position < len(existing):
@@ -343,12 +389,15 @@ class CardDirectionService:
                         UpdateSceneRequest(expected_revision=int(current.get('revision') or 1), **patch))
                 else:
                     saved = await self.studio.create_scene(workspace_id, production_id, token,
-                        CreateSceneRequest(expected_production_revision=body.expected_production_revision,
+                        CreateSceneRequest(expected_production_revision=production_revision,
                             **patch))
                 persisted.append({'card_id': str((saved or {}).get('id')) if isinstance(saved, dict) else None,
                     'revision': (saved or {}).get('revision') if isinstance(saved, dict) else None,
                     'order': position + 1, 'title': shell.title,
                     'target_duration_ms': shell.target_duration_ms})
+            # Preserve all existing Scene identities and their history. Added planned shells are
+            # appended by the canonical Scene RPC; existing Cards are not archived or reordered
+            # implicitly because that would invalidate references and downstream object links.
         return {
             'production_id': str(production_id),
             'production_title': production.get('title'),
@@ -364,6 +413,9 @@ class CardDirectionService:
 
         production = await self._production(workspace_id, production_id, token)
         card = await self._card(workspace_id, production_id, scene_id, token)
+        if body.expected_revision is not None and body.expected_revision != int(card.get('revision') or 1):
+            raise AppError('STUDIO_CONFLICT', 'conflict',
+                'This Card changed since you selected the focus. Reload it before asking TONDE to revise it.', 409)
         shots = await self._shots(workspace_id, production_id, token, scene_id)
         plans = await self._plans(workspace_id, production_id, token)
         continuity = await self._continuity(workspace_id, production_id, token)

@@ -144,7 +144,8 @@ describe('Card-first Studio shell', () => {
     const router = studio('/?scene=' + sceneA + '&shot=' + shotA);
     expect(await screen.findByRole('region', { name: 'Production cards' })).toBeVisible();
     expect(screen.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
-    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneB + '"]'))
+      .toHaveAttribute('aria-hidden', 'true');
     expect(productionService.studioSurface).toHaveBeenCalledWith(workspaceId, productionId);
     // No permanent tool navigation competes with the cards.
     expect(screen.queryByRole('navigation', { name: 'Studio functions' })).toBeNull();
@@ -175,13 +176,20 @@ describe('Card-first Studio shell', () => {
     expect(within(card).getByRole('button', { name: 'START THIS CARD →' })).toBeVisible();
   });
 
-  it('moves card focus by clicking a side card and syncs TONDE focus with it', async () => {
+  it('only exposes the focused Card in the stage, then moves focus from the Production timeline', async () => {
     const router = studio('/?scene=' + sceneA);
     await screen.findByRole('article', { name: 'Card 1: Dark kitchen' });
+    const stage = screen.getByRole('region', { name: 'Production cards' });
+    expect(within(stage).getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
+    expect(stage.querySelector<HTMLElement>('[data-scene="' + sceneB + '"]')).toHaveAttribute('aria-hidden', 'true');
+    expect(stage.querySelectorAll('.cs-hero.active')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Card 2: Weighing' }));
     await waitFor(() => expect(router.state.location.search).toContain('scene=' + sceneB));
     expect(screen.getByText('FOCUS · CARD 02')).toBeVisible();
     expect(screen.getByRole('option', { name: /02A · Scale macro/ })).toBeVisible();
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneB + '"]'))
+      .toHaveAttribute('aria-hidden', 'false');
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneA + '"]')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('moves card focus with the keyboard', async () => {
@@ -234,7 +242,10 @@ describe('Card-first Studio shell', () => {
     expect(screen.getByRole('button', { name: 'AI' })).toHaveAttribute('aria-pressed', 'true');
     // One read model, one Production: switching face refetches nothing and moves no selection.
     expect(productionService.studioSurface).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneA + '"]'))
+      .toHaveAttribute('aria-hidden', 'false');
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneB + '"]'))
+      .toHaveAttribute('aria-hidden', 'true');
   });
 
   it('routes a card waiting on review to Readiness instead of a generic page', async () => {
@@ -479,7 +490,8 @@ describe('expanded Card view', () => {
     expect(await screen.findByRole('region', { name: 'Production cards' })).toBeVisible();
     // The same Card stays centred in the floating sequence.
     expect(router.state.location.search).toContain('scene=' + sceneB);
-    expect(screen.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+    expect(document.querySelector<HTMLElement>('[data-scene="' + sceneB + '"]'))
+      .toHaveAttribute('aria-hidden', 'false');
   });
 });
 

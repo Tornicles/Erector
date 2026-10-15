@@ -182,6 +182,12 @@ async def run_operation(
     request = request.model_copy(update={'idempotency_key': keyed.idempotency_key})
     capabilities = provider.capabilities()
     if not capabilities.configured or capabilities.provider == 'unconfigured':
+        if require_model:
+            raise AppError(
+                'DIRECTOR_PROVIDER_UNAVAILABLE', 'provider',
+                'TONDE Director is unavailable. Production intelligence could not run; retry after Director configuration is restored. Your saved work is unchanged.',
+                503,
+            )
         if deterministic is not None:
             payload = deterministic()
             return OperationOutcome(
@@ -192,15 +198,20 @@ async def run_operation(
                 limitations=['No AI provider is configured, so this result comes from TONDE deterministic domain logic, not from a model.'],
                 payload=payload.model_dump(mode='json'),
             )
-        if require_model:
-            raise AppError(
-                'DIRECTOR_PROVIDER_UNAVAILABLE', 'provider',
-                'AI analysis is not configured in this deployment. Your saved work is unchanged and manual editing stays available.',
-                503,
-            )
+        raise AppError(
+            'DIRECTOR_PROVIDER_UNAVAILABLE', 'provider',
+            'No Director model is available for this operation. Nothing was returned or changed; manual editing remains available.',
+            503,
+        )
     try:
         validated, result = await generate_validated(provider, request, model_cls, max_repair_attempts=max_repair_attempts)
     except ProviderUnavailable as exc:
+        if require_model:
+            raise AppError(
+                'DIRECTOR_PROVIDER_UNAVAILABLE', 'provider',
+                'TONDE Director is unavailable. Production intelligence could not run; retry after Director configuration is restored. Your saved work is unchanged.',
+                503,
+            ) from exc
         if deterministic is not None:
             payload = deterministic()
             return OperationOutcome(

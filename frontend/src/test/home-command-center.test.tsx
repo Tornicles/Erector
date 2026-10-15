@@ -351,4 +351,25 @@ describe('HomeStartBox', () => {
     fireEvent.click(screen.getByRole('button', { name: 'DIRECT THIS →' }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
+  it('explains a locked restored intake and lets the creator start a fresh editable request', () => {
+    const onStartNew = vi.fn();
+    render(
+      <MemoryRouter>
+        <HomeStartBox intent="Saved production goal" onChange={() => {}} onSubmit={vi.fn()} disabled busy={false} source="describe" onSource={() => {}} onStartNew={onStartNew} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('textbox', { name: 'Describe what you want to make' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('This request is attached to a saved Production.');
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new intake' }));
+    expect(onStartNew).toHaveBeenCalledOnce();
+  });
+  it('offers a fresh intake from an editable saved plan with an accurate explanation', () => {
+    render(
+      <MemoryRouter>
+        <HomeStartBox intent="Saved production goal" onChange={() => {}} onSubmit={vi.fn()} disabled={false} busy={false} source="describe" onSource={() => {}} onStartNew={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('re-plan the same saved Production');
+    expect(screen.getByRole('button', { name: 'Start a new intake' })).toBeEnabled();
+  });
 });

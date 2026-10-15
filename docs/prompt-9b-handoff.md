@@ -110,38 +110,38 @@ different Scene), so one problem is never reported twice as two kinds.
 
 ## BACKEND HTTP SURFACE
 
-- [domain/continuity.py](backend/app/domain/continuity.py) — bounded request contracts for
+- [domain/continuity.py](../backend/app/domain/continuity.py) — bounded request contracts for
   statements, retirement, checks, finding decisions and proposals, with the canonical continuity
   vocabulary. A malformed request is rejected by the application (422
   `INVALID_CONTINUITY_INPUT`) rather than by the database, and `anchor_is_coherent()` refuses a
   Shot statement without a Shot, a Scene statement without a Scene, and a Production statement
   that names either.
-- [services/continuity.py](backend/app/services/continuity.py) — `LAYER = 'Production
+- [services/continuity.py](../backend/app/services/continuity.py) — `LAYER = 'Production
   continuity'` and `ContinuityRepository`, which calls every guarded RPC through
   `rpc_detailed(..., layer=LAYER)`. It carries the display vocabulary, the five rules as the
   creator reads them, and the limitation; it recomputes no continuity value.
-- [routers/production_continuity.py](backend/app/routers/production_continuity.py) — under
+- [routers/production_continuity.py](../backend/app/routers/production_continuity.py) — under
   `/api/v1/workspaces/{workspace_id}/productions/{production_id}/continuity`: `GET /vocabulary`,
   `GET /summary`, `GET /states`, `POST /states`, `POST /states/{state_id}/retire`, `GET /chain`,
   `POST /check`, `GET /findings`, `PATCH /findings/{finding_id}`, `POST /findings`. Registered in
-  [main.py](backend/app/main.py).
+  [main.py](../backend/app/main.py).
 - Error translation is the shared one: `42501` → 403, `40001`/`23514`/`23505` → 409,
   `22023`/`22001` → 422, `PGRST202`/`42883` → 503 `STUDIO_SCHEMA_MISSING` naming this layer.
 
 ## STUDIO SURFACE
 
-- [services/productionContinuity.ts](frontend/src/services/productionContinuity.ts) — the typed
+- [services/productionContinuity.ts](../frontend/src/services/productionContinuity.ts) — the typed
   client. `recordStatement` names the anchor target explicitly, and `recordProposal` sends the
   basis, so the browser cannot invent a point in the timeline or a piece of evidence.
-- [studio/ProductionContinuity.tsx](frontend/src/studio/ProductionContinuity.tsx) — the
+- [studio/ProductionContinuity.tsx](../frontend/src/studio/ProductionContinuity.tsx) — the
   `Continuity` tool in Studio: the recorded summary with whether the last check still matches the
   statements, the five rules as a visible ruleset, the declaration form (subject, domain, trait,
   value, anchor, transition, reason) with the anchor target named in the button, the statement
   table with superseded history on request, one subject's timeline in Production order, the check
   with its verdict and findings, the proposal labelled INFERRED and carrying its basis, and the
   creator decisions (acknowledge / resolve / waive). Wired into
-  [StudioPage.tsx](frontend/src/pages/StudioPage.tsx) as a creative-group tool with the
-  `ShieldCheck` icon, and styled by `.cont*` rules in [index.css](frontend/src/index.css).
+  [StudioPage.tsx](../frontend/src/pages/StudioPage.tsx) as a creative-group tool with the
+  `ShieldCheck` icon, and styled by `.cont*` rules in [index.css](../frontend/src/index.css).
 - The surface refuses what the product refuses: a statement cannot be submitted for an anchor that
   names nothing, there is no `Approve` control for a finding, and the proposal's epistemic options
   exclude `observed`.
@@ -178,7 +178,7 @@ different Scene), so one problem is never reported twice as two kinds.
 The six new enums are mapped in `product/vocabulary.json` (`continuityDomains`,
 `continuityAnchors`, `continuityTransitions`, `continuityOrigins`, `continuityFindingKinds`,
 `continuityFindingStates`) and wired into
-[scripts/generate-database-types.mjs](scripts/generate-database-types.mjs), which now emits the
+[scripts/generate-database-types.mjs](../scripts/generate-database-types.mjs), which now emits the
 generated TS aliases and Python `StrEnum`s for them. Stored codes remain the SQL enum labels, so
 display labels and storage codes cannot drift.
 

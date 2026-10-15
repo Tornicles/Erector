@@ -8,6 +8,7 @@
     "test:constitution": "node --test --test-concurrency=2 tests/database/constitution.test.mjs tests/product/*.test.mjs",
     "test:database": "node --test --test-concurrency=2 tests/database/*.test.mjs",
     "verify:legacy": "node scripts/verify-boundaries.mjs",
+    "verify:links": "node scripts/check-links.mjs",
     "verify:hosted": "node scripts/hosted-acceptance.mjs"
   },
   "devDependencies": {

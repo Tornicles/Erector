@@ -125,7 +125,7 @@ class IntelligentBrief(BriefModel):
     call_to_action: str | None = Field(default=None, max_length=400)
     style_direction: list[str] = Field(default_factory=list, max_length=20)
     style_dna: StyleDNA | None = None
-    execution_preference: Literal['real', 'ai', 'hybrid'] = 'real'
+    execution_preference: Literal['real', 'ai', 'hybrid'] | None = None
     resources: list[str] = Field(default_factory=list, max_length=30)
     crew_size: int | None = Field(default=None, ge=1, le=100)
     available_hours: float | None = Field(default=None, ge=0)
@@ -281,7 +281,7 @@ def build_brief(
         ))
     if intent.aspect_ratio:
         assumptions.append(BriefAssumption(statement=f'Aspect ratio {intent.aspect_ratio} follows the stated platform, not a creator instruction.', basis='Platform default', status='assumption'))
-    if intent.execution_authority == 'tonde_decides':
+    if intent.execution_authority == 'tonde_decides' and intent.execution is not None:
         assumptions.append(BriefAssumption(statement=f'Execution method {intent.execution.value} was chosen by TONDE and can be changed.', basis='Collaboration mode', status='tonde_default'))
     for analysis in analyses:
         if analysis.capability.capability.value != 'full_media_available':
@@ -310,7 +310,7 @@ def build_brief(
         call_to_action=answers.get('cta') or cta,
         style_direction=[*style_sections[:12], *adaptation_notes[:4]],
         style_dna=style_dna,
-        execution_preference=intent.execution.value,
+        execution_preference=intent.execution.value if intent.execution is not None else None,
         resources=resources[:30],
         crew_size=constraints.crew_size,
         available_hours=constraints.available_hours,

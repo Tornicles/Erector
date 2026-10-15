@@ -12,6 +12,7 @@ import json
 import struct
 import wave
 from copy import deepcopy
+from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
@@ -19,6 +20,7 @@ from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.main import create_app
+from app.services.ai.provider import GenerationRequest, GenerationResult, ProviderCapabilities, ProviderCapability
 
 USER = '00000000-0000-4000-8000-000000000001'
 OTHER_USER = '00000000-0000-4000-8000-000000000002'
@@ -42,7 +44,55 @@ def build_wav(samples: list[float], sample_rate: int = 16000) -> bytes:
     return buffer.getvalue()
 
 
-def make_client(*, member: bool = True, revision: int = 1, references: list[dict] | None = None):
+class StubDirectorProvider:
+    """Deterministic structured provider fixture for creative API integration tests."""
+
+    def capabilities(self):
+        return ProviderCapabilities(provider='test-director', capabilities=[ProviderCapability.structured_text], model_profile='test-model')
+
+    async def generate(self, request: GenerationRequest):
+        if request.operation == 'intent_interpretation':
+            from app.domain.director import interpret_intent
+
+            goal = request.prompt.split('Creator intent: ', 1)[-1].split(' Known context (JSON):', 1)[0]
+            intent = interpret_intent(goal).intent
+            output = {
+
+                'goal_summary': intent.goal[:1000], 'production_type': intent.primary_type.value,
+                'secondary_types': [], 'subject': intent.subject, 'audience': None, 'platform': intent.platform,
+                'runtime_ms': intent.runtime_ms, 'aspect_ratio': intent.aspect_ratio, 'tone': [],
+                'dialogue_mode': None, 'execution': intent.execution.value if intent.execution else None,
+                'hard_constraints': intent.constraints.hard_constraints, 'soft_preferences': [], 'confidence': 'high', 'notes': [],
+            }
+        elif request.operation == 'story_generation':
+            output = {
+                'title': 'Coffee, made visible', 'logline': 'A home coffee ritual turns an ordinary morning into a sensory choice.',
+                'premise': 'A deliberate coffee ritual gives a rushed morning one moment of attention.',
+                'central_question': 'What makes this cup worth noticing?', 'protagonist': 'A home coffee drinker',
+                'desire': 'A more deliberate morning', 'conflict': 'Routine competes with attention.',
+                'stakes': 'The moment disappears into another rushed day.', 'hook': 'Steam rises into first light.',
+                'payoff': 'The finished cup lands in a quiet, considered frame.', 'call_to_action': None,
+                'beats': [
+                    {'id':'b1','order':1,'name':'First light','story_function':'Introduce the ritual','content':'A hand reaches for the cup as early light crosses the counter, beginning a slower morning ritual.','emotion':'anticipation','visual_idea':'Steam rises against window light.','techniques':[],'planned_duration_ms':10000},
+                    {'id':'b2','order':2,'name':'The pour','story_function':'Make the process tangible','content':'Coffee blooms and darkens through the filter while the room remains quiet and the camera observes the changing texture.','emotion':'focus','visual_idea':'A close detail of the pour.','techniques':[],'planned_duration_ms':10000},
+                    {'id':'b3','order':3,'name':'The pause','story_function':'Land the benefit','content':'The drinker pauses with the finished cup and gives the morning a moment of attention before moving on.','emotion':'calm','visual_idea':'Hands settle around the cup.','techniques':[],'planned_duration_ms':10000},
+                ],
+                'emotional_progression':['anticipation','focus','calm'], 'beginning':'A hand reaches for the cup.',
+                'middle':'Coffee blooms through the filter.', 'ending':'The drinker pauses with the finished cup.',
+                'theme':None,'grammar':'original','variation':'original','dialogue_mode':None,
+                'dialogue_approach':None,'runtime_ms':30000,'producer':'model','assumptions':[],
+            }
+        elif request.operation == 'story_alternatives':
+            return GenerationResult(output={}, provider='test-director', model='test-model')
+        else:
+            return GenerationResult(output={}, provider='test-director', model='test-model')
+        return GenerationResult(output=output, provider='test-director', model='test-model')
+
+    async def transcribe(self, request):
+        raise AssertionError('Transcription is not expected in these tests.')
+
+
+def make_client(*, member: bool = True, revision: int = 1, references: list[dict] | None = None, provider: Any = None):
     """A platform mock that also records what TONDE actually persisted."""
     state: dict = {
         'production': {
@@ -178,7 +228,7 @@ def make_client(*, member: bool = True, revision: int = 1, references: list[dict
         app_env='test', supabase_url='https://test.supabase.co',
         supabase_publishable_key=SecretStr('sb_publishable_test'),
     )
-    return TestClient(create_app(settings, httpx.MockTransport(platform))), state
+    return TestClient(create_app(settings, httpx.MockTransport(platform), ai_provider=provider or StubDirectorProvider())), state
 
 
 def root(workspace: str = WORKSPACE) -> str:
@@ -262,11 +312,13 @@ def persist_bundle(state: dict, bundle: dict) -> None:
 
 
 def test_provider_status_is_honest_about_absence_and_ffmpeg():
+    from app.services.ai.provider import UnconfiguredDirectorProvider
     from app.services.media.frames import UnavailableFrameExtractor
 
-    client, _ = make_client()
+    client, _ = make_client(provider=UnconfiguredDirectorProvider())
     with client:
         client.app.state.frame_extractor = UnavailableFrameExtractor()
+
         response = client.get(f'{root()}/provider', headers=HEADERS)
     assert response.status_code == 200, response.text
     data = response.json()['data']
@@ -277,7 +329,9 @@ def test_provider_status_is_honest_about_absence_and_ffmpeg():
 
 
 def test_studio_surface_reports_the_five_prompt_4_canvases():
-    client, _ = make_client(references=[{
+    from app.services.ai.provider import UnconfiguredDirectorProvider
+
+    client, _ = make_client(provider=UnconfiguredDirectorProvider(), references=[{
         'id': REFERENCE, 'source_type': 'upload', 'source_url': None, 'source_description': 'Coffee reel',
         'media_id': None, 'rights_classification': 'user_owned', 'state': 'active', 'created_at': '2026-01-01T00:00:00Z',
     }])
@@ -325,7 +379,7 @@ def test_studio_script_surface_exposes_the_persisted_readable_documents_after_co
     assert documents['script']['content'].startswith(bundle['script']['title'])
 
 
-def test_plan_builds_a_complete_master_production_without_a_provider():
+def test_plan_builds_a_complete_master_production_with_the_test_provider():
     client, state = make_client()
     with client:
         response = client.post(f'{root()}/plan', headers=HEADERS, json={
@@ -335,7 +389,8 @@ def test_plan_builds_a_complete_master_production_without_a_provider():
         })
     assert response.status_code == 200, response.text
     data = response.json()['data']
-    assert data['producer'] == 'deterministic'
+    assert data['producer'] == 'model'
+    assert data['provider']['provider'] == 'test-director'
     assert data['intent']['primary_type'] == 'commercial'
     assert data['intent']['runtime_ms'] == 30000
     assert data['brief']['runtime']['exact_ms'] == 30000
@@ -347,9 +402,9 @@ def test_plan_builds_a_complete_master_production_without_a_provider():
     assert data['runtime_fit']['status'] == 'fits'
     assert data['questions'] and any(question['blocking'] for question in data['questions'])
     assert data['bundle']['production']['planned_duration_ms'] == 30000
-    # Both the intent interpretation and the plan are recorded with their envelopes.
+    # Intent, substantive Story generation, and the production plan are recorded with envelopes.
     kinds = [record['operation_type'] for record in state['operations']]
-    assert kinds == ['intent_interpretation', 'production_plan'], kinds
+    assert kinds == ['intent_interpretation', 'story_generation', 'production_plan'], kinds
     assert all(record['source_revision'] == 1 for record in state['operations'])
     assert all(record['idempotency_key'] for record in state['operations'])
 

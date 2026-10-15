@@ -30,7 +30,19 @@ chain. The range in the file name follows the newest migration, so the
 artifact is renamed rather than left stale when a migration is added. It is generated, never
 hand-edited:
 
-**Current artifact (Prompt 11): `202610050001_to_048_full_schema_idempotent.sql`.** Migrations 001–048 were rolled forward onto a fresh hosted project on 2026-10-10 (`supabase db push --linked`, exit 0): 036–043 (jobs, media, retention, knowledge, device/scene, discover, observability, AI Director), 044–045 (intent-bound and signed-upload authorization), 046 (storage limits), 047 (verified-media publishability), 048 (anon execute revoke). Ledger reads 001–048; catalog re-read from both sides reports 6651 / 6651 identities with 0 differences; advisors show 0 ERROR; hosted acceptance reads 694 PASS / 0 FAIL / 1 BLOCKED (real email/Google delivery, owner-deferred). The `_to_048` artifact verifies 3/3 on clean, populated and re-applied databases. `tonde` is exposed over the Data API while `tonde_private` stays unexposed. Per-package verify SQL for 036–048 is not yet written.
+**Current generated artifact (2026-10-14): [`202610050001_to_054_full_schema_idempotent.sql`](202610050001_to_054_full_schema_idempotent.sql).** It contains every source migration currently present through 054 (there is no 051 file), including the 053/054 Director idempotency repairs. It is a one-shot, state-tolerant full schema bundle, generated from ordered migrations—not a replacement for normal `supabase db push` and not a migration-ledger repair. The latest applied hosted target is still ambiguous: migration 054 was verified on ref `afwkjgcpvoqvuesyetez`, while a comment in `backend/.env` names `cryujrhdnvofexzceosr` as development. Do not use this bundle to guess which project is intended.
+
+Regenerate and check it with:
+
+```
+node scripts/build-idempotent-schema.mjs
+node scripts/build-idempotent-schema.mjs --check
+node --test tests/database/idempotent-schema.verify.mjs
+```
+
+For a PostgreSQL client, use `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/manual-apply/202610050001_to_054_full_schema_idempotent.sql`; this stops immediately at the first actual error rather than continuing after a failure. Alternatively paste the entire file into the Supabase SQL editor.
+
+This bundle applies against an empty, partly migrated, or complete schema and is verified against the ordered migrations. Existing compatible objects/data are preserved; same-name but incompatible definitions can still fail by design rather than being silently accepted. Stop and inspect any real SQL error before retrying. Manual SQL application does **not** update `supabase_migrations.schema_migrations`; the ledger block is commented out intentionally. A clean Supabase project should use the official migration CLI path, and a partial/unknown project must have its identity and state reviewed before choosing a rollout path.
 
 ```
 node scripts/build-idempotent-schema.mjs          # regenerate
@@ -57,6 +69,12 @@ Every statement in it is guarded, so a second run is a no-op instead of an `alre
 | catalog-driven loops in `DO` blocks | pinned to the tables that existed at that point |
 | seeds (`storage.buckets`, `tonde.ai_providers`) | `ON CONFLICT DO NOTHING` |
 
+`IF NOT EXISTS` prevents duplicate-object errors only; it does not prove an existing table,
+column, constraint, index, or policy has the intended definition. The bundle avoids masking such
+drift: incompatible operations can still fail and must be reviewed, not ignored. Do not wrap the
+whole file in a blanket exception handler or change the verification query to treat missing objects
+as success.
+
 Three constructs need more than a simple existence check, because they are not local to themselves.
 Migration 010 moves five membership/storage helpers from the exposed `tonde` schema into
 `tonde_private`; anything that creates one of those functions, creates a policy that calls one, or
@@ -73,9 +91,10 @@ cannot roll back an earlier migration. The file ends with a verification query; 
 `OK`.
 
 `tests/database/idempotent-schema.verify.mjs` runs the whole thing against a real embedded
-PostgreSQL and asserts that all of this is true: applied over a complete database, over the hosted
+PostgreSQL and asserts that all of this is true: applied over a complete database, over the historical
 001-014 state, and over an empty database it reaches exactly the object set every migration
-produces, and a second apply changes nothing:
+produces, and a second apply changes nothing. It checks that each source migration appears exactly
+once, in order, in the generated bundle:
 
 ```
 node scripts/build-idempotent-schema.mjs              # rebuild the artifact first

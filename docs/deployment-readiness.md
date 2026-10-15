@@ -82,6 +82,7 @@ Durable jobs are represented in Supabase, with leases/retries/history, but the c
 - Root `npm test`: PASS, 366 tests.
 - Root `npm run test:constitution`: PASS, 14 tests.
 - `npm run verify:legacy`: PASS; active runtime boundaries and vocabulary checks.
+- `npm run verify:links`: PASS; repo-wide link audit of 46 markdown files (239 document links, 3 heading anchors and 246 inline code paths named in backticks), the SPA route tables (`App.tsx` + the marketing route table), every `frontend/src` navigation target, `sitemap.xml` against the marketing routes, `robots.txt` disallows, the legacy marketing navigation intents and the package scripts — 0 broken links.
 - `node scripts/generate-database-types.mjs --check`: PASS (132 tables, 88 enums; generated artifacts unchanged).
 - Hosted catalog comparison command: BLOCKED, not PASS. The script's historical saved log showed 4,087/4,087 and zero differences at the earlier certified revision, but the current invocation failed because Supabase returned 403 for linked catalog queries. Do not use the historical report as proof for this current checkout.
 - Backend full pytest: PASS, 579 tests, 2 upstream Starlette/httpx deprecation warnings. `ruff check app tests`: PASS. `mypy app server.py vercel_app.py`: PASS, 114 files.

@@ -424,6 +424,40 @@ function stripSemicolon(s) {
 // Dynamic DDL (`execute format('...')`) inside DO blocks
 // ---------------------------------------------------------------------------
 
+function createdFunctionIdentity(statement) {
+  const { body } = splitLead(statement);
+  const match = /^create\s+(?:or\s+replace\s+)?function\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(/i.exec(body);
+  if (!match) return null;
+
+  const open = match[0].lastIndexOf('(');
+  let depth = 1;
+  let close = open + 1;
+  while (close < body.length && depth > 0) {
+    const skipped = skipToken(body, close, 'function declaration');
+    if (skipped !== -1) {
+      close = skipped;
+      continue;
+    }
+    if (body[close] === '(') depth++;
+    else if (body[close] === ')') depth--;
+    close++;
+  }
+  if (depth !== 0) throw new Error(`unterminated function declaration: ${normalize(body).slice(0, 120)}`);
+
+  const types = splitTopLevelCommas(body.slice(open + 1, close - 1)).flatMap((declaration) => {
+    let argument = declaration.trim();
+    if (!argument) return [];
+    argument = argument.replace(/\s+default\s+[\s\S]*$/i, '').replace(/\s*=\s*[\s\S]*$/, '').trim();
+    const mode = /^(inout|in|out|variadic)\s+/i.exec(argument);
+    const isOutput = mode?.[1].toLowerCase() === 'out';
+    if (mode) argument = argument.slice(mode[0].length).trim();
+    if (isOutput) return [];
+    const named = /^[A-Za-z_]\w*\s+([\s\S]+)$/.exec(argument);
+    return [named ? named[1].trim() : argument];
+  });
+  return `${match[1]}(${types.join(',')})`;
+}
+
 function splitTopLevelCommas(s) {
   const out = [];
   let depth = 0;
@@ -853,8 +887,17 @@ function transformBody(kind, body, ctx = {}) {
       // would silently widen the role's privileges, so it is expanded to the exact set
       // of tables that existed at this point in the migration order - which is the same
       // set it covered the first time round.
+      const normalized = normalize(body);
+      const functionWildcard = /^grant\s+execute\s+on\s+all\s+functions\s+in\s+schema\s+([A-Za-z_]\w*)\s+to\s+([\s\S]+)$/i.exec(normalized);
+      if (functionWildcard && ctx.functions) {
+        const [, schema, roles] = functionWildcard;
+        const list = ctx.functions.get(schema) || [];
+        if (!list.length) return `-- no functions existed in schema ${schema} at this migration point\n`;
+        return `grant execute on function ${list.join(', ')} to ${stripSemicolon(roles)};\n`;
+      }
+
       const wildcard = /^grant\s+([\s\S]+?)\s+on\s+all\s+tables\s+in\s+schema\s+([A-Za-z_]\w*)\s+to\s+([\s\S]+)$/i.exec(
-        normalize(body),
+        normalized,
       );
       if (wildcard && ctx.tables) {
         const [, privileges, schema, roles] = wildcard;
@@ -929,9 +972,10 @@ function build() {
     }
   }
 
-  // Tables that exist at each point in the migration order, so a wildcard grant can be
-  // pinned to the same set it covered when the migration was first applied.
+  // Objects that exist at each point in the migration order, so wildcard grants can be
+  // pinned to the same set they covered when the migration was first applied.
   const runningTables = new Map(); // schema -> ordered table names
+  const runningFunctions = new Map(); // schema -> ordered function identity signatures
   const finalConstraints = new Map();
   const constraintVersions = new Map();
   for (const migration of migrations) for (const statement of migration.statements) {
@@ -952,6 +996,7 @@ function build() {
         statements: m.statements,
         index,
         tables: runningTables,
+        functions: runningFunctions,
         finalConstraints,
       }).trimEnd();
       const created = /^create\s+table\s+(?:if\s+not\s+exists\s+)?([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)/i.exec(
@@ -962,6 +1007,18 @@ function build() {
         if (!runningTables.has(schema)) runningTables.set(schema, []);
         const list = runningTables.get(schema);
         if (!list.includes(table)) list.push(`${schema}.${table}`);
+      }
+      const functionIdentity = createdFunctionIdentity(st.text);
+      if (functionIdentity) {
+        const movedTo = MOVED_FUNCTIONS.get(functionIdentity.slice(0, functionIdentity.indexOf('(')));
+        const finalIdentity = movedTo
+          ? `${movedTo}.${functionIdentity.slice(functionIdentity.indexOf('.') + 1)}`
+          : functionIdentity;
+        const dot = finalIdentity.indexOf('.');
+        const schema = finalIdentity.slice(0, dot);
+        if (!runningFunctions.has(schema)) runningFunctions.set(schema, []);
+        const list = runningFunctions.get(schema);
+        if (!list.includes(finalIdentity)) list.push(finalIdentity);
       }
       return out;
     });
@@ -1069,9 +1126,14 @@ function build() {
     `-- regenerate with:  node scripts/build-idempotent-schema.mjs`,
     `--`,
     `-- This is the whole system in one file, written so that ONE run succeeds whether the`,
-    `-- target database is empty, partly migrated, or already complete. Every statement is`,
-    `-- state-tolerant:`,
+    `-- target database is empty, partly migrated, or already complete. Existing objects are`,
+    `-- skipped or reconciled only by the explicit guards below; an incompatible same-name`,
+    `-- object is NOT silently treated as success and may still produce a real SQL error.`,
+    `-- Every statement is state-tolerant:`,
     `--`,
+    `-- Each source migration begins its own transaction; this bundle retains that order.`,
+    `-- If any statement fails, stop and inspect that error before retrying; later migrations`,
+    `-- may not have run. This file does not edit the Supabase migration ledger.`,
     `--   * create schema / table / index   ->  IF NOT EXISTS`,
     `--   * create [or replace] function    ->  CREATE OR REPLACE FUNCTION`,
     `--   * create policy / trigger         ->  DROP ... IF EXISTS, then CREATE`,
@@ -1085,12 +1147,18 @@ function build() {
     `--   * alter function ... set schema   ->  skipped when the function already moved`,
     `--   * insert into seeded tables       ->  ON CONFLICT DO NOTHING`,
     `--`,
-    `-- Existing rows, and objects created by an earlier partial run, are never dropped or`,
-    `-- rewritten: the file only creates what is missing. Each migration keeps its own`,
-    `-- transaction, so a failure cannot roll back an earlier migration.`,
+    `-- IF NOT EXISTS skips duplicate-object errors but does not validate that an existing`,
+    `-- same-name object has the intended definition. Incompatible drift is allowed to fail`,
+    `-- loudly; do not blanket-catch SQL errors or mark missing verification rows OK.`,
     `--`,
-    `-- Run it with:  psql "$DATABASE_URL" -f <this file>`,
+    `-- Existing rows, and objects created by an earlier partial run, are preserved where`,
+    `-- statements are guarded. Each migration keeps its own transaction; if a statement`,
+    `-- fails, stop and inspect it before retrying: later migrations may not have run.`,
+    `--`,
+    `-- Run it with:  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f <this file>`,
     `-- or paste it into the Supabase Dashboard SQL editor.`,
+    `-- Manual application will not update Supabase's migration history; reconcile it only`,
+    `-- after verifying the actual schema, never just to silence a pending-migration list.`,
     `--`,
     `-- This file is deliberately byte-faithful to supabase/migrations/*.sql apart from the`,
     `-- added guards, so it inherits the two non-ASCII characters those files contain`,

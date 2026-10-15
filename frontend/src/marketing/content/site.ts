@@ -3,8 +3,9 @@
  *
  * Source: `tonde_unified_site.zip` from branch `Tornicles-patch-1`.
  * The four original designs are preserved byte-identical under
- * `frontend/public/marketing/originals/`; working embed copies live under
- * `frontend/public/marketing/legacy/`.
+ * `frontend/public/marketing/originals/`; the working embed copies that briefly
+ * lived under `frontend/public/marketing/legacy/` were replaced by the native
+ * runners in `frontend/src/marketing/native/runners/` (no iframes remain).
  *
  * ROUTING DECISIONS (app routes always win; see `frontend/src/App.tsx`):
  * - `/`                    marketing home (embed area1#home); app home stays `/home`

@@ -158,6 +158,12 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
         context = await repository.intelligence_context(workspace_id, production_id, request.state.access_token)
         provider = get_ai_provider(request)
         provider_info = provider_status(provider)
+        if not provider_info['configured']:
+            raise AppError(
+                'DIRECTOR_PROVIDER_UNAVAILABLE', 'provider',
+                'TONDE Director is unavailable. Production intelligence could not run; retry after Director configuration is restored. Your saved work is unchanged.',
+                503,
+            )
         intent = intent_from_context(context)
         if payload.goal and payload.goal.strip():
             known_context: dict[str, Any] = {
@@ -227,7 +233,7 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
             variation=payload.variation, include_optional_questions=payload.include_optional_questions,
         )
         story_outcome = None
-        if plan.bundle.story is not None and provider_info['configured']:
+        if plan.bundle.story is not None:
             story_envelope = OperationEnvelope(
                 workspace_id=workspace_id, production_id=production_id, scope_object_id=production_id,
                 operation_type='story_generation', scope=OperationScope.story,
@@ -239,6 +245,12 @@ def register_director_intelligence_routes(application: FastAPI, config: Settings
                 envelope=story_envelope, deterministic_story=plan.bundle.story, variation=payload.variation,
                 max_repair_attempts=config.director_max_repair_attempts,
             )
+            if story is None or story.producer != 'model':
+                raise AppError(
+                    'DIRECTOR_STORY_UNAVAILABLE', 'provider',
+                    'TONDE could not produce a validated, substantive Story. No plan was built or applied; retry after Director availability is restored.',
+                    503,
+                )
             if story is not None and story.producer == 'model':
                 plan = build_production_plan(
                     intent, analyses=analyses, setup=context['setup'], answered=engine_answers,

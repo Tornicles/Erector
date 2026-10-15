@@ -272,9 +272,8 @@ test('the floating Card opens into the same Card expanded and every focus stays 
   await expect(card.getByText('Open Shot 01 and shoot the establishing frame.')).toBeVisible();
   await page.screenshot({ path: 'test-results/cards/floating-card.png', fullPage: false });
 
-  // Visual acceptance, measured rather than eyeballed: the centred Card is the largest and is
-  // centred in the stage, its neighbour is visibly peeking beside it, and the floating Card does
-  // not lay out as a full production manual.
+  // Only the selected Card is present in the visible stage. Other Cards remain in the same
+  // horizontal track for swiping, but are clipped fully off-canvas rather than peeking.
   const geometry = await page.evaluate(() => {
     const stage = document.querySelector('.cs-carousel')!.getBoundingClientRect();
     const cards = [...document.querySelectorAll('.cs-hero')].map(node => {
@@ -290,19 +289,14 @@ test('the floating Card opens into the same Card expanded and every focus stays 
     });
     const centred = cards.find(item => item.name === 'Card 1: Dark kitchen')!;
     const neighbour = cards.find(item => item.name === 'Card 2: Weighing')!;
-    // The neighbour's visible sliver: inside the stage, outside the centred Card's own box.
-    const peek = Math.min(neighbour.rect.right, stage.right)
-      - Math.max(neighbour.rect.left, stage.left, centred.rect.right);
+    const neighbourVisible = neighbour.rect.right > stage.left + 1 && neighbour.rect.left < stage.right - 1;
     return { centredScale: centred.scale, neighbourScale: neighbour.scale,
       centredOffset: centred.centreOffset, neighbourOffset: neighbour.centreOffset,
-      peek, centredWords: centred.words, stageWidth: stage.width, cardWidth: centred.rect.width };
+      neighbourVisible, centredWords: centred.words, stageWidth: stage.width, cardWidth: centred.rect.width };
   });
-  expect(geometry.centredScale).toBeGreaterThan(geometry.neighbourScale);
-  expect(geometry.centredOffset).toBeLessThan(geometry.neighbourOffset);
-  // The centred Card is the focus: near the middle of the stage, larger, and the neighbouring Card
-  // peeks beside it without competing for focus.
-  expect(geometry.centredOffset).toBeLessThanOrEqual(geometry.cardWidth / 8);
-  expect(geometry.peek).toBeGreaterThan(24);
+  expect(geometry.centredScale).toBe(geometry.neighbourScale);
+  expect(geometry.centredOffset).toBeLessThanOrEqual(1);
+  expect(geometry.neighbourVisible).toBe(false);
   // The floating Card stays a Card, not a production manual.
   expect(geometry.centredWords).toBeGreaterThan(30);
   expect(geometry.centredWords).toBeLessThan(400);
@@ -330,6 +324,19 @@ test('the floating Card opens into the same Card expanded and every focus stays 
   // The full Card direction is one Card, one screen: no separate tool workspace.
   await expect(expanded.getByText("DIRECTOR'S DIRECTION")).toBeVisible();
   await page.screenshot({ path: 'test-results/cards/expanded-camera.png' });
+
+  // A left swipe advances exactly one Card; a right swipe returns to the original.
+  await page.mouse.move(480, 400);
+  await page.mouse.down();
+  await page.mouse.move(280, 400, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeHidden();
+  await page.mouse.move(280, 400);
+  await page.mouse.down();
+  await page.mouse.move(480, 400, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
 
   // Focusing a Shot expands exactly one Shot inside the same Card.
   await expanded.getByRole('button', { name: /01A · REAL/ }).click();

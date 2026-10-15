@@ -9,7 +9,7 @@ Implementation: `frontend/src/marketing/` (see `content/site.ts` for the full ro
 | Archive path | Repo path |
 |---|---|
 | `originals/*.html` (4 designs) | `frontend/public/marketing/originals/` |
-| `legacy/*.html` (working copies) | `frontend/public/marketing/legacy/` |
+| `legacy/*.html` (working copies) | *deleted in Prompt 2* — each area now renders from `frontend/src/marketing/native/runners/` |
 | `assets/favicon.svg` | `frontend/public/marketing/favicon.svg` |
 
 ## Original section → React route mapping

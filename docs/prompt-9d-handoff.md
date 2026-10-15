@@ -122,33 +122,33 @@ never appear as changes. Comparing versions of *different* objects is rejected.
 
 ## BACKEND HTTP SURFACE
 
-- [domain/versioning.py](backend/app/domain/versioning.py) — bounded request contracts with the
+- [domain/versioning.py](../backend/app/domain/versioning.py) — bounded request contracts with the
   canonical versioning vocabulary (`BRANCH_STATES`, branch scopes, propagation modes).
-- [services/versioning.py](backend/app/services/versioning.py) — `LAYER = 'Versioning'` and
+- [services/versioning.py](../backend/app/services/versioning.py) — `LAYER = 'Versioning'` and
   `VersionRepository`, calling every guarded RPC through `rpc_detailed(..., layer=LAYER)` and
   carrying the display vocabulary, conflict wording and limitation. It recomputes no version state.
-- [routers/production_versioning.py](backend/app/routers/production_versioning.py) — under
+- [routers/production_versioning.py](../backend/app/routers/production_versioning.py) — under
   `/api/v1/workspaces/{workspace_id}/productions/{production_id}/versions`: `GET /vocabulary`,
   `GET /` (history), `GET /compare`, `GET /branches`, `POST /branches`,
   `GET /branches/{branch_id}`, `POST /branches/{branch_id}/changes`,
   `POST /branches/{branch_id}/changes/{change_id}/clear`, `POST /branches/{branch_id}/state`,
   `POST /branches/{branch_id}/merge-preview`, `POST /merges/{proposal_id}/decide`,
-  `GET /{version_id}`, `POST /{version_id}/restore`. Registered in [main.py](backend/app/main.py).
+  `GET /{version_id}`, `POST /{version_id}/restore`. Registered in [main.py](../backend/app/main.py).
 - Error translation is the shared one: `42501` → 403, `40001`/`23514`/`23505` → 409,
   `22023`/`22001` → 422, `PGRST202`/`42883` → 503 `STUDIO_SCHEMA_MISSING` naming this layer.
 
 ## STUDIO SURFACE
 
-- [services/productionVersioning.ts](frontend/src/services/productionVersioning.ts) — the typed
+- [services/productionVersioning.ts](../frontend/src/services/productionVersioning.ts) — the typed
   client with `BRANCH_STATES`, `BRANCH_SCOPES` and `PROPAGATION_MODES`, so the browser cannot offer
   a scope or decision the API will not accept.
-- [studio/ProductionVersioning.tsx](frontend/src/studio/ProductionVersioning.tsx) — the `Versions`
+- [studio/ProductionVersioning.tsx](../frontend/src/studio/ProductionVersioning.tsx) — the `Versions`
   tool in Studio: the version timeline with source actions and current/pinned labels, the compare
   panel, "Restore this version" (creating a new revision), the branch list and detail with the
   branch change form, abandon/reopen, the merge preview with clean/conflicted changes and their
   impact, and the merge decision (accept selected clean changes or reject). Wired into
-  [StudioPage.tsx](frontend/src/pages/StudioPage.tsx) as a creative-group tool with the `GitCompare`
-  icon, and styled by `.ver*` rules in [index.css](frontend/src/index.css).
+  [StudioPage.tsx](../frontend/src/pages/StudioPage.tsx) as a creative-group tool with the `GitCompare`
+  icon, and styled by `.ver*` rules in [index.css](../frontend/src/index.css).
 - The surface refuses what the product refuses: a conflicted change cannot be selected for a merge,
   rejecting a merge changes nothing, and restore never claims to rewind history.
 
@@ -162,7 +162,7 @@ never appear as changes. Comparing versions of *different* objects is rejected.
   immutability trigger, the honest `capture_revision` action hook, all 4 indexes, all 12 RPCs, all
   9 private helpers, that those helpers are unreachable, and that each public RPC is granted to
   `authenticated`. Every row reads `OK` against a full 001→022 database. Steps 20–21 are in
-  [supabase/manual-apply/README.md](supabase/manual-apply/README.md).
+  [supabase/manual-apply/README.md](../supabase/manual-apply/README.md).
 - Hosted 018, 019, 020 and 021 remain unapplied as well: the packages `09_*`, `10_*`, `11_*`,
   `12_*` and `13_*` are queued in order. **Do not replay 009–021.**
 
@@ -185,7 +185,7 @@ never appear as changes. Comparing versions of *different* objects is rejected.
 
 The three new enums are mapped in `product/vocabulary.json` (`branchStates`,
 `branchChangeStates`, `mergeStates`) and wired into
-[scripts/generate-database-types.mjs](scripts/generate-database-types.mjs), which emits the
+[scripts/generate-database-types.mjs](../scripts/generate-database-types.mjs), which emits the
 generated TS aliases and Python `StrEnum`s for them. Stored codes remain the SQL enum labels, so
 display labels and storage codes cannot drift.
 

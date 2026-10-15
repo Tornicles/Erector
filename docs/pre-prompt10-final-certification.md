@@ -20,10 +20,11 @@ verification mail, password-reset mail or Google sign-in work.**
 
 **Certified revision.** Branch `main`, HEAD `b1499ae` (no commit, no push, no staging — shared working
 tree). The frozen manifest is
-[final-manifest.json](../test-results/pre-prompt10/final-manifest.json) and its digest is in
-[final-manifest.sha256](../test-results/pre-prompt10/final-manifest.sha256); the digest lives in that
-evidence file rather than being restated here so that editing this report cannot silently invalidate
-the value it quotes.
+`test-results/pre-prompt10/final-manifest.json` and its digest is in
+`test-results/pre-prompt10/final-manifest.sha256` (both are produced locally by the verification
+scripts and `test-results/` is gitignored, so the evidence files are named rather than linked); the
+digest lives in that evidence file rather than being restated here so that editing this report cannot
+silently invalidate the value it quotes.
 
 ## 1. Blocker A — the stale-approval HTTP hang: root cause and repair
 

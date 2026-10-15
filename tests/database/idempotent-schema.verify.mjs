@@ -240,9 +240,12 @@ test('ACL comparison tolerates ordering and only documented function PUBLIC narr
 
 test('idempotent single-file apply reaches the same schema as the migrations', async () => {
   const files = await migrationFiles();
-  assert.equal(files.length, COVERED_THROUGH, `the built file must cover all ${COVERED_THROUGH} migrations`);
-
   const idempotentSql = await readFile(IDEMPOTENT_FILE, 'utf8');
+  const bundledMigrations = [...idempotentSql.matchAll(/^-- (.*)$/gm)]
+    .map(([, section]) => section)
+    .filter((section) => /^\d{12}_.*\.sql$/.test(section) && files.includes(section));
+  assert.deepEqual(bundledMigrations, files,
+    `the built file must contain every source migration exactly once and in order through ${COVERED_THROUGH}`);
   let canonical;
 
   // Baseline: the canonical path, every migration applied in order.

@@ -90,20 +90,20 @@ direct dependents, and returns the rule verbatim: *impact is computed, never app
 
 ## BACKEND HTTP SURFACE
 
-- [domain/dependencies.py](backend/app/domain/dependencies.py) — bounded request contracts for
+- [domain/dependencies.py](../backend/app/domain/dependencies.py) — bounded request contracts for
   edges, edge activation, preview, apply, stale marking and resolution, with the canonical
   relation/strength/origin/mode/kind vocabularies. A malformed request is rejected by the
   application (422 `INVALID_INTELLIGENCE_INPUT`) rather than by the database.
-- [services/dependencies.py](backend/app/services/dependencies.py) — `LAYER =
+- [services/dependencies.py](../backend/app/services/dependencies.py) — `LAYER =
   'Production intelligence'` and `DependencyRepository`, which calls every guarded RPC through
   `rpc_detailed(..., layer=LAYER)`. It also carries the display vocabulary and deterministic
   summary lines; it recomputes no graph value.
-- [routers/production_intelligence.py](backend/app/routers/production_intelligence.py) — under
+- [routers/production_intelligence.py](../backend/app/routers/production_intelligence.py) — under
   `/api/v1/workspaces/{workspace_id}/productions/{production_id}/intelligence`:
   `GET /modes`, `POST /dependencies/sync`, `POST /dependencies`, `PATCH /dependencies/active`,
   `GET /dependencies`, `GET /graph`, `POST /impact/preview`, `GET /impact/history`,
   `POST /impact/apply`, `GET /stale`, `POST /stale`, `POST /stale/{artifact_id}/resolve`.
-  Registered in [main.py](backend/app/main.py).
+  Registered in [main.py](../backend/app/main.py).
 - **Preview and apply are different requests.** `POST /impact/apply` returns 409
   `IMPACT_CONFIRMATION_REQUIRED` when `confirm` is not set — and does not reach the database at
   all — and 422 `IMPACT_REVIEW_SELECTION_REQUIRED` when `REVIEW CHANGES` carries no selection.
@@ -114,10 +114,10 @@ direct dependents, and returns the rule verbatim: *impact is computed, never app
 
 ## STUDIO SURFACE
 
-- [services/productionIntelligence.ts](frontend/src/services/productionIntelligence.ts) — the
+- [services/productionIntelligence.ts](../frontend/src/services/productionIntelligence.ts) — the
   typed client, including `apply({ analysisId, mode, selectedIds, expectedRootRevision })`,
   which always sends `confirm: true` so an apply is never implicit.
-- [studio/ProductionIntelligence.tsx](frontend/src/studio/ProductionIntelligence.tsx) — the
+- [studio/ProductionIntelligence.tsx](../frontend/src/studio/ProductionIntelligence.tsx) — the
   `Impact` tool in Studio: a source picker (the selected Shot, the selected Scene, the
   Production, or a reusable Asset), a forward/reverse direction toggle, 1–4 level depth, sync,
   preview, the recorded graph and stored relationships, the three propagation choices with
@@ -156,7 +156,7 @@ direct dependents, and returns the rule verbatim: *impact is computed, never app
 
 The six new enums are mapped in `product/vocabulary.json`
 (`dependencyStrengths`, `dependencyOrigins`, `impactClasses`, `impactModes`, `artifactKinds`,
-`staleStates`) and wired into [scripts/generate-database-types.mjs](scripts/generate-database-types.mjs),
+`staleStates`) and wired into [scripts/generate-database-types.mjs](../scripts/generate-database-types.mjs),
 which now emits generated TS type aliases (`DependencyStrength`, `DependencyOrigin`,
 `ImpactClass`, `ImpactMode`, `ArtifactKind`, `StaleState`) and Python `StrEnum` classes. The
 stored codes remain the SQL enum labels, so display labels and storage codes cannot drift.

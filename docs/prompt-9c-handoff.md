@@ -132,35 +132,35 @@ currently in force, so what TONDE is reusing is visible rather than implied.
 
 ## BACKEND HTTP SURFACE
 
-- [domain/memory.py](backend/app/domain/memory.py) — bounded request contracts with the canonical
+- [domain/memory.py](../backend/app/domain/memory.py) — bounded request contracts with the canonical
   memory vocabulary. `MemoryItemRequest`'s validator rejects an inference that claims creator
   authority or carries no basis, so a product rule is a clean 422 before the database sees it.
-- [services/memory.py](backend/app/services/memory.py) — `LAYER = 'Production memory'` and
+- [services/memory.py](../backend/app/services/memory.py) — `LAYER = 'Production memory'` and
   `MemoryRepository`, calling every guarded RPC through `rpc_detailed(..., layer=LAYER)` and
   carrying the display vocabulary, the authority rule and the limitation. It recomputes no
   authority value.
-- [routers/production_memory.py](backend/app/routers/production_memory.py) — under
+- [routers/production_memory.py](../backend/app/routers/production_memory.py) — under
   `/api/v1/workspaces/{workspace_id}/productions/{production_id}/memory`: `GET /vocabulary`,
   `GET /summary`, `GET /items`, `POST /items`, `POST /items/{item_id}/retire`, `GET /resolve`,
   `GET /policies`, `PUT /policies`, `GET /candidates`, `POST /candidates`,
   `POST /candidates/{candidate_id}/decide`, `GET /search`. Registered in
-  [main.py](backend/app/main.py).
+  [main.py](../backend/app/main.py).
 - Error translation is the shared one: `42501` → 403, `40001`/`23514`/`23505` → 409,
   `22023`/`22001` → 422, `PGRST202`/`42883` → 503 `STUDIO_SCHEMA_MISSING` naming this layer.
 
 ## STUDIO SURFACE
 
-- [services/productionMemory.ts](frontend/src/services/productionMemory.ts) — the typed client
+- [services/productionMemory.ts](../frontend/src/services/productionMemory.ts) — the typed client
   with `SEARCH_KINDS`, `WRITABLE_ORIGINS` and `CANDIDATE_SOURCES`, so the browser cannot offer an
   origin the API will not accept or ask for a facet the API does not support.
-- [studio/ProductionMemory.tsx](frontend/src/studio/ProductionMemory.tsx) — the `Memory` tool in
+- [studio/ProductionMemory.tsx](../frontend/src/studio/ProductionMemory.tsx) — the `Memory` tool in
   Studio: the recorded summary, the authority tier list as a visible ruleset, the remember form
   (scope, kind, subject, source, origin, drawn-from object, statement and — for an inference — the
   basis), the item table with in-force/outranked labels and the source-change line, "Why TONDE is
   using this" resolver, the policy controls, candidate accept/dismiss, and the structured search
-  fieldset with result list. Wired into [StudioPage.tsx](frontend/src/pages/StudioPage.tsx) as a
+  fieldset with result list. Wired into [StudioPage.tsx](../frontend/src/pages/StudioPage.tsx) as a
   creative-group tool with the `Library` icon, and styled by `.mem*` rules in
-  [index.css](frontend/src/index.css).
+  [index.css](../frontend/src/index.css).
 - The surface refuses what the product refuses: a submission with no subject or statement is
   blocked, an inference without a basis cannot be submitted, and there is no `Approve` control —
   accepting a candidate is knowledge, not an approval.
@@ -196,7 +196,7 @@ currently in force, so what TONDE is reusing is visible rather than implied.
 
 The four new enums are mapped in `product/vocabulary.json` (`memoryScopes`, `memoryKinds`,
 `memorySources`, `memoryOrigins`) and wired into
-[scripts/generate-database-types.mjs](scripts/generate-database-types.mjs), which now emits the
+[scripts/generate-database-types.mjs](../scripts/generate-database-types.mjs), which now emits the
 generated TS aliases and Python `StrEnum`s for them. Stored codes remain the SQL enum labels, so
 display labels and storage codes cannot drift.
 

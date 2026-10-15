@@ -110,6 +110,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   const [impactOffer, setImpactOffer] = useState<{ sceneId: string; label: string } | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const persisted = useRef(initial);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const selectedSceneId = params.get('scene');
   const selectedShotId = params.get('shot');
@@ -424,6 +425,11 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
     }
   };
 
+  const cardIndex = Math.max(0, scenes.findIndex(scene => scene.id === focusScene?.id));
+  const focusAdjacentCard = (delta: -1 | 1) => {
+    const next = scenes[Math.min(Math.max(cardIndex + delta, 0), scenes.length - 1)];
+    if (next && next.id !== focusScene?.id) setUrl({ scene: next.id, shot: null });
+  };
   const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
   const directorFace = face === 'hybrid' ? 'Hybrid' : PRODUCT.executionFaces[face as ExecutionFace];
   const reviewCount = model?.status_summary.needs_attention ?? 0;
@@ -478,7 +484,21 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       <button type="button" className="cs-btn" onClick={() => setImpactOffer(null)}>Keep it</button></p>}
 
     <div className="cs-workspace">
-      <section className="cs-stage" aria-label="Production sequence">
+      <section className="cs-stage" aria-label="Production sequence" tabIndex={0}
+        onTouchStart={event => { const touch = event.touches[0]; touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null; }}
+        onTouchEnd={event => {
+          const start = touchStart.current; const touch = event.changedTouches[0]; touchStart.current = null;
+          if (!start || !touch) return;
+          const dx = touch.clientX - start.x; const dy = touch.clientY - start.y;
+          if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy)) focusAdjacentCard(dx < 0 ? 1 : -1);
+        }}
+        onKeyDown={event => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          const target = event.target as HTMLElement;
+          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+            || target.isContentEditable || target.closest('[role="textbox"]')) return;
+          event.preventDefault(); focusAdjacentCard(event.key === 'ArrowRight' ? 1 : -1);
+        }}>
         <div className="cs-stage-head">
           <div>
             <p className="eyebrow">PRODUCTION SEQUENCE</p>

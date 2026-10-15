@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { useModalFocus } from '../hooks/useModalFocus';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowUpRight, Plus, Clapperboard, Search, Upload, X, ArchiveRestore, Archive } from 'lucide-react';
 import type { Database } from '../types/database';
 import type { Row } from '../types/domain';
@@ -26,7 +26,15 @@ type IntakeOrigin = { source_type: Database['tonde']['Enums']['reference_source'
 export function HomePage() {
   const { workspaceId } = useAuth();
   const navigate = useNavigate();
-  const [intent, setIntent] = useState(() => { try { const context=JSON.parse(localStorage.getItem('tonde:intake-context')||'null') as {description?:string}|null; return context?.description ?? ''; } catch { return ''; } });
+  const location = useLocation();
+  const [intent, setIntent] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const linkedIdea = params.get('idea');
+    if (linkedIdea) return linkedIdea;
+    try { const context=JSON.parse(localStorage.getItem('tonde:intake-context')||'null') as {description?:string}|null; return context?.description ?? ''; }
+    catch { return ''; }
+  });
+  const templateLaunch = useRef<Promise<{ productionId: string; response: DirectorPlanResponse; goal: string; answers: Record<string, string> } | null> | null>(null);
   const [url, setUrl] = useState('');
   const [source, setSource] = useState<'describe' | 'upload' | 'url' | 'import' | 'record'>('describe');
   const [attachments, setAttachments] = useState<IntakeAttachment[]>([]);
@@ -37,12 +45,14 @@ export function HomePage() {
   const [workError, setWorkError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [createdProductionId, setCreatedProductionId] = useState<string | null>(null);
+  const launchProductionId = useMemo(() => new URLSearchParams(location.search).get('intake'), [location.search]);
   const [plan, setPlan] = useState<DirectorPlanResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [collaboration, setCollaboration] = useState<DirectorCollaborationMode>('stop_at_major_decisions');
   const [planBusy, setPlanBusy] = useState(false);
   const [commitBusy, setCommitBusy] = useState(false);
   const [planError, setPlanError] = useState<string|null>(null);
+  const intakeStorageKey = workspaceId ? `tonde:director-plan:${workspaceId}` : null;
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState<string | null>(null);
@@ -50,6 +60,20 @@ export function HomePage() {
   const [details, setDetails] = useState<Record<string, StudioReadModel>>({});
   const readyToDirect = intent.trim().length > 0 || attachments.some(item => item.state === 'uploaded') || isReferenceUrl(url);
   const intakeLocked = !!createdProductionId;
+  const startNewIntake = () => {
+    pendingIntake.current = null;
+    setCreatedProductionId(null);
+    setPlan(null);
+    setAnswers({});
+    setPlanError(null);
+    setError(null);
+    setIntent('');
+    setUrl('');
+    setAttachments([]);
+    setSource('describe');
+    if (intakeStorageKey) localStorage.removeItem(intakeStorageKey);
+    localStorage.removeItem('tonde:intake-context');
+  };
   useEffect(() => {
     if (!workspaceId) { setWork([]); setWorkError(null); setWorkLoading(false); return; }
     let active = true;
@@ -69,12 +93,64 @@ export function HomePage() {
     if (intakeLocked) return;
     const timer = window.setTimeout(() => {
       try {
-        if (intent.trim()) localStorage.setItem('tonde:intake-context', JSON.stringify({ description: intent }));
-        else localStorage.removeItem('tonde:intake-context');
+        if (intent.trim()) {
+          const existing = JSON.parse(localStorage.getItem('tonde:intake-context') || 'null') as Record<string, unknown> | null;
+          const carriesTemplate = Boolean(new URLSearchParams(location.search).get('direct') === '1' && existing?.template);
+          localStorage.setItem('tonde:intake-context', JSON.stringify({
+            ...(carriesTemplate ? existing : {}), description: intent,
+          }));
+        } else if (!new URLSearchParams(location.search).get('direct')) localStorage.removeItem('tonde:intake-context');
       } catch { /* storage unavailable — intake simply won't resume */ }
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [intent, intakeLocked]);
+  }, [intent, intakeLocked, location.search]);
+  useEffect(() => {
+    if (launchProductionId || new URLSearchParams(location.search).get('direct') !== '1' || !intent.trim() || !workspaceId) return;
+    let active = true;
+    let context: { template?: { title?: string; defaults?: Record<string, string>; questions?: Record<string, string>; productionType?: Database['tonde']['Enums']['production_type'] } } | null = null;
+    try { context = JSON.parse(localStorage.getItem('tonde:intake-context') || 'null'); }
+    catch { setPlanError('The saved template context could not be read. Nothing was created; retry from Discover.'); return; }
+    if (!context?.template) return;
+    setPlanBusy(true); setPlanError(null);
+    if (!templateLaunch.current) {
+      const template = context.template;
+      const goal = intent.trim();
+      const seededAnswers = template.defaults ?? {};
+      templateLaunch.current = (async () => {
+        const productionId = await productionService.create(workspaceId, template.title || goal.slice(0, 160) || 'Untitled Production', template.productionType);
+        pendingIntake.current = { productionId, references: [{
+          source_type: 'description', source_description: goal,
+          provenance: { origin: 'discover', reference_kind: 'production_template', template_name: template.title || 'Production template' },
+        }], nextReference: 0 };
+        localStorage.setItem(`tonde:intake-launch:${workspaceId}:${productionId}`, 'pending');
+        await productionService.addReference(workspaceId, productionId, {
+          source_type: 'description', source_description: goal,
+          provenance: { origin: 'discover', reference_kind: 'production_template', template_name: template.title || 'Production template' },
+        });
+        pendingIntake.current.nextReference = 1;
+        if (Object.keys(seededAnswers).length > 0) {
+          await productionService.recordDirectorDecisions(workspaceId, productionId, seededAnswers, 'intake', template.questions ?? {});
+        }
+        const response = await productionService.directorPlan(workspaceId, productionId, {
+          goal, collaboration_mode: collaboration, answered_decisions: seededAnswers, include_optional_questions: true,
+        });
+        return { productionId, response, goal, answers: seededAnswers };
+      })().catch(failure => {
+        templateLaunch.current = null;
+        throw failure;
+      });
+    }
+    void templateLaunch.current.then(result => {
+      if (!active || !result) return;
+      setPlan(result.response); setAnswers(result.answers); setCreatedProductionId(result.productionId);
+      if (intakeStorageKey) localStorage.setItem(intakeStorageKey, JSON.stringify({
+        productionId: result.productionId, goal: result.goal, collaboration, answers: result.answers,
+      }));
+    }).catch(failure => {
+      if (active) setPlanError(`Template intake could not start: ${safeError(failure).message}`);
+    }).finally(() => { if (active) setPlanBusy(false); });
+    return () => { active = false; };
+  }, [workspaceId, launchProductionId, location.search, intent, collaboration, intakeStorageKey]);
   const addFiles = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
     if (!workspaceId) { setError('Your workspace is not ready. Retry after signing in again.'); return; }
@@ -102,7 +178,6 @@ export function HomePage() {
     }
   };
   const pendingIntake = useRef<{ productionId: string; references: IntakeOrigin[]; nextReference: number } | null>(null);
-  const intakeStorageKey = workspaceId ? `tonde:director-plan:${workspaceId}` : null;
   const runPlan = async (targetId: string, mode: DirectorCollaborationMode, nextAnswers: Record<string,string>, goalOverride?: string) => {
     if (!workspaceId) return null;
     const goal = (goalOverride ?? intent).trim() || plan?.intent.goal || '';
@@ -114,6 +189,41 @@ export function HomePage() {
     if (intakeStorageKey) localStorage.setItem(intakeStorageKey, JSON.stringify({ productionId: targetId, goal, collaboration: mode, answers: nextAnswers }));
     return response;
   };
+  useEffect(() => {
+    if (!workspaceId || !launchProductionId || new URLSearchParams(location.search).get('direct') === '1') return;
+    let active = true;
+    const launch = async () => {
+      const key = `tonde:intake-launch:${workspaceId}:${launchProductionId}`;
+      const pending = localStorage.getItem(key) === 'pending';
+      if (!pending) return;
+      try {
+        const production = await productionService.get(workspaceId, launchProductionId);
+        if (!active) return;
+        const intakeContext = JSON.parse(localStorage.getItem('tonde:intake-context') || 'null') as { description?: string; template?: { title?: string; defaults?: Record<string, string>; questions?: Record<string, string>; productionType?: Database['tonde']['Enums']['production_type'] } } | null;
+        const goal = new URLSearchParams(location.search).get('idea')?.trim() || intakeContext?.description?.trim() || production.title;
+        setIntent(goal);
+        setCreatedProductionId(launchProductionId);
+        setPlanBusy(true);
+        localStorage.removeItem(key);
+        const seededAnswers = intakeContext?.template?.defaults ?? {};
+        const response = await productionService.directorPlan(workspaceId, launchProductionId, {
+          goal, collaboration_mode: collaboration,
+          answered_decisions: seededAnswers, include_optional_questions: true,
+        });
+        if (active) {
+          setPlan(response); setAnswers(seededAnswers);
+          if (intakeStorageKey) localStorage.setItem(intakeStorageKey, JSON.stringify({
+            productionId: launchProductionId, goal, collaboration, answers: seededAnswers,
+          }));
+        }
+      } catch (failure) {
+        if (active) setPlanError(safeError(failure).message);
+      } finally { if (active) setPlanBusy(false); }
+    };
+    void launch();
+    return () => { active = false; };
+  }, [workspaceId, launchProductionId, intakeStorageKey, location.search]);
+
   useEffect(() => {
     if (!workspaceId || !intakeStorageKey) return;
     let active = true;
@@ -149,10 +259,11 @@ export function HomePage() {
       let pending = pendingIntake.current;
       if (!pending) {
         const productionId = createdProductionId ?? await productionService.create(workspaceId, intent.trim().slice(0,160)||'Untitled Production');
+        const context = intakeContext();
         pending = { productionId, references: [
           ...(isReferenceUrl(url)?[{source_type:'url' as const,source_url:url.trim()}]:[]),
           ...(intent.trim()?[{source_type:'description' as const,source_description:intent.trim(),...(intakeProvenance()?{provenance:intakeProvenance()!}:{})}]:[]),
-        ], nextReference: 0 };
+        ], nextReference: context?.template ? 1 : 0 };
         pendingIntake.current = pending;
         setCreatedProductionId(productionId);
       }
@@ -335,7 +446,8 @@ export function HomePage() {
           </div>
           <HomeStartBox intent={intent} onChange={setIntent} onSubmit={beginDirector}
             disabled={!workspaceId || intakeLocked} readyToSubmit={readyToDirect && attachments.every(item => item.state === 'uploaded')} busy={planBusy} source={source}
-            onSource={value => { setSource(value); if (value === 'upload') inputRef.current?.click(); }}>
+            onSource={value => { setSource(value); if (value === 'upload') inputRef.current?.click(); }}
+            onStartNew={createdProductionId && (plan || planError) ? startNewIntake : undefined}>
             <div className="hl-intake-secondary">
               <div className="home-examples" aria-label="Example intakes">{['Plan my wedding shoot', 'Make a story from this song', 'I want something inspired by this movie'].map(example => <button key={example} type="button" onClick={() => setIntent(example)}>“{example}”</button>)}</div>
               {source === 'url' && <label className="intake-secondary">Reference URL<input aria-label="Reference URL" inputMode="url" type="url" placeholder="Paste a supported reference link" value={url} onChange={event => setUrl(event.target.value)} disabled={intakeLocked} />{url && <small className="subtle">{referenceProvider(url)} · Access and media analysis are not verified.</small>}</label>}
@@ -440,7 +552,11 @@ export function ProjectsPage({ studio = false }: { studio?: boolean }) {
   const create = (event: FormEvent) => {
     event.preventDefault(); if (!workspaceId || !title.trim()) return;
     setBusy(true); setError(null);
-    productionService.create(workspaceId, title).then(id => navigate(`/studio/${id}`)).catch(e => setError(safeError(e).message)).finally(() => setBusy(false));
+    productionService.create(workspaceId, title).then(id => {
+      localStorage.setItem('tonde:intake-context', JSON.stringify({ description: title.trim(), origin: studio ? 'studio_launcher' : 'projects' }));
+      localStorage.setItem(`tonde:intake-launch:${workspaceId}:${id}`, 'pending');
+      navigate(`/home?intake=${encodeURIComponent(id)}`);
+    }).catch(e => setError(safeError(e).message)).finally(() => setBusy(false));
   };
   const selected = workspaceId ? localStorage.getItem(`tonde:${workspaceId}:production`) : null;
   const filterOptions: Array<[ProjectFilter, string]> = [['all','All'],['draft','Draft'],['review','Needs Review'],['approved','Approved'],['changed','Changed After Approval'],['archived','Archived']];
@@ -450,7 +566,14 @@ export function ProjectsPage({ studio = false }: { studio?: boolean }) {
   const gallery = featured ? items.filter(item => item.id !== featured.id) : items;
   return <div className="page"><header className="projects-v3-head"><div><p className="eyebrow">{studio ? 'THE PRODUCTION WORKSPACE' : 'PROJECTS'}</p><h1>{studio ? 'Open a production.' : 'Your productions,\nat a glance.'}</h1><p className="lead">{studio ? 'Choose a Production. Open directly into the Studio.' : 'A visual library of the work you are actually making. Open a Production to continue directing it in Studio.'}</p></div>{!studio && <button className="primary-btn projects-create" onClick={() => navigate('/home')}>＋ New Production</button>}</header>
     {!studio && <div className="projects-toolbar" role="search"><div className="projects-search"><Search size={15} aria-hidden="true" /><input aria-label="Search productions" value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Search productions, clients, stories…" /></div>{filterOptions.map(([value,label]) => <button key={value} type="button" className={`filter-pill${filter === value ? ' active' : ''}`} aria-pressed={filter === value} onClick={() => { setFilter(value); setPage(0); }}>{label}</button>)}</div>}
-    <form className="inline-form" onSubmit={create}><label>{studio ? 'Production title' : 'Start a production'}<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} required placeholder="What are you making?" disabled={!workspaceId} /></label><button className="primary" disabled={!workspaceId || busy || !title.trim()} title={!workspaceId ? 'Connect a Supabase workspace to create a Production' : undefined}><Plus size={16} />{busy ? 'Creating…' : 'DIRECT THIS'}</button></form>{!workspaceId && <p className="subtle" role="status">Local preview only — connect a Supabase workspace to create and manage Productions.</p>}
+    <form className="inline-form" onSubmit={event => {
+      if (!studio) { create(event); return; }
+      event.preventDefault();
+      const idea = title.trim();
+      if (!idea) return;
+      localStorage.setItem('tonde:intake-context', JSON.stringify({ description: idea, origin: 'studio_launcher' }));
+      navigate(`/home?idea=${encodeURIComponent(idea)}`);
+    }}><label>{studio ? 'What are you making?' : 'Start a production'}<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} required placeholder="What are you making?" disabled={!workspaceId} /></label><button className="primary" disabled={!workspaceId || busy || !title.trim()} title={!workspaceId ? 'Connect a Supabase workspace to create a Production' : undefined}><Plus size={16} />{busy ? 'Creating…' : 'DIRECT THIS'}</button></form>{!workspaceId && <p className="subtle" role="status">Local preview only — connect a Supabase workspace to create and manage Productions.</p>}
     {studio && selected && <Link className="text-link" to={`/studio/${selected}`}>Continue selected production <ArrowUpRight size={15} /></Link>}
     {!studio && <p className="subtle">Rename, archive and restore are available. Duplicate and permanent delete are not offered; production history is retained.</p>}
     {!workspaceId && <EmptyState title="Connect a workspace to browse Productions">Supabase is not configured for this preview. Production data stays unavailable rather than being simulated.</EmptyState>}
@@ -525,11 +648,14 @@ function orderWork(items: Production[]) {
 function isReferenceUrl(value:string) {
   try { const parsed=new URL(value.trim());return (parsed.protocol==='https:'||parsed.protocol==='http:')&&!!parsed.hostname; } catch { return false; }
 }
+function intakeContext(): { origin?: string; technique?: string; template?: { title?: string; defaults?: Record<string, string>; questions?: Record<string, string>; productionType?: Database['tonde']['Enums']['production_type'] } } | null {
+  try { return JSON.parse(localStorage.getItem('tonde:intake-context') || 'null'); }
+  catch { return null; }
+}
 function intakeProvenance(): Row<'production_references'>['provenance'] | null {
-  try {
-    const context = JSON.parse(localStorage.getItem('tonde:intake-context') || 'null') as { origin?: string; technique?: string } | null;
-    return context?.technique ? { origin: context.origin ?? 'discover', reference_kind: 'production_technique', technique_name: context.technique } : null;
-  } catch { return null; }
+  const context = intakeContext();
+  if (context?.template) return { origin: context.origin ?? 'discover', reference_kind: 'production_template', template_name: context.template.title ?? 'Production template', defaults: context.template.defaults ?? {} };
+  return context?.technique ? { origin: context.origin ?? 'discover', reference_kind: 'production_technique', technique_name: context.technique } : null;
 }
 export function DiscoverPage() {
   const { workspaceId } = useAuth(); const navigate = useNavigate();
@@ -546,7 +672,7 @@ export function DiscoverPage() {
   const filteredTechniques=techniques.filter(item=>`${item.name} ${item.purpose} ${item.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const [savedIds,setSavedIds]=useState<string[]>(()=>readSavedTechniques());
   const save=(name:string)=>{const next=savedIds.includes(name)?savedIds.filter(item=>item!==name):[...savedIds,name];setSavedIds(next);localStorage.setItem('tonde:saved-discover',JSON.stringify(next));setError(null);};
-  const startWith=(description:string,technique?:string)=>{localStorage.setItem('tonde:intake-context',JSON.stringify({description,origin:'discover',technique}));navigate('/home');};
+  const startWith=(description:string,technique?:string)=>{localStorage.setItem('tonde:intake-context',JSON.stringify({description,origin:'discover',technique}));navigate(`/home?idea=${encodeURIComponent(description)}`);};
   const [labInput, setLabInput] = useState('');
   return <div className="page"><section className="discover-hero-v5">
       <div className="discover-copy">

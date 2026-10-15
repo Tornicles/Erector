@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { IntakeAnalysisState, IntakeDecision } from '../services/productions';
 
 /** Normalize the two server shapes: client payloads (`id`) and raw analysis
@@ -62,9 +62,10 @@ function KnownStrip({ analysis }: { analysis: IntakeAnalysisState }) {
   </div>;
 }
 
-function QuestionCard({ decision, index, total, busy, onAnswer }: {
+function QuestionCard({ decision, index, total, busy, onAnswer, autoAdvanceKey, onAutoAdvance }: {
   decision: IntakeDecision; index: number; total: number; busy: boolean;
   onAnswer: (id: string, value: string) => void;
+  autoAdvanceKey: number; onAutoAdvance: (decisionId: string, value: string) => void;
 }) {
   const [selected, setSelected] = useState<string[]>(() => {
     if (!decision.answer || decision.state === 'open') return [];
@@ -72,12 +73,18 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
   });
   const [recommendOpen, setRecommendOpen] = useState(false);
   const [freeText, setFreeText] = useState('');
+  const [selectedAt, setSelectedAt] = useState(0);
+  const [tondeDecision, setTondeDecision] = useState(false);
+  const [tondeAnswer, setTondeAnswer] = useState<string | null>(null);
   useEffect(() => {
     setSelected(!decision.answer || decision.state === 'open'
       ? []
       : decision.options.filter(option => decision.answer?.includes(option.label)).map(option => option.id));
     setRecommendOpen(false);
     setFreeText('');
+    setSelectedAt(0);
+    setTondeDecision(false);
+    setTondeAnswer(null);
   }, [decision.id, decision.answer, decision.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const multi = decision.answer_mode === 'multi_select';
   const toggle = (id: string) => {
@@ -87,6 +94,13 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
   };
   const labels = useMemo(() => decision.options
     .filter(option => selected.includes(option.id)).map(option => option.label), [decision.options, selected]);
+  useEffect(() => {
+    if ((!selectedAt && !tondeDecision) || busy || (!tondeDecision && multi)) return;
+    const value = tondeDecision ? tondeAnswer : labels.join(' + ');
+    if (!value) return;
+    const timer = window.setTimeout(() => onAutoAdvance(decision.id, value), tondeDecision ? 760 : 320);
+    return () => window.clearTimeout(timer);
+  }, [selectedAt, labels, multi, busy, tondeDecision, tondeAnswer, onAutoAdvance, decision.id, autoAdvanceKey]);
   const canContinue = labels.length > 0 || freeText.trim().length > 0;
   const submitLabels = () => {
     if (freeText.trim()) onAnswer(decision.id, freeText.trim());
@@ -97,8 +111,12 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
       .map(wanted => decision.options.find(option => option.id === wanted || option.label === wanted)?.id)
       .filter((id): id is string => Boolean(id));
     if (ids.length > 0) {
-      setSelected(multi ? ids : ids.slice(0, 1));
+      const recommendation = multi ? ids : ids.slice(0, 1);
+      setSelected(recommendation);
       setFreeText('');
+      // A recommended single answer follows the same visible confirmation +
+      // automatic advance as a directly selected single-choice option.
+      if (!multi) setSelectedAt(value => value + 1);
     }
   };
   return <article className="in-question" aria-label={`Decision ${index + 1} of ${total}`}>
@@ -112,7 +130,10 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
       {decision.options.map((option, position) => {
         const active = selected.includes(option.id);
         return <button key={option.id} type="button" className={`in-choice${active ? ' selected' : ''}`}
-          aria-pressed={active} disabled={busy} onClick={() => toggle(option.id)}>
+          aria-pressed={active} disabled={busy} onClick={() => {
+            toggle(option.id);
+            if (!multi) { setSelectedAt(value => value + 1); setTondeDecision(false); }
+          }}>
           <span className="in-num" aria-hidden="true">{String(position + 1).padStart(2, '0')}</span>
           <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
           <span className="in-check" aria-hidden="true">✓</span>
@@ -120,14 +141,24 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
       })}
     </div>}
     <div className="in-decision-actions">
-      {decision.allow_tonde_decides && <button type="button" className="in-btn" disabled={busy}
-        onClick={() => onAnswer(decision.id, 'TONDE decides')}>✦ TONDE DECIDE</button>}
+      {decision.allow_tonde_decides && <button type="button" className="in-btn" disabled={busy || tondeDecision}
+        onClick={() => {
+          const ids = decision.recommendation.option_ids
+            .map(wanted => decision.options.find(option => option.id === wanted || option.label === wanted)?.id)
+            .filter((id): id is string => Boolean(id));
+          const recommendation = multi ? ids : ids.slice(0, 1);
+          const labels = decision.options.filter(option => recommendation.includes(option.id)).map(option => option.label);
+          setTondeDecision(true);
+          setSelected(recommendation);
+          setTondeAnswer(labels.join(' + ') || 'TONDE decides');
+          setRecommendOpen(true);
+        }}>✦ TONDE DECIDE</button>}
       {decision.recommendation.option_ids.length > 0 && <button type="button" className="in-ghost" disabled={busy}
         onClick={() => setRecommendOpen(open => !open)} aria-expanded={recommendOpen}>
         What do you recommend?</button>}
     </div>
     {recommendOpen && decision.recommendation.option_ids.length > 0 && <div className="in-recommend" role="status">
-      <div><strong>TONDE recommends: {decision.recommendation.option_ids.map(id =>
+      <div><strong>{tondeDecision ? 'TONDE chose: ' : 'TONDE recommends: '}{decision.recommendation.option_ids.map(id =>
         decision.options.find(option => option.id === id)?.label ?? id).join(' + ')}</strong>
         <p>{decision.recommendation.reason}</p></div>
       <button type="button" className="hm-primary" disabled={busy} onClick={useRecommendation}>USE THIS</button>
@@ -138,9 +169,8 @@ function QuestionCard({ decision, index, total, busy, onAnswer }: {
         onChange={event => setFreeText(event.target.value)}
         placeholder="Something else? Answer naturally…"
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (canContinue && !busy) submitLabels(); } }} />
-      <button type="button" className="in-btn" disabled={busy || !canContinue} onClick={submitLabels}>
-        {freeText.trim() ? 'Use answer' : 'Continue →'}
-      </button>
+      {(freeText.trim() || multi) && <button type="button" className="in-btn" disabled={busy || !canContinue} onClick={submitLabels}>
+        {freeText.trim() ? 'Use answer →' : 'Continue →'}</button>}
     </div>
   </article>;
 }
@@ -162,6 +192,26 @@ export function IntakeFlow({ analysis, decisions, deterministicNote, busy, build
   const [index, setIndex] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [setAside, setSetAside] = useState(false);
+  const [autoAdvanceKey, setAutoAdvanceKey] = useState(0);
+  const onAutoAdvance = useCallback((decisionId: string, value: string) => {
+    if (busy) return;
+    onAnswer(decisionId, value);
+    if (editingId === decisionId) {
+      setEditingId(null);
+      setIndex(0);
+    }
+    setAutoAdvanceKey(current => current + 1);
+  }, [busy, editingId, onAnswer]);
+  const goBack = () => {
+    if (busy) return;
+    setAutoAdvanceKey(current => current + 1);
+    if (index > 0) {
+      setIndex(currentIndex => currentIndex - 1);
+      return;
+    }
+    const previous = [...answered].reverse().find(item => item.id !== editingId);
+    if (previous) setEditingId(previous.id);
+  };
   useEffect(() => {
     setIndex(current => Math.min(current, Math.max(open.length - 1, 0)));
     if (editingId && !normalizedDecisions.some(item => item.id === editingId)) setEditingId(null);
@@ -193,11 +243,12 @@ export function IntakeFlow({ analysis, decisions, deterministicNote, busy, build
       <KnownStrip analysis={analysis} />
       <QuestionCard key={current.id} decision={current}
         index={editing ? answered.findIndex(item => item.id === current.id) : index}
-        total={editing ? answered.length : open.length} busy={busy} onAnswer={onAnswer} />
+        total={editing ? answered.length : open.length} busy={busy} onAnswer={onAnswer}
+        autoAdvanceKey={autoAdvanceKey} onAutoAdvance={onAutoAdvance} />
       <footer className="in-foot">
         <small>Typical intake: 1–3 decisions. Zero questions when TONDE already has enough.</small>
         <div className="in-nav">
-          {!editing && <button type="button" className="in-btn" disabled={busy || index === 0} onClick={() => setIndex(value => Math.max(value - 1, 0))}>← Back</button>}
+          {!editing && <button type="button" className="in-btn" disabled={busy || (index === 0 && answered.length === 0)} onClick={goBack}>← Back</button>}
           {editing && <button type="button" className="in-btn" onClick={() => setEditingId(null)}>Done editing</button>}
           {!editing && index < open.length - 1 && <span className="in-hint">Answer to continue — the queue re-evaluates every time.</span>}
         </div>

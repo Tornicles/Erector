@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.cards import BeatPlan, CardValidationReport, FieldFinding, ImpactPlan
 
@@ -67,12 +67,18 @@ class PlanCardsRequest(CardSystemModel):
     """Plan the Production structure. The Card count cap is enforced here, not in the browser."""
 
     target_runtime_ms: int = Field(ge=1_000, le=900_719_925_474_099)
-    beats: list[BeatPlan] = Field(min_length=1, max_length=MAX_BEATS)
     #: Persist the planned Card shells as real Cards. Planning without persisting is a preview.
     persist: bool = False
-    #: The creator may knowingly exceed the cap; TONDE never does it silently.
+    #: The creator may knowingly exceed the runtime-based cap; TONDE never does it silently.
     acknowledge_card_cap: bool = False
+    beats: list[BeatPlan] = Field(min_length=1, max_length=MAX_BEATS + 1)
     expected_production_revision: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def require_bounded_beats(self) -> 'PlanCardsRequest':
+        if len(self.beats) > MAX_BEATS:
+            raise ValueError(f'A plan can contain at most {MAX_BEATS} beats.')
+        return self
 
 
 class ValidateCardRequest(CardSystemModel):

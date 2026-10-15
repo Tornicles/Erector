@@ -1,11 +1,71 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateComponents';
 import { safeError } from '../services/errors';
+import { useModalFocus } from '../hooks/useModalFocus';
 import { prompt11Service, type DeviceReadiness, type DiscoverIndex, type DiscoverPreview, type JobList, type KnowledgeSearch, type SceneIntelligence } from '../services/prompt11';
 import { productionService } from '../services/productions';
 import type { Production } from '../types/domain';
+import type { ProductionType } from '../types/product';
+
+type ProductionTemplate = {
+  id: string;
+  title: string;
+  category: string;
+  productionType: ProductionType;
+  description: string;
+  idea: string;
+  defaults: Record<string, string>;
+  questions: Record<string, string>;
+};
+
+// TONDE-owned starter structures, not example Productions. Selecting one still
+// creates a canonical Production and asks the server Director to re-evaluate gaps.
+const PRODUCTION_TEMPLATES: ProductionTemplate[] = [
+  {
+    id: 'cinematic-narrative-series', title: 'Cinematic Narrative Series', category: 'NARRATIVE', productionType: 'series',
+    description: 'Character-led episodic storytelling with substantial beats and continuity.',
+    idea: 'I want to create a cinematic episodic mystery series with a strong central question.',
+    defaults: { format: 'Episodic series', direction: 'Dark mystery' },
+    questions: { format: 'How big should this story be?', direction: 'Which direction feels most like what you want?' },
+  },
+  {
+    id: 'short-documentary', title: 'Short Documentary', category: 'DOCUMENTARY', productionType: 'documentary',
+    description: 'A question-led structure built around research, people, evidence and meaning.',
+    idea: 'I want to create a short documentary driven by one central question.',
+    defaults: { driver: 'A question' },
+    questions: { driver: 'What drives the film?' },
+  },
+  {
+    id: 'product-commercial', title: 'Product Commercial', category: 'COMMERCIAL', productionType: 'commercial',
+    description: 'A clear hook, proof, feeling and call to action in one coherent Production.',
+    idea: 'I want to create a product commercial for social media.',
+    defaults: { objective: 'Sell product', platform: 'TikTok / Reels', execution: 'REAL' },
+    questions: { objective: 'What must this commercial accomplish?', platform: 'Where will people see it?', execution: 'How will you make this Production?' },
+  },
+  {
+    id: 'wedding-film', title: 'Wedding Film', category: 'EVENT', productionType: 'custom',
+    description: 'Protect unrepeatable moments while building an emotional highlight story.',
+    idea: 'I am filming a wedding and want a cinematic highlight film plus social clips.',
+    defaults: { deliverable: 'Highlight film + Social clips', coverage_priority: 'Emotion + Ceremony' },
+    questions: { deliverable: 'What do you want to leave with?', coverage_priority: 'What matters most?' },
+  },
+  {
+    id: 'sports-highlight', title: 'Sports Highlight', category: 'SPORTS', productionType: 'custom',
+    description: 'Prioritize decisive action, reactions and the game story under pressure.',
+    idea: 'I am filming a sports event and want a highlight reel.',
+    defaults: { output: 'Highlight reel', focus: 'Game story + Crowd and reactions' },
+    questions: { output: 'What do you want from the game?', focus: 'What can TONDE not afford to miss?' },
+  },
+  {
+    id: 'ai-concept-film', title: 'AI Concept Film', category: 'AI PLAYBOOK', productionType: 'short_film',
+    description: 'Plan original prompt-ready Shots for execution in an external AI tool you choose.',
+    idea: 'I want to create a short cinematic concept film using an external AI tool.',
+    defaults: { execution: 'AI' },
+    questions: { execution: 'How will you make this Production?' },
+  },
+];
 
 function useWorkspaceValue<T>(load: (workspaceId: string) => Promise<T>, dependencies: unknown[] = []) {
   const { workspaceId } = useAuth();
@@ -29,16 +89,21 @@ function useWorkspaceValue<T>(load: (workspaceId: string) => Promise<T>, depende
 
 export function DiscoverPage() {
   const { workspaceId } = useAuth();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<DiscoverIndex | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<DiscoverPreview | null>(null);
+  const [templatePreview, setTemplatePreview] = useState<ProductionTemplate | null>(null);
+  const templateDialogRef = useRef<HTMLElement>(null);
+  const [templateRestoreTarget, setTemplateRestoreTarget] = useState<HTMLElement | null>(null);
+  useModalFocus(!!templatePreview, templateRestoreTarget, templateDialogRef, '[data-template-preview-close]');
   const [productions, setProductions] = useState<Production[]>([]);
   const [target, setTarget] = useState('');
   const [kind, setKind] = useState<'direct_this' | 'use_technique' | 'attach_reference'>('direct_this');
-  const [savedTab, setSavedTab] = useState(false);
+  const [activeTab, setActiveTab] = useState<'browse' | 'saved' | 'templates'>('browse');
   const reload = async () => {
     if (!workspaceId) { setItems(null); return; }
     setError(null);
@@ -77,12 +142,43 @@ export function DiscoverPage() {
     } catch (failure) { setError(safeError(failure).message); }
     finally { setBusy(false); }
   };
-  const visible = (items?.items ?? []).filter(item => !savedTab || item.saved);
+  const beginTemplate = (template: ProductionTemplate) => {
+    if (!workspaceId) { setError('Connect a workspace before starting a Production from a template.'); return; }
+    try {
+      // A new template intake must not restore or mutate a different saved draft.
+      localStorage.removeItem(`tonde:director-plan:${workspaceId}`);
+      localStorage.setItem('tonde:intake-context', JSON.stringify({
+        description: template.idea,
+        origin: 'discover',
+        template: { title: template.title, defaults: template.defaults, questions: template.questions, productionType: template.productionType },
+      }));
+    } catch {
+      setError('This browser could not save the template intake context. Nothing was created; retry or start from Home.');
+      return;
+    }
+    setTemplatePreview(null);
+    navigate(`/home?idea=${encodeURIComponent(template.idea)}&direct=1`);
+  };
+  const visible = (items?.items ?? []).filter(item => activeTab !== 'saved' || item.saved);
+  const matchingTemplates = PRODUCTION_TEMPLATES.filter(template =>
+    `${template.title} ${template.category} ${template.description} ${template.idea}`.toLowerCase().includes(query.trim().toLowerCase()));
   return <div className="page"><header className="compact-header"><p className="eyebrow">PRODUCTION KNOWLEDGE & REFERENCES</p><h1>Discover</h1><p>Find sourced production knowledge, techniques, examples and inspiration. Every item states its provenance and current usability; Discover is not a stock gallery.</p></header>
     {!workspaceId && <p role="status" className="capability-note">Connect a workspace to browse its curated Discover library.</p>}
-    <div className="discover-toolbar"><label>Search Discover<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Movement, light, camera…" /></label><div role="tablist" aria-label="Discover items"><button role="tab" aria-selected={!savedTab} onClick={() => setSavedTab(false)}>Browse</button><button role="tab" aria-selected={savedTab} onClick={() => setSavedTab(true)}>Saved</button></div></div>
-    {error && <ErrorState message={error} retry={() => void reload()} />}{notice && <p role="status" className="capability-note">{notice}</p>}
-    {items === null ? <LoadingState label="Loading Discover…" /> : visible.length ? <section className="technique-list" aria-label="Discover library">{visible.map(item => <article className="technique-row" key={item.item_id}><div><p className="eyebrow">{item.item_kind.replaceAll('_', ' ')} · {item.provenance?.source_label ?? 'Source not named'} · {item.provenance?.rights_classification?.replaceAll('_', ' ') ?? 'rights unknown'}</p><h2>{item.title}</h2><p>{item.summary}</p><p className="subtle">{item.review_state.replaceAll('_', ' ')} · {item.source_state.replaceAll('_', ' ')} · {item.usable ? 'Usable now' : 'Not currently usable'}</p>{!item.usable && <p className="capability-note">This source is not currently available for Create This.</p>}</div><div className="technique-actions"><button type="button" disabled={busy} aria-pressed={item.saved} onClick={() => void save(item.item_id, item.saved)}>{item.saved ? 'Unsave' : 'Save'}</button><button type="button" className="primary" disabled={busy || !item.usable || !target} onClick={() => void begin(item.item_id)}>Create This…</button></div></article>)}</section> : <EmptyState title={savedTab ? 'No saved Discover items' : 'No curated Discover items yet'}>Discover content becomes available when sourced items are curated. You can still direct original work from Home.</EmptyState>}
+    <div className="discover-toolbar"><label>Search Discover<input aria-label="Search Discover" value={query} onChange={event => setQuery(event.target.value)} placeholder="Movement, light, camera…" /></label><div role="tablist" aria-label="Discover items"><button type="button" role="tab" aria-selected={activeTab === 'browse'} onClick={() => setActiveTab('browse')}>Browse</button><button type="button" role="tab" aria-selected={activeTab === 'saved'} onClick={() => setActiveTab('saved')}>Saved</button><button type="button" role="tab" aria-selected={activeTab === 'templates'} onClick={() => setActiveTab('templates')}>Templates</button></div></div>
+    {error && <ErrorState message={error} retry={() => { setError(null); void reload(); }} />}{notice && <p role="status" className="capability-note">{notice}</p>}
+    {activeTab === 'templates' ? matchingTemplates.length ? <section className="discover-board" aria-label="Production templates">{matchingTemplates.map((template, index) => <article className="discover-card-v5" key={template.id}>
+      <div className={`discover-art ${['d-story','d-camera','d-photo','d-wedding','d-ai','d-edit'][index % 6]}`}><div className="discover-art-top"><span>{template.category}</span><span>TONDE STARTER</span></div></div>
+      <div className="discover-card-body"><h2>{template.title}</h2><p>{template.description}</p><p className="subtle">Use this as a starting point. Adaptive Intake checks what is still materially unknown.</p>
+        <div className="discover-card-foot"><button type="button" onClick={event => { setTemplateRestoreTarget(event.currentTarget); setTemplatePreview(template); }}>Preview</button><button type="button" disabled={!workspaceId} onClick={() => beginTemplate(template)}>Use template →</button></div>
+      </div></article>)}</section> : <EmptyState title="No templates match that search">Try a different Production type or story term.</EmptyState>
+    : items === null ? <LoadingState label="Loading Discover…" /> : visible.length ? <section className="technique-list" aria-label={activeTab === 'saved' ? 'Saved Discover items' : 'Discover library'}>{visible.map(item => <article className="technique-row" key={item.item_id}><div><p className="eyebrow">{item.item_kind.replaceAll('_', ' ')} · {item.provenance?.source_label ?? 'Source not named'} · {item.provenance?.rights_classification?.replaceAll('_', ' ') ?? 'rights unknown'}</p><h2>{item.title}</h2><p>{item.summary}</p><p className="subtle">{item.review_state.replaceAll('_', ' ')} · {item.source_state.replaceAll('_', ' ')} · {item.usable ? 'Usable now' : 'Not currently usable'}</p>{!item.usable && <p className="capability-note">This source is not currently available for Create This.</p>}</div><div className="technique-actions"><button type="button" disabled={busy} aria-pressed={item.saved} onClick={() => void save(item.item_id, item.saved)}>{item.saved ? 'Unsave' : 'Save'}</button><button type="button" className="primary" disabled={busy || !item.usable || !target} onClick={() => void begin(item.item_id)}>Create This…</button></div></article>)}</section> : <EmptyState title={activeTab === 'saved' ? 'No saved Discover items' : 'No curated Discover items yet'}>Discover content becomes available when sourced items are curated. You can still direct original work from Home.</EmptyState>}
+    {templatePreview && <div className="command-scrim" onMouseDown={event => { if (event.target === event.currentTarget) setTemplatePreview(null); }}><section ref={templateDialogRef} className="notification-dialog" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
+      <div className="notification-heading"><h2 id="template-preview-title">{templatePreview.title}</h2><button type="button" data-template-preview-close onClick={() => setTemplatePreview(null)}>Close</button></div>
+      <p className="eyebrow">{templatePreview.category} · TONDE STARTER</p><p>{templatePreview.description}</p>
+      <p>This seeds the starting intent and selected defaults, then opens the shared Adaptive Intake. It does not create a completed Production or bypass Director review.</p>
+      {Object.entries(templatePreview.defaults).length > 0 && <ul aria-label="Template starting defaults">{Object.entries(templatePreview.defaults).map(([key, value]) => <li key={key}><strong>{templatePreview.questions[key] ?? key.replaceAll('_', ' ')}:</strong> {value}</li>)}</ul>}
+      <div className="dialog-actions"><button type="button" onClick={() => setTemplatePreview(null)}>Cancel</button><button type="button" className="primary" disabled={!workspaceId} onClick={() => beginTemplate(templatePreview)}>Use template →</button></div>
+    </section></div>}
     {preview && <div className="command-scrim"><section className="notification-dialog" role="dialog" aria-modal="true" aria-labelledby="create-this-title"><div className="notification-heading"><h2 id="create-this-title">Preview Create This</h2><button type="button" onClick={() => setPreview(null)}>Close</button></div><p>{preview.impact.meaning}</p><p><strong>Confirmation required:</strong> <code>{preview.impact.confirmation}</code></p><ul>{preview.impact.changes.map((change, index) => <li key={`${change.object}-${index}`}>{change.object}: {change.detail}</li>)}</ul><p>Nothing has been created yet. This adds an attributed description or reference to your TONDE Production; it does not copy the source content.</p><label>Target Production<select value={target} onChange={event => setTarget(event.target.value)}>{productions.map(production => <option key={production.id} value={production.id}>{production.title}</option>)}</select></label><label>Action<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="direct_this">Direct This</option><option value="use_technique">Use This Technique</option><option value="attach_reference">Attach as Reference</option></select></label><div className="dialog-actions"><button type="button" onClick={() => setPreview(null)}>Cancel</button><button type="button" className="primary" disabled={busy || !target} onClick={() => void apply()}>Apply with canonical confirmation</button></div></section></div>}
   </div>;
 }

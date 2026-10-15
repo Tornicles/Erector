@@ -103,35 +103,35 @@ judgement*:
 
 ## BACKEND HTTP SURFACE
 
-- [domain/readiness.py](backend/app/domain/readiness.py) — bounded request contracts with the
+- [domain/readiness.py](../backend/app/domain/readiness.py) — bounded request contracts with the
   canonical access-action vocabulary. `LockRequest` refuses an unlock with no reason, and
   `ApprovalDecideRequest` refuses a decision that is not one of the three the database accepts, so
   a product-rule mistake is a clean 422 before the database sees it.
-- [services/readiness.py](backend/app/services/readiness.py) — `LAYER = 'Production readiness'` and
+- [services/readiness.py](../backend/app/services/readiness.py) — `LAYER = 'Production readiness'` and
   `ReadinessRepository`, calling every guarded RPC through `rpc_detailed(..., layer=LAYER)` and
   carrying the display vocabulary, the approval rule and the readiness limitation. It recomputes no
   approval state and computes no readiness itself.
-- [routers/production_readiness.py](backend/app/routers/production_readiness.py) — under
+- [routers/production_readiness.py](../backend/app/routers/production_readiness.py) — under
   `/api/v1/workspaces/{workspace_id}/productions/{production_id}`: `GET /readiness/vocabulary`,
   `GET /readiness`, `GET /access/{object_id}`, `GET /access/{object_id}/history`,
   `POST /access/{object_id}/decide`, `POST /access/{object_id}/lock`. Registered in
-  [main.py](backend/app/main.py).
+  [main.py](../backend/app/main.py).
 - Error translation is the shared one: `42501` → 403, `40001`/`23514`/`23505` → 409,
   `22023`/`22001` → 422, `PGRST202`/`42883` → 503 `STUDIO_SCHEMA_MISSING` naming this layer.
 
 ## STUDIO SURFACE
 
-- [services/productionReadiness.ts](frontend/src/services/productionReadiness.ts) — the typed client
+- [services/productionReadiness.ts](../frontend/src/services/productionReadiness.ts) — the typed client
   with the access actions, the reviewable kinds and the readiness vocabulary, so the browser cannot
   offer a decision or a kind the API will not accept.
-- [studio/ProductionReadiness.tsx](frontend/src/studio/ProductionReadiness.tsx) — the `Readiness`
+- [studio/ProductionReadiness.tsx](../frontend/src/studio/ProductionReadiness.tsx) — the `Readiness`
   tool in Studio: the readiness category with its headline, counts and dimensions, the blocker list
   with severity, why it matters, the next action and an **Open** button that navigates to the real
   object, and the per-object approval/lock panel showing the revision approved, the decider, the
   time, whether content changed since, the lock reason, the decision form (Approve / Request review
   / Reopen / Lock / Unlock) and the append-only decision history. Wired into
-  [StudioPage.tsx](frontend/src/pages/StudioPage.tsx) as an execution-group tool with the
-  `ClipboardCheck` icon, and styled by `.rd*` rules in [index.css](frontend/src/index.css).
+  [StudioPage.tsx](../frontend/src/pages/StudioPage.tsx) as an execution-group tool with the
+  `ClipboardCheck` icon, and styled by `.rd*` rules in [index.css](../frontend/src/index.css).
 - The surface refuses what the product refuses: unlocking without a reason is blocked, there is no
   score or percentage anywhere, and there is no control that could manufacture an approval.
 
@@ -147,7 +147,7 @@ judgement*:
   Prompt 9A impact engine still reporting locked dependents instead of rewriting them, both
   indexes, all 5 RPCs, all 6 private helpers, that those helpers are unreachable, and that each
   public RPC is granted to `authenticated`. Every row reads `OK` against a full 001→023 database.
-  Steps 22–23 are in [supabase/manual-apply/README.md](supabase/manual-apply/README.md).
+  Steps 22–23 are in [supabase/manual-apply/README.md](../supabase/manual-apply/README.md).
 - Hosted 018–022 remain unapplied as well: the packages `09_*` … `14_*` are queued in order.
   **Do not replay 009–022.**
 
@@ -170,7 +170,7 @@ judgement*:
 
 The three new enums are mapped in `product/vocabulary.json` (`accessActions`, `readinessStates`,
 `readinessDimensions`) and wired into
-[scripts/generate-database-types.mjs](scripts/generate-database-types.mjs), which emits the
+[scripts/generate-database-types.mjs](../scripts/generate-database-types.mjs), which emits the
 generated TS aliases and Python `StrEnum`s for them. Stored codes remain the SQL enum labels, so
 display labels and storage codes cannot drift.
 

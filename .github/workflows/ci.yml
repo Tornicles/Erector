@@ -18,6 +18,7 @@ jobs:
       - run: npm test
       - run: node scripts/generate-database-types.mjs --check
       - run: npm run verify:legacy
+      - run: npm run verify:links
   frontend:
     runs-on: ubuntu-latest
     defaults:

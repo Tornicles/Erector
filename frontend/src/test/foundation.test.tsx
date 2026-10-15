@@ -221,6 +221,30 @@ beforeEach(() => {
   for (const action of ['signInWithPassword','signUp','signInWithOAuth','resetPasswordForEmail','updateUser','signOut'] as const) mocks.auth[action].mockResolvedValue({ data: { session }, error: null });
 });
 describe('canonical application routes', () => {
+  it('restores a saved Director plan, explains the locked composer, then accepts a fresh intake without changing that Production', async () => {
+    localStorage.setItem(`tonde:director-plan:${workspaceId}`, JSON.stringify({
+      productionId, goal: 'Saved Production goal', collaboration: 'stop_at_major_decisions', answers: {},
+    }));
+    vi.mocked(productionService.directorPlan).mockResolvedValue(planFixture(true));
+    route('/home');
+
+    const composer = await screen.findByRole('textbox', { name: 'Describe what you want to make' });
+    await waitFor(() => expect(productionService.directorPlan).toHaveBeenCalledWith(workspaceId, productionId,
+      expect.objectContaining({ goal: 'Saved Production goal' })));
+    expect(composer).toBeDisabled();
+    expect(screen.getByText(/This request is attached to a saved Production/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new intake' }));
+    expect(composer).toBeEnabled();
+    expect(productionService.create).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`tonde:director-plan:${workspaceId}`)).toBeNull();
+    expect(localStorage.getItem('tonde:intake-context')).toBeNull();
+
+    fireEvent.change(composer, { target: { value: 'A different new idea' } });
+    expect(composer).toHaveValue('A different new idea');
+    expect(productionService.directorPlan).toHaveBeenCalledTimes(1);
+  });
+
   it('uploads, captures explicit reference context, analyses before planning, and retries without duplicating uploads', async () => {
     vi.spyOn(mediaService, 'upload').mockResolvedValue({ id: 'media-id' } as Awaited<ReturnType<typeof mediaService.upload>>);
     vi.mocked(productionService.create).mockResolvedValue(productionId);
@@ -281,11 +305,16 @@ describe('canonical application routes', () => {
   });
   it('creates canonical project/production and opens its Studio', async () => {
     vi.mocked(productionService.create).mockResolvedValue(productionId);
+    vi.mocked(productionService.directorPlan).mockResolvedValueOnce(planFixture(false));
     const router=route('/projects');
     fireEvent.change(await screen.findByLabelText('Start a production'),{target:{value:'New production'}});
     fireEvent.click(screen.getByRole('button',{name:'DIRECT THIS'}));
-    await waitFor(()=>expect(router.state.location.pathname).toBe(`/studio/${productionId}`));
+    await waitFor(()=>expect(router.state.location.pathname).toBe('/home'));
+    expect(router.state.location.search).toContain(`intake=${productionId}`);
+    expect(await screen.findByRole('heading',{name:'Which premium coffee brand is this for?'})).toBeVisible();
     expect(productionService.create).toHaveBeenCalledWith(workspaceId,'New production');
+    expect(productionService.directorPlan).toHaveBeenCalledWith(workspaceId,productionId,
+      expect.objectContaining({goal:'New production',collaboration_mode:'stop_at_major_decisions'}));
   });
   it('Direct This creates one shared Production, plans it, answers decisions and commits to Studio', async () => {
     vi.mocked(productionService.create).mockResolvedValue(productionId);
@@ -305,8 +334,8 @@ describe('canonical application routes', () => {
     fireEvent.click(screen.getByRole('button',{name:'What do you recommend?'}));
     expect(await screen.findByText(/TONDE recommends: North Bean/)).toBeVisible();
     fireEvent.click(screen.getByRole('button',{name:'USE THIS'}));
-    fireEvent.click(screen.getByRole('button',{name:'Continue →'}));
-    await waitFor(()=>expect(productionService.recordDirectorDecisions).toHaveBeenCalledWith(workspaceId, productionId, { product: 'North Bean' }, 'intake', { product: 'Which premium coffee brand is this for?' }));
+    // Selecting the recommendation auto-advances this single-choice decision.
+    await waitFor(()=>expect(productionService.recordDirectorDecisions).toHaveBeenCalledTimes(1));
     await waitFor(()=>expect(productionService.directorPlan).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole('heading',{name:'I have enough to direct this.'})).toBeVisible();
     const build = await screen.findByRole('button',{name:'BUILD PRODUCTION →'});
@@ -373,6 +402,43 @@ describe('canonical application routes', () => {
     fireEvent.click(screen.getByRole('button',{name:/Apply with canonical confirmation/}));
     expect(await screen.findByText('Applied.')).toBeVisible();
     expect(prompt11Mocks.applyDiscover).toHaveBeenCalledWith(workspaceId,'app-1','HANDHELD-TENSION APPLY');
+  });
+  it('filters and previews Discover templates, then seeds a draft through shared Director intake without building it', async () => {
+    vi.mocked(productionService.create).mockResolvedValue(productionId);
+    vi.mocked(productionService.directorPlan).mockResolvedValue(planFixture(false));
+    const router = route('/discover');
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Templates' }));
+    expect(await screen.findByRole('heading', { name: 'Cinematic Narrative Series' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Product Commercial' })).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search Discover' }), { target: { value: 'product commercial' } });
+    expect(await screen.findByRole('heading', { name: 'Product Commercial' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Short Documentary' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    const preview = await screen.findByRole('dialog', { name: 'Product Commercial' });
+    expect(within(preview).getByText('What must this commercial accomplish?:')).toBeVisible();
+    expect(within(preview).getByText('Sell product')).toBeVisible();
+    expect(within(preview).getByText(/does not create a completed Production or bypass Director review/)).toBeVisible();
+    fireEvent.click(within(preview).getByRole('button', { name: 'Use template →' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/home'));
+    expect(router.state.location.search).toContain('direct=1');
+    expect(await screen.findByRole('heading', { name: 'Which premium coffee brand is this for?' })).toBeVisible();
+    expect(productionService.create).toHaveBeenCalledWith(workspaceId, 'Product Commercial', 'commercial');
+    expect(productionService.addReference).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({
+      source_type: 'description', source_description: 'I want to create a product commercial for social media.',
+      provenance: expect.objectContaining({ origin: 'discover', reference_kind: 'production_template', template_name: 'Product Commercial' }),
+    }));
+    expect(productionService.recordDirectorDecisions).toHaveBeenCalledWith(workspaceId, productionId,
+      { objective: 'Sell product', platform: 'TikTok / Reels', execution: 'REAL' }, 'intake', {
+        objective: 'What must this commercial accomplish?', platform: 'Where will people see it?', execution: 'How will you make this Production?',
+      });
+    expect(productionService.directorPlan).toHaveBeenCalledWith(workspaceId, productionId, expect.objectContaining({
+      goal: 'I want to create a product commercial for social media.',
+      answered_decisions: { objective: 'Sell product', platform: 'TikTok / Reels', execution: 'REAL' },
+    }));
+    expect(productionService.directorCommit).not.toHaveBeenCalled();
   });
   it('Home upload/URL mode truthfully gates unsupported import and recording actions', async () => {
     route('/home');
