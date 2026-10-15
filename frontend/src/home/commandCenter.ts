@@ -20,14 +20,23 @@ export function deriveHomeMode(input: {
   return 'active';
 }
 
-const TERMINAL_JOB = new Set(['failed', 'dead_letter', 'timed_out']);
+export const FAILED_JOB_STATES = new Set(['failed', 'dead_letter', 'timed_out']);
+export const LIVE_JOB_STATES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
+
+export function isFailedJob(job: Job): boolean {
+  return FAILED_JOB_STATES.has(job.status);
+}
+
+export function isLiveJob(job: Job): boolean {
+  return LIVE_JOB_STATES.has(job.status);
+}
 
 export function failedJobs(jobs: Job[]): Job[] {
-  return jobs.filter(job => TERMINAL_JOB.has(job.status));
+  return jobs.filter(isFailedJob);
 }
 
 export function liveJobs(jobs: Job[]): Job[] {
-  return jobs.filter(job => !TERMINAL_JOB.has(job.status));
+  return jobs.filter(isLiveJob);
 }
 export function homeHeroCopy(mode: HomeMode, productionTitle: string | null, detail: string | null): { eyebrow: string; title: string; lead: string } {
   if (mode === 'new') return {
