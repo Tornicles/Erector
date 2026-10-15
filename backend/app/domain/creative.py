@@ -85,6 +85,16 @@ class StoryPlan(CreativeModel):
                 score += 1
         return score
 
+    def minimum_substance_score(self) -> int:
+        """Scale the quality gate to the number of beats.
+
+        The previous fixed threshold of eight made every valid one- or two-beat
+        Story mathematically impossible to accept (their maximum scores are
+        three and six). Three or more beats retain the original strict gate.
+        """
+
+        return min(8, max(3, (len(self.beats) * 3) - 1))
+
 
 class ShotConcept(CreativeModel):
     """Execution-neutral initial Shot idea. Prompts 6/7 attach real execution."""
@@ -301,6 +311,42 @@ def allocate_runtime(target_ms: int, count: int, weights: list[float] | None = N
     return floors
 
 
+
+EVENT_GRAMMARS: dict[str, list[tuple[str, str, str]]] = {
+    'conference': [
+        ('Arrival and orientation', 'Establish scale, place and what attendees came to do', 'anticipation'),
+        ('Opening and keynote', 'Capture the event promise and the people setting its direction', 'focus'),
+        ('Core programme', 'Cover the sessions, demonstrations and exchanges that deliver the value', 'engagement'),
+        ('Connections and reactions', 'Show networking, audience response and human proof that the event matters', 'energy'),
+        ('Closing and outcome', 'Land the event on what changed, what was learned and what comes next', 'resolve'),
+    ],
+    'wedding': [
+        ('Preparation', 'Establish people, details and emotional anticipation before the ceremony', 'anticipation'),
+        ('Ceremony', 'Protect the irreversible vows, reactions and defining moments', 'emotion'),
+        ('Portraits and transition', 'Create intentional breathing room and relationship images after the ceremony', 'relief'),
+        ('Celebration', 'Capture speeches, dancing, family reactions and the social energy of the day', 'joy'),
+        ('Closing memory', 'End on a human image that feels like the day continuing beyond the film', 'resolve'),
+    ],
+    'sports': [
+        ('Before the action', 'Establish the athlete, stakes, venue and conditions before play begins', 'anticipation'),
+        ('Opening phase', 'Show how the contest starts and what pattern is emerging', 'focus'),
+        ('Turning point', 'Prioritise the decisive change in momentum and the reactions around it', 'tension'),
+        ('Decisive action', 'Capture the moment that determines the result or defines the performance', 'release'),
+        ('Aftermath', 'Land on result, emotion and what the performance meant to the people involved', 'resolve'),
+    ],
+}
+
+
+def _event_grammar_for_goal(goal: str) -> tuple[str, list[tuple[str, str, str]]] | None:
+    text = goal.lower()
+    if any(word in text for word in ('conference', 'keynote', 'summit', 'corporate event', 'business event', 'trade show', 'expo')):
+        return 'conference_event', EVENT_GRAMMARS['conference']
+    if any(word in text for word in ('wedding', 'bride', 'groom', 'ceremony', 'reception')):
+        return 'wedding_event', EVENT_GRAMMARS['wedding']
+    if any(word in text for word in ('soccer', 'football match', 'basketball', 'tournament', 'match day', 'sports event', 'game highlights')):
+        return 'sports_event', EVENT_GRAMMARS['sports']
+    return None
+
 BEAT_GRAMMAR: dict[ProductionType, list[tuple[str, str, str]]] = {
     ProductionType.commercial: [
         ('Hook', 'Earn the next three seconds', 'attention'),
@@ -436,7 +482,8 @@ def build_story(
     if brief.production_type == ProductionType.photography:
         return None
     analyses = analyses or []
-    grammar_name, grammar = _grammar_for(brief.production_type)
+    goal_grammar = _event_grammar_for_goal(brief.production_goal) if brief.production_type == ProductionType.custom else None
+    grammar_name, grammar = goal_grammar or _grammar_for(brief.production_type)
     beats_spec = list(grammar)
     if variation == 'simpler' and len(beats_spec) > 3:
         beats_spec = [beats_spec[0], beats_spec[len(beats_spec) // 2], beats_spec[-1]]

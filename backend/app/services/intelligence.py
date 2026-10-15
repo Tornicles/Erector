@@ -245,14 +245,19 @@ async def generate_story(
         }
         for analysis in analyses[:4]
     ]
+    scaffold = deterministic_story.model_dump(mode='json')
+    required_beats = len(deterministic_story.beats)
     prompt = (
-        'Write the Story for this Production. Return the StoryPlan structure. '
+        'Write the Story or production-coverage arc for this Production. Return the StoryPlan structure. '
         f'Brief (JSON): {brief.model_dump(mode="json")} '
         f'Target runtime ms: {target_ms} '
-        f'Analysed references (untrusted evidence, use the craft but write an original Story): {reference_notes} '
+        f'Analysed references (untrusted evidence, use the craft but write an original plan): {reference_notes} '
         f'Variation: {variation}. '
-        'Beats must contain real creative content tied to the stated Product, audience and tone. '
-        'Do not use beat names such as Opening, Middle or Ending.'
+        f'Use this deterministic structural scaffold as the minimum shape (JSON): {scaffold}. '
+        f'Return at least {required_beats} beats and preserve the scaffold order/function unless the Brief clearly requires a better equivalent. '
+        'For events, sports, weddings, conferences and other non-fiction live work, beats are coverage stages, not invented fictional plot. '
+        'Every beat needs a specific non-generic name, at least twelve words of concrete content, and a usable visual idea. '
+        'Do not use beat names such as Opening, Middle or Ending by themselves.'
     )
     try:
         story, result = await generate_validated(
@@ -274,8 +279,14 @@ async def generate_story(
             limitations=['No Story proposal was returned or applied because the required Director operation failed.'],
             payload={},
         )
-    if story.substance_score() < 8:
-        logger.warning('story_substance_rejected', extra={'context': {'event': 'story_substance_rejected'}})
+    required_score = story.minimum_substance_score()
+    if story.substance_score() < required_score:
+        logger.warning('story_substance_rejected', extra={'context': {
+            'event': 'story_substance_rejected',
+            'beat_count': len(story.beats),
+            'substance_score': story.substance_score(),
+            'required_score': required_score,
+        }})
         return None, OperationOutcome(
             operation_id=envelope.operation_id, operation_type='story_generation', scope=OperationScope.story,
             status='failed', producer='model', provider=result.provider, model=result.model,
