@@ -215,7 +215,7 @@ test('Home plans one Production, applies the answered decisions and opens that s
   await page.locator('section[aria-label="Adaptive creative intake"]').scrollIntoViewIfNeeded();
   await page.screenshot({path: 'test-results/intake-recommendation.png'});
   await page.getByRole('button',{name:'USE THIS'}).click();
-  await page.getByRole('button',{name:'Continue →'}).click();
+  // A recommended single-choice answer confirms visibly and auto-advances.
   await expect(page.getByRole('heading',{name:'I have enough to direct this.'})).toBeVisible();
   const build=page.getByRole('button',{name:'BUILD PRODUCTION →'});
   await expect(build).toBeEnabled();

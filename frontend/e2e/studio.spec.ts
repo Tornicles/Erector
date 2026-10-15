@@ -193,7 +193,10 @@ test('Studio edits canonical Cards and Shots, keeps one Master Production and su
   await page.goto(`/studio/${productionId}?tool=Scenes&scene=${sceneA}`);
   await expect(page.getByRole('region', { name: 'Production cards' })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
+  // Inactive Cards remain mounted in the horizontal track but are removed from the
+  // accessibility tree until focused. Their production-strip buttons remain operable.
+  const inactiveCard = page.getByRole('article', { name: 'Card 2: Weighing', includeHidden: true });
+  await expect(inactiveCard).toHaveAttribute('aria-hidden', 'true');
   await expect(page.getByRole('button', { name: 'Card 1: Dark kitchen' })).toBeVisible();
   await expect(page.getByText('FOCUS · CARD 01')).toBeVisible();
   await expect(page.getByRole('option', { name: /01A · Establish/ })).toBeVisible();
@@ -325,39 +328,53 @@ test('the floating Card opens into the same Card expanded and every focus stays 
   await expect(expanded.getByText("DIRECTOR'S DIRECTION")).toBeVisible();
   await page.screenshot({ path: 'test-results/cards/expanded-camera.png' });
 
-  // A left swipe advances exactly one Card; a right swipe returns to the original.
+  // The focused Card area changes only its presentation; its direct Shot actions remain available.
+  await expanded.getByRole('button', { name: /01A · REAL/ }).click();
+  await expect(expanded.getByRole('status')).toHaveText('FOCUS · SHOT 01A');
+  await expect(expanded.getByRole('heading', { name: 'Establish' })).toBeVisible();
+  await page.screenshot({ path: 'test-results/cards/expanded-shot.png' });
+
+  // Return to the production stage before swiping. A left swipe advances exactly one Card;
+  // a right swipe returns to the original. Inactive Cards are aria-hidden, not visible content.
+  await expanded.getByRole('button', { name: '← BACK TO PRODUCTION' }).click();
+  await expect(page.getByRole('region', { name: 'Production cards' })).toBeVisible();
+  const firstCard = page.getByRole('article', { name: 'Card 1: Dark kitchen', includeHidden: true });
   await page.mouse.move(480, 400);
   await page.mouse.down();
   await page.mouse.move(280, 400, { steps: 5 });
   await page.mouse.up();
   await expect(page.getByRole('article', { name: 'Card 2: Weighing' })).toBeVisible();
-  await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeHidden();
+  await expect(firstCard).toHaveAttribute('aria-hidden', 'true');
   await page.mouse.move(280, 400);
   await page.mouse.down();
   await page.mouse.move(480, 400, { steps: 5 });
   await page.mouse.up();
   await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
 
-  // Focusing a Shot expands exactly one Shot inside the same Card.
-  await expanded.getByRole('button', { name: /01A · REAL/ }).click();
-  await expect(expanded.getByRole('status')).toHaveText('FOCUS · SHOT 01A');
-  await expect(expanded.getByRole('heading', { name: 'Establish' })).toBeVisible();
+  // Both the floating Card and expanded Card expose the same Shot focus.
+  await page.getByRole('article', { name: 'Card 1: Dark kitchen' }).getByRole('button', { name: 'Open Card 1 expanded' }).click();
+  const expandedFirst = page.getByRole('region', { name: 'Card 1 expanded' });
+  await expect(expandedFirst).toBeVisible();
+  await expandedFirst.getByRole('button', { name: /01A · REAL/ }).click();
+  await expect(expandedFirst.getByRole('status')).toHaveText('FOCUS · SHOT 01A');
+  await expect(expandedFirst.getByRole('heading', { name: 'Establish' })).toBeVisible();
   await page.screenshot({ path: 'test-results/cards/expanded-shot.png' });
 
   // Returning restores the floating sequence with the same Card centred.
-  await expanded.getByRole('button', { name: '← BACK TO PRODUCTION' }).click();
+  await expandedFirst.getByRole('button', { name: '← BACK TO PRODUCTION' }).click();
   await expect(page.getByRole('region', { name: 'Production cards' })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Card 1: Dark kitchen' })).toBeVisible();
   await expect(page).not.toHaveURL(/view=card/);
 
   // Clicking the centred Card opens the Card itself (overview), not a neighbouring one.
-  await page.getByRole('article', { name: 'Card 1: Dark kitchen' }).click();
-  await expect(page.getByRole('region', { name: 'Card 1 expanded' }).getByRole('status')).toHaveText('FOCUS · CARD 01');
-  await expect(page.getByRole('tab', { name: 'OVERVIEW' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('article', { name: 'Card 1: Dark kitchen' }).getByRole('button', { name: 'Open Card 1 expanded' }).click();
+  const overview = page.getByRole('region', { name: 'Card 1 expanded' });
+  await expect(overview.getByRole('status')).toHaveText('FOCUS · CARD 01');
+  await expect(overview.getByRole('tab', { name: 'OVERVIEW' })).toHaveAttribute('aria-selected', 'true');
 
   // Narrow viewport: the same Card remains usable, with no horizontal page overflow.
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('region', { name: 'Card 1 expanded' })).toBeVisible();
+  await expect(overview).toBeVisible();
   await expect(page.getByLabel('Message to the Director')).toBeVisible();
   // The measurement reports which element left the viewport, not only how far: this assertion is
   // metric-dependent, so a platform with different text rendering can fail it while the working
