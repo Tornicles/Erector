@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # Standard OpenAI credential name. Only a fallback: an explicit
     # DIRECTOR_API_KEY always wins. Never browser-visible.
     openai_api_key: SecretStr | None = None
+    # Vercel AI Gateway can authenticate deployed Functions with the automatically
+    # injected OIDC token. Keep the Gateway API key optional for non-OIDC environments.
+    ai_gateway_api_key: SecretStr | None = None
+    vercel_oidc_token: SecretStr | None = None
     director_model: str | None = None
     director_long_context_model: str | None = None
     director_transcription_model: str | None = None
@@ -70,11 +74,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode='after')
     def _prefer_director_api_key(self) -> 'Settings':
-        # Operators commonly set OPENAI_API_KEY alongside DIRECTOR_API_KEY. The
-        # Director reads DIRECTOR_API_KEY; fall back to the standard OpenAI name
-        # so a deployment with only OPENAI_API_KEY still configures the provider
-        # instead of silently running unconfigured. Never the reverse: an
-        # explicit DIRECTOR_API_KEY always wins and nothing is printed.
+        # Gateway deployments must authenticate to the Gateway itself, not present a
+        # direct OpenAI key to the Gateway endpoint. Prefer an explicit Gateway key,
+        # then Vercel's automatically injected OIDC token. Direct-provider deployments
+        # retain the existing DIRECTOR_API_KEY -> OPENAI_API_KEY precedence.
+        gateway_host = urlparse(self.director_base_url).hostname if self.director_base_url else None
+        if gateway_host == 'ai-gateway.vercel.sh':
+            if self.ai_gateway_api_key is not None:
+                self.director_api_key = self.ai_gateway_api_key
+            elif self.vercel_oidc_token is not None:
+                self.director_api_key = self.vercel_oidc_token
+            return self
         if self.director_api_key is None and self.openai_api_key is not None:
             self.director_api_key = self.openai_api_key
         return self
