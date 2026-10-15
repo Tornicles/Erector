@@ -1,7 +1,7 @@
 import type { Production } from '../types/domain';
 import type { Job } from '../services/prompt11';
 import type { StudioReadModel } from '../services/productions';
-import { continueHref } from './commandCenter';
+import { continueHref, isFailedJob, isLiveJob } from './commandCenter';
 
 /**
  * TONDE Live priority engine (single home for Home ranking — §62).
@@ -54,8 +54,6 @@ export function isMeaningfulJob(job: Job): boolean {
   return MEANINGFUL_JOB.some(token => kind.includes(token));
 }
 
-const TERMINAL_JOB = new Set(['failed', 'dead_letter', 'timed_out']);
-
 function jobHref(workspaceId: string, job: Job): string {
   if (job.production_id) return continueHref(workspaceId, job.production_id);
   return '/jobs';
@@ -80,7 +78,7 @@ export function rankLiveItems(input: {
 
   // 1. Failed work first: nothing downstream can use it until retried.
   for (const job of input.jobs) {
-    if (!TERMINAL_JOB.has(job.status)) continue;
+    if (!isFailedJob(job)) continue;
     push({
       id: `live-failed-${job.job_id}`,
       type: 'failed_job',
@@ -144,7 +142,7 @@ export function rankLiveItems(input: {
 
   // 4. Meaningful live jobs: only work that changes what the creator does next.
   for (const job of input.jobs) {
-    if (TERMINAL_JOB.has(job.status) || !isMeaningfulJob(job)) continue;
+    if (!isLiveJob(job) || !isMeaningfulJob(job)) continue;
     const title = input.models.find(model => model.production.id === job.production_id)?.production.title ?? null;
     push({
       id: `live-job-${job.job_id}`,
