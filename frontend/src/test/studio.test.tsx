@@ -216,14 +216,33 @@ describe('Card-first Studio shell', () => {
     expect(screen.getByRole('button', { name: 'Add a blank card' })).toBeVisible();
   });
 
-  it('says TONDE is building while background jobs for the Production are live', async () => {
+  it('reports only active background work scoped to this Production', async () => {
     vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [] }));
     vi.mocked(prompt11Service.jobs).mockResolvedValue({
-      jobs: [{ job_id: 'job-1', job_type: 'director_plan', status: 'running', attempts: 1, max_attempts: 3, production_id: productionId }],
-      count: 1, note: '',
+      jobs: [
+        { job_id: 'mine', job_type: 'reference_analysis', status: 'running', attempts: 1, max_attempts: 3, production_id: productionId },
+        { job_id: 'workspace', job_type: 'reference_analysis', status: 'running', attempts: 1, max_attempts: 3, production_id: null },
+        { job_id: 'done', job_type: 'reference_analysis', status: 'succeeded', attempts: 1, max_attempts: 3, production_id: productionId },
+      ],
+      count: 3, note: '',
     });
     studio('/');
-    expect(await screen.findByText(/TONDE is building cards in the background/)).toBeVisible();
+    expect(await screen.findByText(/TONDE has 1 active background task for this Production/)).toBeVisible();
+    expect(screen.queryByText(/building cards in the background/i)).toBeNull();
+  });
+
+  it('does not claim background work for workspace-level or completed jobs', async () => {
+    vi.mocked(productionService.studioSurface).mockResolvedValue(model({ scenes: [] }));
+    vi.mocked(prompt11Service.jobs).mockResolvedValue({
+      jobs: [
+        { job_id: 'workspace', job_type: 'reference_analysis', status: 'running', attempts: 1, max_attempts: 3, production_id: null },
+        { job_id: 'done', job_type: 'reference_analysis', status: 'succeeded', attempts: 1, max_attempts: 3, production_id: productionId },
+      ],
+      count: 2, note: '',
+    });
+    studio('/');
+    expect(await screen.findByText(/Describe the first moment to TONDE/)).toBeVisible();
+    expect(screen.queryByRole('status', { name: /background/i })).toBeNull();
   });
 
   it('adds a blank card from the empty state through the real create path', async () => {
