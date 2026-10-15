@@ -580,6 +580,37 @@ def test_answered_decisions_are_not_asked_again():
     assert plan.brief.platform == 'YouTube'
 
 
+def test_story_override_rebuilds_scenes_script_and_reality_from_the_same_story():
+    base = _plan(COFFEE_GOAL)
+    assert base.bundle.story is not None
+    original = base.bundle.story
+    first = original.beats[0].model_copy(update={
+        'name': 'Model-only reveal',
+        'content': 'The model opens on a concrete handoff that does not exist in the deterministic Story and changes what the first Scene must execute.',
+        'story_function': 'Replace the deterministic opening with the model-authored production beat.',
+        'visual_idea': 'Hold the handoff in one clean frame before revealing the product.',
+    })
+    model_story = original.model_copy(update={
+        'title': 'Model-authored Story',
+        'beats': [first, *original.beats[1:]],
+        'producer': 'model',
+    })
+
+    rebuilt = build_production_plan(
+        _intent(COFFEE_GOAL),
+        producer='model',
+        story_override=model_story,
+    )
+
+    assert rebuilt.bundle.story == model_story
+    assert rebuilt.bundle.scenes[0].title == 'Model-only reveal'
+    assert rebuilt.bundle.scenes[0].action[0] == first.content
+    assert rebuilt.bundle.script is not None
+    assert rebuilt.bundle.script.title == 'Model-authored Story'
+    assert rebuilt.bundle.script.scenes[0].scene_title == 'Model-only reveal'
+    assert rebuilt.bundle.runtime_fit.assigned_ms == sum(scene.planned_duration_ms for scene in rebuilt.bundle.scenes)
+
+
 def test_story_substance_gate_scales_for_short_valid_story():
     from app.domain.creative import StoryBeat, StoryPlan
 
