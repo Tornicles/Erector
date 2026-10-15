@@ -1135,6 +1135,9 @@ button.library-row:hover{border-color:#3c5b4d}
 .cs-mini small{display:block;font-size:9px;color:var(--muted);margin-top:3px}
 .cs-insert{flex:0 0 28px;height:28px;border:1px dashed var(--line);border-radius:50%;background:transparent;color:var(--muted);cursor:pointer}
 .cs-director{min-width:0;min-height:0;border-left:1px solid var(--line);display:flex;flex-direction:column;background:#08120f}
+.cs-director,.cs-director .s8-inspector,.cs-director .s8-scroll{position:relative;pointer-events:auto}
+.cs-director{z-index:2}
+.cs-director textarea,.cs-director input,.cs-director button,.cs-director select{position:relative;pointer-events:auto;z-index:1}
 .cs-focus{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 0}
 .cs-focus strong{font-size:12px}
 .cs-focus span{font-size:10px;color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:4px 8px}
