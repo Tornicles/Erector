@@ -114,10 +114,29 @@ describe('deriveHomeMode', () => {
 });
 
 describe('job partitions', () => {
-  it('treats terminal states as failed and everything else as live', () => {
-    const jobs = [job({ job_id: 'a', status: 'failed' }), job({ job_id: 'b', status: 'running' }), job({ job_id: 'c', status: 'queued' })];
-    expect(failedJobs(jobs).map(item => item.job_id)).toEqual(['a']);
-    expect(liveJobs(jobs).map(item => item.job_id)).toEqual(['b', 'c']);
+  it('keeps successful/cancelled terminal jobs out of both failure and live work', () => {
+    const jobs = [
+      job({ job_id: 'failed', status: 'failed' }),
+      job({ job_id: 'dead', status: 'dead_letter' }),
+      job({ job_id: 'timeout', status: 'timed_out' }),
+      job({ job_id: 'running', status: 'running' }),
+      job({ job_id: 'queued', status: 'queued' }),
+      job({ job_id: 'waiting', status: 'waiting' }),
+      job({ job_id: 'retrying', status: 'retrying' }),
+      job({ job_id: 'succeeded', status: 'succeeded' }),
+      job({ job_id: 'cancelled', status: 'cancelled' }),
+    ];
+    expect(failedJobs(jobs).map(item => item.job_id)).toEqual(['failed', 'dead', 'timeout']);
+    expect(liveJobs(jobs).map(item => item.job_id)).toEqual(['running', 'queued', 'waiting', 'retrying']);
+  });
+
+  it('does not surface a succeeded meaningful job in TONDE Live', () => {
+    const items = rankLiveItems({
+      workspaceId: 'ws-1',
+      models: [modelWith(base(), [])],
+      jobs: [job({ job_id: 'done', job_type: 'reference_analysis', status: 'succeeded' })],
+    });
+    expect(items.map(item => item.type)).toEqual(['continue']);
   });
 });
 
