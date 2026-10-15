@@ -28,6 +28,26 @@
       "destination": { "service": "api" }
     },
     {
+      "source": "/assets/(.*)",
+      "destination": { "service": "frontend" }
+    },
+    {
+      "source": "/marketing/(.*)",
+      "destination": { "service": "frontend" }
+    },
+    {
+      "source": "/robots.txt",
+      "destination": { "service": "frontend" }
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": { "service": "frontend" }
+    },
+    {
+      "source": "/((?!api|assets|marketing).*)",
+      "destination": { "service": "frontend", "path": "/index.html" }
+    },
+    {
       "source": "/(.*)",
       "destination": { "service": "frontend" }
     }
