@@ -217,7 +217,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
       try {
         const list = await prompt11Service.jobs(workspaceId);
         if (!active) return;
-        const mine = list.jobs.filter(job => !job.production_id || job.production_id === initial.id);
+        const mine = list.jobs.filter(job => job.production_id === initial.id);
         setJobs(mine);
         const sig = mine.map(job => `${job.job_id}:${job.status}`).join('|');
         if (lastSig !== '' && sig !== lastSig) { refresh(); setSurfaceAttempt(value => value + 1); }
@@ -433,7 +433,7 @@ export function StudioComposition({ initial, reload }: { initial: Production; re
   const providerLabel = model ? (model.provider.configured ? `Director · ${model.provider.model_profile}` : 'Director · deterministic only') : 'Director · connecting…';
   const directorFace = face === 'hybrid' ? 'Hybrid' : PRODUCT.executionFaces[face as ExecutionFace];
   const reviewCount = model?.status_summary.needs_attention ?? 0;
-  const live = model ? liveJobs(jobs.filter(job => !job.production_id || job.production_id === initial.id)) : [];
+  const live = model ? liveJobs(jobs) : [];
 
   const shotTargets = useMemo(() => scenes.flatMap(scene => scene.shots.map(shot => ({
     id: shot.id, label: `Shot ${shot.sort_order} ${shot.title}`, kind: 'shot',
