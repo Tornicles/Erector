@@ -61,6 +61,7 @@ def build_production_plan(
     variation: str = 'original',
     producer: Literal['deterministic', 'model'] = 'deterministic',
     include_optional_questions: bool = True,
+    story_override: StoryPlan | None = None,
 ) -> ProductionPlan:
     """One coherent Master Production plan: Brief, Story, Script, domain content, runtime, Reality Check."""
 
@@ -69,7 +70,10 @@ def build_production_plan(
     answers = dict(answered or intent.answered_decisions or {})
     brief = build_brief(intent, analyses=analyses, setups=setup, answered=answers, include_optional=include_optional_questions)
     target_ms = brief.runtime.planning_ms
-    bundle = build_creative_bundle(brief, target_ms=target_ms, analyses=analyses, variation=variation, producer=producer)
+    bundle = build_creative_bundle(
+        brief, target_ms=target_ms, analyses=analyses, variation=variation,
+        producer=producer, story_override=story_override,
+    )
     reality = assess_full_reality(bundle, setup, brief, target_ms=target_ms)
     limitations: list[str] = []
     if brief.runtime.kind == 'range':
