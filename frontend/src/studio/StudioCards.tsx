@@ -459,7 +459,7 @@ export function EmptyCards({ liveJobs, busy, onAsk, onBlank }: {
     <p className="eyebrow">PRODUCTION SEQUENCE</p>
     <h2>This Production has no cards yet.</h2>
     {liveJobs > 0
-      ? <p role="status">TONDE is building cards in the background ({liveJobs} running). They appear here as soon as each one is ready — stay on this page.</p>
+      ? <p role="status">TONDE has {liveJobs} active background task{liveJobs === 1 ? '' : 's'} for this Production. Cards appear here only after a Production build saves them.</p>
       : <p>Describe the first moment to TONDE, or start with one blank card and direct it from there.</p>}
     <div className="cs-empty-actions">
       <button type="button" className="cs-primary" disabled={busy} onClick={onAsk}>Ask TONDE to develop it →</button>
